@@ -22,6 +22,8 @@ export const movements = sqliteTable("movements", {
   type: text("type", { enum: ["purchase", "open", "consume", "adjust"] }).notNull(),
   quantity: real("quantity").notNull(),
   note: text("note").notNull().default(""),
+  createdByUserId: text("created_by_user_id"),
+  createdByName: text("created_by_name"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

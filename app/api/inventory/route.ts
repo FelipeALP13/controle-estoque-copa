@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { items, movements, openBatches } from "../../../db/schema";
 
@@ -35,6 +36,7 @@ export async function GET() {
           type: movements.type,
           quantity: movements.quantity,
           note: movements.note,
+          createdByName: movements.createdByName,
           createdAt: movements.createdAt,
         })
         .from(movements)
@@ -89,6 +91,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>;
     const action = String(body.action ?? "");
     const db = getDb();
+    const user = await getChatGPTUser();
 
     if (action === "addItem") {
       const name = String(body.name ?? "").trim();
@@ -217,7 +220,14 @@ export async function POST(request: Request) {
 
       await db.batch([
         db.update(items).set({ unopenedQty, openedQty, lastOpenedAt, updatedAt: timestamp }).where(eq(items.id, itemId)),
-        db.insert(movements).values({ itemId, type, quantity: movementQuantity, note }),
+        db.insert(movements).values({
+          itemId,
+          type,
+          quantity: movementQuantity,
+          note,
+          createdByUserId: user?.userId ?? null,
+          createdByName: user?.displayName ?? "Equipe",
+        }),
       ]);
       return Response.json({ ok: true });
     }

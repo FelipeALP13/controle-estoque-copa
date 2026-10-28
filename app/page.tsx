@@ -50,6 +50,7 @@ type Movement = {
   type: "purchase" | "open" | "consume" | "adjust";
   quantity: number;
   note: string;
+  createdByName: string | null;
   createdAt: string;
 };
 
@@ -115,6 +116,8 @@ export default function Home() {
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= item.minimumQty);
   const openItems = items.filter((item) => item.openedQty > 0);
   const totalUnits = items.reduce((sum, item) => sum + item.unopenedQty + item.openedQty, 0);
+  const measuredItems = items.filter((item) => item.analytics.averageDurationDays !== null);
+  const todayLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("pt-BR");
     return items.filter((item) => {
@@ -180,10 +183,49 @@ export default function Home() {
 
           {tab === "stock" ? (
             <>
+              <section className="overview-hero">
+                <div className="hero-copy">
+                  <p className="hero-date">{todayLabel}</p>
+                  <h2>{lowItems.length ? `${lowItems.length} ${lowItems.length === 1 ? "item precisa" : "itens precisam"} de atenção` : "Tudo em ordem por aqui"}</h2>
+                  <p>{lowItems.length ? "Revise a sugestão de compra e mantenha a copa abastecida para a equipe." : "O estoque está acima dos mínimos definidos. Continue registrando o consumo para melhorar as previsões."}</p>
+                  <div className="quick-actions">
+                    <button onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
+                    <button onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
+                    <button onClick={() => setModal({ kind: "movement", type: "consume" })}><TrendingDown /> Lançar consumo</button>
+                    <button onClick={() => setModal({ kind: "movement", type: "adjust" })}><Settings2 /> Conferir saldo</button>
+                  </div>
+                </div>
+                <div className="hero-status">
+                  <span className={lowItems.length ? "needs-attention" : "healthy"}>{lowItems.length ? <TriangleAlert /> : <PackageCheck />}</span>
+                  <small>Saúde do estoque</small>
+                  <strong>{lowItems.length ? "Atenção" : "Em dia"}</strong>
+                  <p>{items.length ? `${items.length - lowItems.length} de ${items.length} itens saudáveis` : "Cadastre o primeiro item"}</p>
+                </div>
+              </section>
+
               <div className="stats-grid">
                 <article className="stat-card"><span className="stat-icon blue"><Box /></span><div><small>Itens cadastrados</small><strong>{items.length}</strong><p>{fmt(totalUnits)} unidades no total</p></div></article>
                 <article className="stat-card"><span className="stat-icon amber"><PackageOpen /></span><div><small>Em uso agora</small><strong>{openItems.length}</strong><p>{openItems.length ? "Com embalagem aberta" : "Nada aberto"}</p></div></article>
                 <article className={`stat-card ${lowItems.length ? "attention" : ""}`}><span className="stat-icon red"><TriangleAlert /></span><div><small>Precisam de reposição</small><strong>{lowItems.length}</strong><p>{lowItems.length ? "No estoque mínimo ou abaixo" : "Estoque saudável"}</p></div></article>
+                <article className="stat-card"><span className="stat-icon green"><CalendarClock /></span><div><small>Previsões confiáveis</small><strong>{measuredItems.length}</strong><p>{measuredItems.length ? "Com ciclo de consumo completo" : "Ainda coletando histórico"}</p></div></article>
+              </div>
+
+              <div className="overview-insights">
+                <article className="insight-card attention-card">
+                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></div>
+                  {lowItems.length ? <div className="restock-list">{lowItems.slice(0,4).map((item) => {
+                    const total = item.unopenedQty + item.openedQty;
+                    const suggested = Math.max(1, Math.ceil((item.analytics.monthlyRecommendation ?? item.minimumQty + 1) - total));
+                    return <div key={item.id}><span className="item-avatar">{item.name.slice(0,2).toUpperCase()}</span><div><strong>{item.name}</strong><small>{fmt(total)} {item.unit} disponíveis</small></div><b>Comprar {suggested}</b></div>;
+                  })}</div> : <div className="insight-empty"><PackageCheck /><div><strong>Nada para comprar agora</strong><p>Todos os itens estão acima do mínimo.</p></div></div>}
+                </article>
+                <article className="insight-card activity-card">
+                  <div className="insight-head"><div><span className="insight-icon"><History /></span><div><h3>Atividade recente</h3><p>Últimos registros feitos pela equipe.</p></div></div><button onClick={() => setTab("history")}>Ver histórico</button></div>
+                  {movements.length ? <div className="mini-activity">{movements.slice(0,4).map((movement) => {
+                    const copy = movementCopy[movement.type]; const Icon = copy.icon;
+                    return <div key={movement.id}><span className={`history-icon ${copy.tone}`}><Icon /></span><div><strong>{copy.label} · {movement.itemName}</strong><small>{movement.createdByName || "Equipe"} · {exactDate(movement.createdAt)}</small></div><b>{movement.type === "consume" ? "−" : movement.type === "purchase" ? "+" : ""}{fmt(Math.abs(movement.quantity))}</b></div>;
+                  })}</div> : <div className="insight-empty"><History /><div><strong>Nenhuma atividade ainda</strong><p>Os lançamentos da equipe aparecerão aqui.</p></div></div>}
+                </article>
               </div>
 
               <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><button className="secondary-button" onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div>
@@ -284,7 +326,7 @@ function HistoryView({ movements, loading }: { movements: Movement[]; loading: b
             const copy = movementCopy[movement.type];
             const Icon = copy.icon;
             const sign = movement.type === "consume" ? "−" : movement.type === "purchase" ? "+" : "";
-            return <article key={movement.id}><span className={`history-icon ${copy.tone}`}><Icon /></span><div><strong>{copy.label} de {movement.itemName}</strong><p>{movement.note || (movement.type === "open" ? "Embalagem colocada em uso" : "Sem observações")}</p></div><div className="history-meta"><strong>{sign}{fmt(Math.abs(movement.quantity))} {movement.unit}</strong><small>{exactDate(movement.createdAt)}</small></div></article>;
+            return <article key={movement.id}><span className={`history-icon ${copy.tone}`}><Icon /></span><div><strong>{copy.label} de {movement.itemName}</strong><p>{movement.note || (movement.type === "open" ? "Embalagem colocada em uso" : "Sem observações")} · por {movement.createdByName || "Equipe"}</p></div><div className="history-meta"><strong>{sign}{fmt(Math.abs(movement.quantity))} {movement.unit}</strong><small>{exactDate(movement.createdAt)}</small></div></article>;
           })}
         </div>
       )}
