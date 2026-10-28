@@ -9,6 +9,8 @@ export const items = sqliteTable("items", {
   unopenedQty: real("unopened_qty").notNull().default(0),
   openedQty: real("opened_qty").notNull().default(0),
   minimumQty: real("minimum_qty").notNull().default(1),
+  icon: text("icon").notNull().default("📦"),
+  imageKey: text("image_key"),
   lastOpenedAt: text("last_opened_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -46,5 +48,7 @@ export const members = sqliteTable("members", {
   email: text("email").notNull(),
   role: text("role", { enum: ["admin", "member", "viewer"] }).notNull().default("member"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  avatarIcon: text("avatar_icon").notNull().default("👤"),
+  avatarKey: text("avatar_key"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

@@ -29,6 +29,13 @@
       "when": 1793210762156,
       "tag": "0003_grey_joystick",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793211971441,
+      "tag": "0004_material_rage",
+      "breakpoints": true
     }
   ]
 }

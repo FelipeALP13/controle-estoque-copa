@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { headers } from "next/headers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { items, members, movements, openBatches } from "../../../db/schema";
@@ -9,21 +10,25 @@ type MemberRole = "admin" | "member" | "viewer";
 async function getOrCreateMember(db: ReturnType<typeof getDb>) {
   const user = await getChatGPTUser();
   if (!user) {
-    return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, active: true };
+    const host = (await headers()).get("host") ?? "";
+    if (host.startsWith("127.0.0.1") || host.startsWith("localhost")) {
+      return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, active: true, avatarIcon: "👤", avatarKey: null };
+    }
+    throw new Error("AUTH_REQUIRED");
   }
   const email = user.email.trim().toLowerCase();
 
   const [existing] = await db.select().from(members).where(eq(members.userId, user.userId)).limit(1);
   if (existing) {
-    if (existing.name !== user.displayName || existing.email !== email) {
-      await db.update(members).set({ name: user.displayName, email }).where(eq(members.id, existing.id));
+    if (existing.email !== email) {
+      await db.update(members).set({ email }).where(eq(members.id, existing.id));
     }
-    return { ...existing, name: user.displayName, email };
+    return { ...existing, email };
   }
 
   const [invited] = await db.select().from(members).where(eq(members.email, email)).limit(1);
   if (invited) {
-    const [claimed] = await db.update(members).set({ userId: user.userId, name: user.displayName, email }).where(eq(members.id, invited.id)).returning();
+    const [claimed] = await db.update(members).set({ userId: user.userId, email }).where(eq(members.id, invited.id)).returning();
     return claimed;
   }
 
@@ -58,6 +63,20 @@ function roundDays(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function suggestedIcon(name: string, current: string) {
+  if (current && current !== "📦") return current;
+  const normalized = name.toLocaleLowerCase("pt-BR");
+  if (normalized.includes("café") || normalized.includes("cafe")) return "☕";
+  if (normalized.includes("biscoito") || normalized.includes("bolacha")) return "🍪";
+  if (normalized.includes("açúcar") || normalized.includes("acucar")) return "🍬";
+  if (normalized.includes("leite")) return "🥛";
+  if (normalized.includes("chá") || normalized.includes("cha")) return "🍵";
+  if (normalized.includes("suco")) return "🧃";
+  if (normalized.includes("papel")) return "🧻";
+  if (normalized.includes("sabão") || normalized.includes("detergente")) return "🧼";
+  return current || "📦";
+}
+
 export async function GET() {
   try {
     const db = getDb();
@@ -83,7 +102,7 @@ export async function GET() {
         .limit(80),
       db.select().from(openBatches).orderBy(desc(openBatches.openedAt)).limit(800),
       canManage(currentMember.role)
-        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, role: members.role, active: members.active, createdAt: members.createdAt }).from(members).orderBy(members.name)
+        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, role: members.role, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
         : Promise.resolve([]),
     ]);
 
@@ -110,6 +129,7 @@ export async function GET() {
 
       return {
         ...item,
+        icon: suggestedIcon(item.name, item.icon),
         analytics: {
           averageDurationDays: averageDurationDays ? roundDays(averageDurationDays) : null,
           lastDurationDays: unitDurations.length ? roundDays(unitDurations[0]) : null,
@@ -121,18 +141,19 @@ export async function GET() {
       };
     });
 
-    const visibleMembers = currentMember.userId === "local-preview" && memberRows.length === 0
-      ? [{ id: 0, ...currentMember, createdAt: new Date().toISOString() }]
+    const visibleMembers = currentMember.userId === "local-preview"
+      ? [{ id: 0, ...currentMember, createdAt: new Date().toISOString() }, ...memberRows]
       : memberRows;
 
     return Response.json({
       items: enrichedItems,
       movements: movementRows,
-      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, role: currentMember.role },
+      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, role: currentMember.role, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
       members: visibleMembers,
     });
   } catch (error) {
-    return Response.json({ error: errorMessage(error) }, { status: 500 });
+    const message = error instanceof Error ? error.message : "";
+    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2F" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
 }
 
@@ -143,6 +164,17 @@ export async function POST(request: Request) {
     const db = getDb();
     const currentMember = await getOrCreateMember(db);
     if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado." }, { status: 403 });
+
+    if (action === "updateProfile") {
+      const name = String(body.name ?? "").trim();
+      const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
+      const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      if (!name) return Response.json({ error: "Informe seu nome." }, { status: 400 });
+      if (currentMember.userId === "local-preview") return Response.json({ member: { ...currentMember, name, avatarIcon, avatarKey } });
+      const [updated] = await db.update(members).set({ name, avatarIcon, avatarKey }).where(eq(members.userId, currentMember.userId)).returning();
+      return Response.json({ member: updated });
+    }
+
     if (currentMember.role === "viewer") return Response.json({ error: "Seu perfil permite somente visualizar o estoque." }, { status: 403 });
 
     if (action === "updateMemberRole") {
@@ -166,8 +198,27 @@ export async function POST(request: Request) {
       if (!["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Permissão inválida." }, { status: 400 });
       const existing = await db.select({ id: members.id }).from(members).where(eq(members.email, email)).limit(1);
       if (existing.length) return Response.json({ error: "Já existe um membro cadastrado com este e-mail." }, { status: 409 });
-      const [member] = await db.insert(members).values({ userId: `pending:${email}`, name, email, role, active: true }).returning();
+      const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
+      const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      const [member] = await db.insert(members).values({ userId: `pending:${email}`, name, email, role, active: true, avatarIcon, avatarKey }).returning();
       return Response.json({ member }, { status: 201 });
+    }
+
+    if (action === "updateMember") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem editar membros." }, { status: 403 });
+      const targetUserId = String(body.userId ?? "");
+      const name = String(body.name ?? "").trim();
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const role = String(body.role ?? "member") as MemberRole;
+      const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
+      const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      if (!targetUserId || !name || !email.includes("@") || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Dados do membro inválidos." }, { status: 400 });
+      if (targetUserId === currentMember.userId) return Response.json({ error: "Edite seus dados em Meu perfil." }, { status: 400 });
+      const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.email, email)).limit(1);
+      if (duplicate.length && duplicate[0].userId !== targetUserId) return Response.json({ error: "Este e-mail já pertence a outro membro." }, { status: 409 });
+      const [updated] = await db.update(members).set({ name, email, role, active: body.active !== false, avatarIcon, avatarKey }).where(eq(members.userId, targetUserId)).returning();
+      if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      return Response.json({ member: updated });
     }
 
     if (action === "updateMemberActive") {
@@ -186,8 +237,10 @@ export async function POST(request: Request) {
       const category = String(body.category ?? "Outros").trim() || "Outros";
       const unit = String(body.unit ?? "un.").trim() || "un.";
       const minimumQty = Math.max(0, number(body.minimumQty, 1));
+      const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
+      const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!name) return Response.json({ error: "Informe o nome do item." }, { status: 400 });
-      const [item] = await db.insert(items).values({ name, category, unit, minimumQty }).returning();
+      const [item] = await db.insert(items).values({ name, category, unit, minimumQty, icon, imageKey }).returning();
       return Response.json({ item }, { status: 201 });
     }
 
@@ -197,11 +250,11 @@ export async function POST(request: Request) {
       if (existing.length) return Response.json({ error: "A lista já possui itens." }, { status: 409 });
       const now = Date.now();
       const created = await db.insert(items).values([
-        { name: "Café", category: "Bebidas", unit: "pacote", unopenedQty: 4, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now).toISOString() },
-        { name: "Açúcar", category: "Mercearia", unit: "pacote", unopenedQty: 2, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now - 3 * 86400000).toISOString() },
-        { name: "Biscoito", category: "Lanches", unit: "pacote", unopenedQty: 6, openedQty: 0, minimumQty: 3 },
-        { name: "Leite", category: "Bebidas", unit: "caixa", unopenedQty: 1, openedQty: 1, minimumQty: 4, lastOpenedAt: new Date(now - 86400000).toISOString() },
-        { name: "Chá", category: "Bebidas", unit: "caixa", unopenedQty: 2, openedQty: 0, minimumQty: 1 },
+        { name: "Café", category: "Bebidas", unit: "pacote", icon: "☕", unopenedQty: 4, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now).toISOString() },
+        { name: "Açúcar", category: "Mercearia", unit: "pacote", icon: "🍬", unopenedQty: 2, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now - 3 * 86400000).toISOString() },
+        { name: "Biscoito", category: "Lanches", unit: "pacote", icon: "🍪", unopenedQty: 6, openedQty: 0, minimumQty: 3 },
+        { name: "Leite", category: "Bebidas", unit: "caixa", icon: "🥛", unopenedQty: 1, openedQty: 1, minimumQty: 4, lastOpenedAt: new Date(now - 86400000).toISOString() },
+        { name: "Chá", category: "Bebidas", unit: "caixa", icon: "🍵", unopenedQty: 2, openedQty: 0, minimumQty: 1 },
       ]).returning();
       return Response.json({ items: created }, { status: 201 });
     }
@@ -213,8 +266,10 @@ export async function POST(request: Request) {
       const category = String(body.category ?? "Outros").trim() || "Outros";
       const unit = String(body.unit ?? "un.").trim() || "un.";
       const minimumQty = Math.max(0, number(body.minimumQty, 1));
+      const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
+      const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!itemId || !name) return Response.json({ error: "Item inválido." }, { status: 400 });
-      const [item] = await db.update(items).set({ name, category, unit, minimumQty, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
+      const [item] = await db.update(items).set({ name, category, unit, minimumQty, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
       return Response.json({ item });
     }
 
@@ -334,6 +389,7 @@ export async function POST(request: Request) {
 
     return Response.json({ error: "Ação desconhecida." }, { status: 400 });
   } catch (error) {
-    return Response.json({ error: errorMessage(error) }, { status: 500 });
+    const message = error instanceof Error ? error.message : "";
+    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2F" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
 }
