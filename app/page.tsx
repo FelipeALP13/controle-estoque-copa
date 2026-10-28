@@ -18,8 +18,10 @@ import {
   Settings2,
   ShoppingCart,
   Sparkles,
+  Trash2,
   TrendingDown,
   TriangleAlert,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -71,6 +73,7 @@ type Movement = {
 
 type ModalState =
   | { kind: "item"; item?: Item }
+  | { kind: "member" }
   | { kind: "movement"; type: Movement["type"]; item?: Item }
   | null;
 
@@ -178,6 +181,11 @@ export default function Home() {
     await submit({ action: "seed" }, "Itens iniciais adicionados.");
   }
 
+  async function deleteItem(item: Item) {
+    if (!window.confirm(`Excluir ${item.name}? O histórico e as medições deste item também serão removidos.`)) return;
+    await submit({ action: "deleteItem", itemId: item.id }, "Item excluído.");
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
@@ -200,7 +208,7 @@ export default function Home() {
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
           <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
-          {isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
+          {isAdmin ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
         <section className="content">
@@ -272,11 +280,11 @@ export default function Home() {
               ) : (
                 <div className="stock-list">
                   <div className="list-head"><span>Item</span><span>Saldo atual</span><span>Situação</span><span>Duração média</span><span>Última abertura</span><span>Ações</span></div>
-                  {filtered.map((item) => <StockRow key={item.id} item={item} role={currentUser?.role ?? "viewer"} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} />)}
+                  {filtered.map((item) => <StockRow key={item.id} item={item} role={currentUser?.role ?? "viewer"} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} onDelete={() => deleteItem(item)} />)}
                 </div>
               )}
             </>
-          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -286,7 +294,7 @@ export default function Home() {
   );
 }
 
-function StockRow({ item, role, onAction, onEdit }: { item: Item; role: MemberRole; onAction: (type: Movement["type"]) => void; onEdit: () => void }) {
+function StockRow({ item, role, onAction, onEdit, onDelete }: { item: Item; role: MemberRole; onAction: (type: Movement["type"]) => void; onEdit: () => void; onDelete: () => void }) {
   const total = item.unopenedQty + item.openedQty;
   const isLow = total <= item.minimumQty;
   const initial = item.name.slice(0, 2).toUpperCase();
@@ -303,6 +311,7 @@ function StockRow({ item, role, onAction, onEdit }: { item: Item; role: MemberRo
         <button title="Registrar compra" disabled={role === "viewer"} onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
         <button title="Ajustar saldo" disabled={role !== "admin"} onClick={() => onAction("adjust")}><Settings2 size={17} /></button>
         <button title="Editar item" disabled={role !== "admin"} onClick={onEdit}><Pencil size={16} /></button>
+        <button className="danger-action" title="Excluir item" aria-label={`Excluir ${item.name}`} disabled={role !== "admin"} onClick={onDelete}><Trash2 size={16} /></button>
       </div>
     </article>
   );
@@ -341,7 +350,7 @@ function PlanningView({ items, loading }: { items: Item[]; loading: boolean }) {
   );
 }
 
-function TeamView({ members, currentUser, saving, onUpdateRole }: { members: Member[]; currentUser: CurrentUser | null; saving: boolean; onUpdateRole: (userId: string, role: MemberRole) => void }) {
+function TeamView({ members, currentUser, saving, onAddMember, onUpdateRole, onUpdateActive }: { members: Member[]; currentUser: CurrentUser | null; saving: boolean; onAddMember: () => void; onUpdateRole: (userId: string, role: MemberRole) => void; onUpdateActive: (userId: string, active: boolean) => void }) {
   return (
     <>
       <div className="team-intro">
@@ -354,15 +363,17 @@ function TeamView({ members, currentUser, saving, onUpdateRole }: { members: Mem
         <article><strong>Somente leitura</strong><p>Consulta estoque, planejamento e histórico, sem fazer lançamentos.</p></article>
       </div>
       <div className="team-panel">
-        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Novos usuários autorizados no Site entram automaticamente como membros.</p></div><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span></div>
+        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Cadastre a equipe por e-mail e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
         <div className="team-table">
-          <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Entrada</span></div>
+          <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Status</span><span>Entrada</span></div>
           {members.map((member) => <div className="team-row" key={member.userId}>
             <div className="member-cell"><span className="avatar member-avatar">{member.name.slice(0,2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.email}{member.userId === currentUser?.userId ? " · você" : ""}</small></div></div>
             <select aria-label={`Permissão de ${member.name}`} disabled={saving || member.userId === currentUser?.userId} value={member.role} onChange={(event) => onUpdateRole(member.userId, event.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select>
+            <button className={`access-toggle ${member.active ? "active" : "inactive"}`} disabled={saving || member.userId === currentUser?.userId} onClick={() => onUpdateActive(member.userId, !member.active)}>{member.active ? "Ativo" : "Desativado"}</button>
             <span className="member-date">{new Intl.DateTimeFormat("pt-BR").format(new Date(member.createdAt))}</span>
           </div>)}
         </div>
+        <p className="team-access-note">O cadastro define as permissões dentro do sistema. A pessoa também precisa estar autorizada a abrir este Site privado.</p>
       </div>
     </>
   );
@@ -400,9 +411,12 @@ function Modal({ state, items, saving, onClose, onSubmit }: { state: NonNullable
   const [unopenedQty, setUnopenedQty] = useState(String(preselected?.unopenedQty ?? selected?.unopenedQty ?? 0));
   const [openedQty, setOpenedQty] = useState(String(preselected?.openedQty ?? selected?.openedQty ?? 0));
   const [note, setNote] = useState("");
+  const [memberName, setMemberName] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState<MemberRole>("member");
 
-  const title = state.kind === "item" ? (editing ? "Editar item" : "Novo item") : movementCopy[state.type].label;
-  const description = state.kind === "item" ? "Defina como este produto será acompanhado." : {
+  const title = state.kind === "member" ? "Adicionar membro" : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : movementCopy[state.type].label;
+  const description = state.kind === "member" ? "Cadastre a pessoa e escolha a permissão inicial. O acesso será reconhecido pelo e-mail informado." : state.kind === "item" ? "Defina como este produto será acompanhado." : {
     purchase: "A quantidade comprada será adicionada ao estoque fechado.",
     open: "A quantidade sairá do estoque fechado e passará para aberto.",
     consume: "O consumo será descontado somente das embalagens abertas.",
@@ -417,6 +431,10 @@ function Modal({ state, items, saving, onClose, onSubmit }: { state: NonNullable
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (state.kind === "member") {
+      onSubmit({ action: "addMember", name: memberName, email: memberEmail, role: memberRole }, "Membro adicionado.");
+      return;
+    }
     if (state.kind === "item") {
       onSubmit({ action: editing ? "updateItem" : "addItem", itemId: editing?.id, name, category, unit, minimumQty: Number(minimumQty) }, editing ? "Item atualizado." : "Novo item cadastrado.");
       return;
@@ -428,9 +446,13 @@ function Modal({ state, items, saving, onClose, onSubmit }: { state: NonNullable
 
   return (
     <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={handleSubmit}>
-      <div className="modal-head"><div><p className="eyebrow">MOVIMENTAÇÃO DO ESTOQUE</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
+      <div className="modal-head"><div><p className="eyebrow">{state.kind === "member" ? "GESTÃO DE ACESSO" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
       <div className="form-grid">
-        {state.kind === "item" ? <>
+        {state.kind === "member" ? <>
+          <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
+          <label className="full"><span>E-mail da conta</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /><small>Use o mesmo e-mail que a pessoa utiliza para acessar o Site.</small></label>
+          <label className="full"><span>Permissão inicial</span><select value={memberRole} onChange={(e) => setMemberRole(e.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
+        </> : state.kind === "item" ? <>
           <label className="full"><span>Nome do item</span><input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Café em pó" /></label>
           <label><span>Categoria</span><select value={category} onChange={(e) => setCategory(e.target.value)}><option>Bebidas</option><option>Lanches</option><option>Mercearia</option><option>Descartáveis</option><option>Limpeza</option><option>Outros</option></select></label>
           <label><span>Unidade de controle</span><select value={unit} onChange={(e) => setUnit(e.target.value)}><option>pacote</option><option>caixa</option><option>unidade</option><option>garrafa</option><option>kg</option><option>litro</option></select></label>
@@ -444,7 +466,7 @@ function Modal({ state, items, saving, onClose, onSubmit }: { state: NonNullable
           <label className="full"><span>Observação <em>opcional</em></span><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: compra mensal, contagem feita pela manhã..." /></label>
         </>}
       </div>
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || (state.kind === "movement" && !itemId)}>{saving ? "Salvando..." : "Confirmar"}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || (state.kind === "movement" && !itemId)}>{saving ? "Salvando..." : state.kind === "member" ? "Adicionar membro" : "Confirmar"}</button></div>
     </form></div>
   );
 }

@@ -11,20 +11,27 @@ async function getOrCreateMember(db: ReturnType<typeof getDb>) {
   if (!user) {
     return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, active: true };
   }
+  const email = user.email.trim().toLowerCase();
 
   const [existing] = await db.select().from(members).where(eq(members.userId, user.userId)).limit(1);
   if (existing) {
-    if (existing.name !== user.displayName || existing.email !== user.email) {
-      await db.update(members).set({ name: user.displayName, email: user.email }).where(eq(members.id, existing.id));
+    if (existing.name !== user.displayName || existing.email !== email) {
+      await db.update(members).set({ name: user.displayName, email }).where(eq(members.id, existing.id));
     }
-    return { ...existing, name: user.displayName, email: user.email };
+    return { ...existing, name: user.displayName, email };
+  }
+
+  const [invited] = await db.select().from(members).where(eq(members.email, email)).limit(1);
+  if (invited) {
+    const [claimed] = await db.update(members).set({ userId: user.userId, name: user.displayName, email }).where(eq(members.id, invited.id)).returning();
+    return claimed;
   }
 
   const anyMember = await db.select({ id: members.id }).from(members).limit(1);
   const [created] = await db.insert(members).values({
     userId: user.userId,
     name: user.displayName,
-    email: user.email,
+    email,
     role: anyMember.length ? "member" : "admin",
   }).returning();
   return created;
@@ -55,6 +62,7 @@ export async function GET() {
   try {
     const db = getDb();
     const currentMember = await getOrCreateMember(db);
+    if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado. Fale com um administrador." }, { status: 403 });
     const [itemRows, movementRows, batchRows, memberRows] = await Promise.all([
       db.select().from(items).orderBy(items.name),
       db
@@ -148,6 +156,30 @@ export async function POST(request: Request) {
       return Response.json({ member: updated });
     }
 
+    if (action === "addMember") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem adicionar membros." }, { status: 403 });
+      const name = String(body.name ?? "").trim();
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const role = String(body.role ?? "member") as MemberRole;
+      if (!name) return Response.json({ error: "Informe o nome do membro." }, { status: 400 });
+      if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
+      if (!["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Permissão inválida." }, { status: 400 });
+      const existing = await db.select({ id: members.id }).from(members).where(eq(members.email, email)).limit(1);
+      if (existing.length) return Response.json({ error: "Já existe um membro cadastrado com este e-mail." }, { status: 409 });
+      const [member] = await db.insert(members).values({ userId: `pending:${email}`, name, email, role, active: true }).returning();
+      return Response.json({ member }, { status: 201 });
+    }
+
+    if (action === "updateMemberActive") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem alterar o acesso." }, { status: 403 });
+      const targetUserId = String(body.userId ?? "");
+      if (!targetUserId) return Response.json({ error: "Usuário inválido." }, { status: 400 });
+      if (targetUserId === currentMember.userId) return Response.json({ error: "Para evitar bloqueio acidental, você não pode desativar seu próprio acesso." }, { status: 400 });
+      const [updated] = await db.update(members).set({ active: body.active === true }).where(eq(members.userId, targetUserId)).returning();
+      if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      return Response.json({ member: updated });
+    }
+
     if (action === "addItem") {
       if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem cadastrar itens." }, { status: 403 });
       const name = String(body.name ?? "").trim();
@@ -184,6 +216,15 @@ export async function POST(request: Request) {
       if (!itemId || !name) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [item] = await db.update(items).set({ name, category, unit, minimumQty, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
       return Response.json({ item });
+    }
+
+    if (action === "deleteItem") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem excluir itens." }, { status: 403 });
+      const itemId = number(body.itemId);
+      if (!itemId) return Response.json({ error: "Item inválido." }, { status: 400 });
+      const [deleted] = await db.delete(items).where(eq(items.id, itemId)).returning();
+      if (!deleted) return Response.json({ error: "Item não encontrado." }, { status: 404 });
+      return Response.json({ item: deleted });
     }
 
     if (action === "movement") {
