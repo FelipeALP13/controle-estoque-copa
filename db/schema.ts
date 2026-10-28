@@ -24,3 +24,15 @@ export const movements = sqliteTable("movements", {
   note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const openBatches = sqliteTable("open_batches", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id")
+    .notNull()
+    .references(() => items.id, { onDelete: "cascade" }),
+  quantity: real("quantity").notNull(),
+  remainingQty: real("remaining_qty").notNull(),
+  openedAt: text("opened_at").notNull(),
+  closedAt: text("closed_at"),
+  closedReason: text("closed_reason", { enum: ["consumed", "adjusted"] }),
+});

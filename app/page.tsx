@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowDownToLine,
+  BarChart3,
   Box,
+  CalendarClock,
   Coffee,
   History,
   Menu,
@@ -30,6 +32,14 @@ type Item = {
   openedQty: number;
   minimumQty: number;
   lastOpenedAt: string | null;
+  analytics: {
+    averageDurationDays: number | null;
+    lastDurationDays: number | null;
+    completedCycles: number;
+    activeDays: number | null;
+    monthlyRecommendation: number | null;
+    estimatedCoverageDays: number | null;
+  };
 };
 
 type Movement = {
@@ -81,7 +91,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"stock" | "history">("stock");
+  const [tab, setTab] = useState<"stock" | "planning" | "history">("stock");
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -147,6 +157,7 @@ export default function Home() {
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
           <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
+          <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>
           <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>
         </nav>
         <div className="sidebar-tip">
@@ -159,7 +170,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : "Histórico de movimentações"}</h1></div>
+          <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : "Histórico de movimentações"}</h1></div>
           <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button>
         </header>
 
@@ -192,12 +203,12 @@ export default function Home() {
                 <div className="empty-state compact"><Search /><h3>Nenhum item encontrado</h3><p>Tente outro nome ou remova o filtro selecionado.</p></div>
               ) : (
                 <div className="stock-list">
-                  <div className="list-head"><span>Item</span><span>Saldo atual</span><span>Situação</span><span>Última abertura</span><span>Ações</span></div>
+                  <div className="list-head"><span>Item</span><span>Saldo atual</span><span>Situação</span><span>Duração média</span><span>Última abertura</span><span>Ações</span></div>
                   {filtered.map((item) => <StockRow key={item.id} item={item} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} />)}
                 </div>
               )}
             </>
-          ) : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -216,6 +227,7 @@ function StockRow({ item, onAction, onEdit }: { item: Item; onAction: (type: Mov
       <div className="item-cell"><span className="item-avatar">{initial}</span><div><strong>{item.name}</strong><small>{item.category} · mínimo {fmt(item.minimumQty)} {item.unit}</small></div></div>
       <div className="balance-cell"><strong>{fmt(total)} <small>{item.unit}</small></strong><div><span>{fmt(item.unopenedQty)} fechado</span><i /> <span>{fmt(item.openedQty)} aberto</span></div></div>
       <div><span className={`status ${isLow ? "low" : "ok"}`}>{isLow ? <TriangleAlert size={14} /> : <PackageCheck size={14} />}{isLow ? "Repor" : "Em dia"}</span></div>
+      <div className="duration-cell">{item.analytics.averageDurationDays !== null ? <><strong>{fmt(item.analytics.averageDurationDays)} dias</strong><small>{item.analytics.monthlyRecommendation} {item.unit}/30 dias</small></> : item.analytics.activeDays !== null ? <><strong>Em medição</strong><small>Há {fmt(item.analytics.activeDays)} dias</small></> : <><strong>Sem histórico</strong><small>Registre abertura e consumo</small></>}</div>
       <div className="opened-cell"><strong>{relativeDate(item.lastOpenedAt)}</strong>{item.lastOpenedAt && <small>{new Intl.DateTimeFormat("pt-BR").format(new Date(item.lastOpenedAt))}</small>}</div>
       <div className="row-actions">
         <button title="Registrar abertura" disabled={item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
@@ -225,6 +237,39 @@ function StockRow({ item, onAction, onEdit }: { item: Item; onAction: (type: Mov
         <button title="Editar item" onClick={onEdit}><Pencil size={16} /></button>
       </div>
     </article>
+  );
+}
+
+function PlanningView({ items, loading }: { items: Item[]; loading: boolean }) {
+  if (loading) return <LoadingRows />;
+  const measured = items.filter((item) => item.analytics.averageDurationDays !== null);
+  const monthlyTotal = measured.reduce((sum, item) => sum + (item.analytics.monthlyRecommendation ?? 0), 0);
+  return (
+    <>
+      <div className="planning-summary">
+        <article><span className="stat-icon blue"><CalendarClock /></span><div><small>Itens com média calculada</small><strong>{measured.length} de {items.length}</strong><p>Após um ciclo completo de uso</p></div></article>
+        <article><span className="stat-icon amber"><ShoppingCart /></span><div><small>Compra estimada por mês</small><strong>{monthlyTotal}</strong><p>Soma dos itens já medidos</p></div></article>
+      </div>
+      <div className="section-heading planning-title"><div><h2>Duração e previsão por item</h2><p>A média usa os últimos oito ciclos completos e melhora conforme a equipe registra o consumo.</p></div></div>
+      {items.length === 0 ? <div className="empty-state"><span><BarChart3 /></span><h3>Ainda não há itens para analisar</h3><p>Cadastre os produtos e registre as aberturas e consumos para gerar as previsões.</p></div> : (
+        <div className="planning-grid">
+          {items.map((item) => {
+            const analytics = item.analytics;
+            const measuredItem = analytics.averageDurationDays !== null;
+            return <article key={item.id} className="planning-card">
+              <div className="planning-card-head"><span className="item-avatar">{item.name.slice(0,2).toUpperCase()}</span><div><strong>{item.name}</strong><small>{item.category} · {item.unit}</small></div><span className={`measure-badge ${measuredItem ? "ready" : "waiting"}`}>{measuredItem ? "Calculado" : "Em medição"}</span></div>
+              <div className="planning-metrics">
+                <div><small>Duração média</small><strong>{measuredItem ? `${fmt(analytics.averageDurationDays!)} dias` : analytics.activeDays !== null ? `${fmt(analytics.activeDays)} dias em uso` : "—"}</strong></div>
+                <div><small>Sugestão para 30 dias</small><strong>{analytics.monthlyRecommendation ? `${analytics.monthlyRecommendation} ${item.unit}` : "Aguardando dados"}</strong></div>
+                <div><small>Cobertura do saldo atual</small><strong>{analytics.estimatedCoverageDays !== null ? `cerca de ${fmt(analytics.estimatedCoverageDays)} dias` : "Aguardando dados"}</strong></div>
+                <div><small>Ciclos usados no cálculo</small><strong>{analytics.completedCycles || "Nenhum ainda"}</strong></div>
+              </div>
+              <p className="planning-note">{measuredItem ? `A última unidade durou ${fmt(analytics.lastDurationDays!)} dias. A recomendação considera o ritmo médio de consumo da equipe.` : analytics.activeDays !== null ? "Este item já está sendo medido. A previsão aparece quando o saldo aberto chegar a zero." : "Abra uma unidade e registre o consumo até zerar para iniciar a medição."}</p>
+            </article>;
+          })}
+        </div>
+      )}
+    </>
   );
 }
 

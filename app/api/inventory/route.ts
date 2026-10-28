@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { items, movements } from "../../../db/schema";
+import { items, movements, openBatches } from "../../../db/schema";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 
@@ -17,10 +17,14 @@ function number(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function roundDays(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
 export async function GET() {
   try {
     const db = getDb();
-    const [itemRows, movementRows] = await Promise.all([
+    const [itemRows, movementRows, batchRows] = await Promise.all([
       db.select().from(items).orderBy(items.name),
       db
         .select({
@@ -37,8 +41,44 @@ export async function GET() {
         .innerJoin(items, eq(movements.itemId, items.id))
         .orderBy(desc(movements.createdAt), desc(movements.id))
         .limit(80),
+      db.select().from(openBatches).orderBy(desc(openBatches.openedAt)).limit(800),
     ]);
-    return Response.json({ items: itemRows, movements: movementRows });
+
+    const now = Date.now();
+    const enrichedItems = itemRows.map((item) => {
+      const batches = batchRows.filter((batch) => batch.itemId === item.id);
+      const completed = batches
+        .filter((batch) => batch.closedAt && batch.closedReason === "consumed" && batch.quantity > 0)
+        .slice(0, 8);
+      const unitDurations = completed.map((batch) => {
+        const elapsedDays = Math.max(1, (new Date(batch.closedAt!).getTime() - new Date(batch.openedAt).getTime()) / 86400000);
+        return elapsedDays / batch.quantity;
+      });
+      const averageDurationDays = unitDurations.length
+        ? unitDurations.reduce((sum, duration) => sum + duration, 0) / unitDurations.length
+        : null;
+      const active = batches.filter((batch) => !batch.closedAt && batch.remainingQty > 0);
+      const inferredActiveAt = active.length
+        ? active.reduce((oldest, batch) => new Date(batch.openedAt).getTime() < new Date(oldest).getTime() ? batch.openedAt : oldest, active[0].openedAt)
+        : item.openedQty > 0 ? item.lastOpenedAt : null;
+      const activeDays = inferredActiveAt ? Math.max(0, (now - new Date(inferredActiveAt).getTime()) / 86400000) : null;
+      const monthlyRecommendation = averageDurationDays ? Math.max(1, Math.ceil(30 / averageDurationDays)) : null;
+      const totalQty = item.unopenedQty + item.openedQty;
+
+      return {
+        ...item,
+        analytics: {
+          averageDurationDays: averageDurationDays ? roundDays(averageDurationDays) : null,
+          lastDurationDays: unitDurations.length ? roundDays(unitDurations[0]) : null,
+          completedCycles: completed.length,
+          activeDays: activeDays === null ? null : roundDays(activeDays),
+          monthlyRecommendation,
+          estimatedCoverageDays: averageDurationDays ? roundDays(averageDurationDays * totalQty) : null,
+        },
+      };
+    });
+
+    return Response.json({ items: enrichedItems, movements: movementRows });
   } catch (error) {
     return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
@@ -97,6 +137,7 @@ export async function POST(request: Request) {
       const [current] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
       if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });
 
+      const timestamp = new Date().toISOString();
       let unopenedQty = current.unopenedQty;
       let openedQty = current.openedQty;
       let lastOpenedAt = current.lastOpenedAt;
@@ -106,6 +147,28 @@ export async function POST(request: Request) {
         unopenedQty = Math.max(0, number(body.unopenedQty));
         openedQty = Math.max(0, number(body.openedQty));
         movementQuantity = unopenedQty + openedQty - current.unopenedQty - current.openedQty;
+
+        if (openedQty > current.openedQty) {
+          const difference = openedQty - current.openedQty;
+          await db.insert(openBatches).values({ itemId, quantity: difference, remainingQty: difference, openedAt: timestamp });
+          lastOpenedAt = timestamp;
+        } else if (openedQty < current.openedQty) {
+          let toRemove = current.openedQty - openedQty;
+          const activeBatches = await db.select().from(openBatches)
+            .where(and(eq(openBatches.itemId, itemId), isNull(openBatches.closedAt)))
+            .orderBy(desc(openBatches.openedAt), desc(openBatches.id));
+          for (const batch of activeBatches) {
+            if (toRemove <= 0) break;
+            const removed = Math.min(toRemove, batch.remainingQty);
+            const remainingQty = batch.remainingQty - removed;
+            await db.update(openBatches).set({
+              remainingQty,
+              closedAt: remainingQty <= 0 ? timestamp : null,
+              closedReason: remainingQty <= 0 ? "adjusted" : null,
+            }).where(eq(openBatches.id, batch.id));
+            toRemove -= removed;
+          }
+        }
       } else {
         if (!(quantity > 0)) return Response.json({ error: "A quantidade deve ser maior que zero." }, { status: 400 });
         if (type === "purchase") unopenedQty += quantity;
@@ -113,16 +176,47 @@ export async function POST(request: Request) {
           if (quantity > unopenedQty) return Response.json({ error: `Só existem ${unopenedQty} ${current.unit} fechados.` }, { status: 400 });
           unopenedQty -= quantity;
           openedQty += quantity;
-          lastOpenedAt = new Date().toISOString();
+          lastOpenedAt = timestamp;
+          await db.insert(openBatches).values({ itemId, quantity, remainingQty: quantity, openedAt: timestamp });
         }
         if (type === "consume") {
           if (quantity > openedQty) return Response.json({ error: `Só existem ${openedQty} ${current.unit} abertos. Registre a abertura antes do consumo.` }, { status: 400 });
+
+          let activeBatches = await db.select().from(openBatches)
+            .where(and(eq(openBatches.itemId, itemId), isNull(openBatches.closedAt)))
+            .orderBy(asc(openBatches.openedAt), asc(openBatches.id));
+          const trackedQty = activeBatches.reduce((sum, batch) => sum + batch.remainingQty, 0);
+          const untrackedQty = Math.max(0, current.openedQty - trackedQty);
+          if (untrackedQty > 0) {
+            await db.insert(openBatches).values({
+              itemId,
+              quantity: untrackedQty,
+              remainingQty: untrackedQty,
+              openedAt: current.lastOpenedAt || timestamp,
+            });
+            activeBatches = await db.select().from(openBatches)
+              .where(and(eq(openBatches.itemId, itemId), isNull(openBatches.closedAt)))
+              .orderBy(asc(openBatches.openedAt), asc(openBatches.id));
+          }
+
+          let toConsume = quantity;
+          for (const batch of activeBatches) {
+            if (toConsume <= 0) break;
+            const consumed = Math.min(toConsume, batch.remainingQty);
+            const remainingQty = batch.remainingQty - consumed;
+            await db.update(openBatches).set({
+              remainingQty,
+              closedAt: remainingQty <= 0 ? timestamp : null,
+              closedReason: remainingQty <= 0 ? "consumed" : null,
+            }).where(eq(openBatches.id, batch.id));
+            toConsume -= consumed;
+          }
           openedQty -= quantity;
         }
       }
 
       await db.batch([
-        db.update(items).set({ unopenedQty, openedQty, lastOpenedAt, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)),
+        db.update(items).set({ unopenedQty, openedQty, lastOpenedAt, updatedAt: timestamp }).where(eq(items.id, itemId)),
         db.insert(movements).values({ itemId, type, quantity: movementQuantity, note }),
       ]);
       return Response.json({ ok: true });
