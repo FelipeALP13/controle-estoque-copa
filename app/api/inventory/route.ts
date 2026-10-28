@@ -1,9 +1,38 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
-import { items, movements, openBatches } from "../../../db/schema";
+import { items, members, movements, openBatches } from "../../../db/schema";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
+type MemberRole = "admin" | "member" | "viewer";
+
+async function getOrCreateMember(db: ReturnType<typeof getDb>) {
+  const user = await getChatGPTUser();
+  if (!user) {
+    return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, active: true };
+  }
+
+  const [existing] = await db.select().from(members).where(eq(members.userId, user.userId)).limit(1);
+  if (existing) {
+    if (existing.name !== user.displayName || existing.email !== user.email) {
+      await db.update(members).set({ name: user.displayName, email: user.email }).where(eq(members.id, existing.id));
+    }
+    return { ...existing, name: user.displayName, email: user.email };
+  }
+
+  const anyMember = await db.select({ id: members.id }).from(members).limit(1);
+  const [created] = await db.insert(members).values({
+    userId: user.userId,
+    name: user.displayName,
+    email: user.email,
+    role: anyMember.length ? "member" : "admin",
+  }).returning();
+  return created;
+}
+
+function canManage(role: MemberRole) {
+  return role === "admin";
+}
 
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Erro inesperado";
@@ -25,7 +54,8 @@ function roundDays(value: number) {
 export async function GET() {
   try {
     const db = getDb();
-    const [itemRows, movementRows, batchRows] = await Promise.all([
+    const currentMember = await getOrCreateMember(db);
+    const [itemRows, movementRows, batchRows, memberRows] = await Promise.all([
       db.select().from(items).orderBy(items.name),
       db
         .select({
@@ -44,6 +74,9 @@ export async function GET() {
         .orderBy(desc(movements.createdAt), desc(movements.id))
         .limit(80),
       db.select().from(openBatches).orderBy(desc(openBatches.openedAt)).limit(800),
+      canManage(currentMember.role)
+        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, role: members.role, active: members.active, createdAt: members.createdAt }).from(members).orderBy(members.name)
+        : Promise.resolve([]),
     ]);
 
     const now = Date.now();
@@ -80,7 +113,16 @@ export async function GET() {
       };
     });
 
-    return Response.json({ items: enrichedItems, movements: movementRows });
+    const visibleMembers = currentMember.userId === "local-preview" && memberRows.length === 0
+      ? [{ id: 0, ...currentMember, createdAt: new Date().toISOString() }]
+      : memberRows;
+
+    return Response.json({
+      items: enrichedItems,
+      movements: movementRows,
+      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, role: currentMember.role },
+      members: visibleMembers,
+    });
   } catch (error) {
     return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
@@ -91,9 +133,23 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>;
     const action = String(body.action ?? "");
     const db = getDb();
-    const user = await getChatGPTUser();
+    const currentMember = await getOrCreateMember(db);
+    if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado." }, { status: 403 });
+    if (currentMember.role === "viewer") return Response.json({ error: "Seu perfil permite somente visualizar o estoque." }, { status: 403 });
+
+    if (action === "updateMemberRole") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem alterar permissões." }, { status: 403 });
+      const targetUserId = String(body.userId ?? "");
+      const role = String(body.role ?? "") as MemberRole;
+      if (!targetUserId || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Permissão inválida." }, { status: 400 });
+      if (targetUserId === currentMember.userId) return Response.json({ error: "Para evitar bloqueio acidental, você não pode alterar sua própria permissão." }, { status: 400 });
+      const [updated] = await db.update(members).set({ role }).where(eq(members.userId, targetUserId)).returning();
+      if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      return Response.json({ member: updated });
+    }
 
     if (action === "addItem") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem cadastrar itens." }, { status: 403 });
       const name = String(body.name ?? "").trim();
       const category = String(body.category ?? "Outros").trim() || "Outros";
       const unit = String(body.unit ?? "un.").trim() || "un.";
@@ -104,6 +160,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "seed") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem carregar a lista inicial." }, { status: 403 });
       const existing = await db.select({ id: items.id }).from(items).limit(1);
       if (existing.length) return Response.json({ error: "A lista já possui itens." }, { status: 409 });
       const now = Date.now();
@@ -118,6 +175,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "updateItem") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem editar itens." }, { status: 403 });
       const itemId = number(body.itemId);
       const name = String(body.name ?? "").trim();
       const category = String(body.category ?? "Outros").trim() || "Outros";
@@ -136,6 +194,7 @@ export async function POST(request: Request) {
       if (!itemId || !["purchase", "open", "consume", "adjust"].includes(type)) {
         return Response.json({ error: "Movimentação inválida." }, { status: 400 });
       }
+      if (type === "adjust" && !canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem ajustar a contagem física." }, { status: 403 });
 
       const [current] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
       if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });
@@ -225,8 +284,8 @@ export async function POST(request: Request) {
           type,
           quantity: movementQuantity,
           note,
-          createdByUserId: user?.userId ?? null,
-          createdByName: user?.displayName ?? "Equipe",
+          createdByUserId: currentMember.userId,
+          createdByName: currentMember.name,
         }),
       ]);
       return Response.json({ ok: true });

@@ -20,8 +20,23 @@ import {
   Sparkles,
   TrendingDown,
   TriangleAlert,
+  Users,
   X,
 } from "lucide-react";
+
+type MemberRole = "admin" | "member" | "viewer";
+
+type Member = {
+  id: number;
+  userId: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+  active: boolean;
+  createdAt: string;
+};
+
+type CurrentUser = Pick<Member, "userId" | "name" | "email" | "role">;
 
 type Item = {
   id: number;
@@ -83,16 +98,22 @@ function exactDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
+function roleLabel(role: MemberRole) {
+  return role === "admin" ? "Administrador" : role === "member" ? "Membro" : "Somente leitura";
+}
+
 export default function Home() {
   const [items, setItems] = useState<Item[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"stock" | "planning" | "history">("stock");
+  const [tab, setTab] = useState<"stock" | "planning" | "history" | "team">("stock");
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -104,6 +125,8 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || "Não foi possível carregar o estoque.");
       setItems(data.items);
       setMovements(data.movements);
+      setCurrentUser(data.currentUser);
+      setMembers(data.members || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
@@ -117,6 +140,8 @@ export default function Home() {
   const openItems = items.filter((item) => item.openedQty > 0);
   const totalUnits = items.reduce((sum, item) => sum + item.unopenedQty + item.openedQty, 0);
   const measuredItems = items.filter((item) => item.analytics.averageDurationDays !== null);
+  const canWrite = Boolean(currentUser && currentUser.role !== "viewer");
+  const isAdmin = currentUser?.role === "admin";
   const todayLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("pt-BR");
@@ -162,19 +187,20 @@ export default function Home() {
           <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
           <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>
           <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>
+          {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setMobileMenu(false); }}><Users /> Equipe</button>}
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
           <p>Registre a abertura antes de lançar o consumo. Assim você sempre saberá o que está em uso.</p>
         </div>
-        <div className="sidebar-footer"><span className="avatar">FC</span><div><strong>Controle interno</strong><small>Dados compartilhados</small></div></div>
+        <div className="sidebar-footer"><span className="avatar">{currentUser?.name?.slice(0,2).toUpperCase() || "EQ"}</span><div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? roleLabel(currentUser.role) : "Carregando acesso"}</small></div></div>
       </aside>
 
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : "Histórico de movimentações"}</h1></div>
-          <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button>
+          <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
+          {isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
         <section className="content">
@@ -189,24 +215,24 @@ export default function Home() {
                   <h2>{lowItems.length ? `${lowItems.length} ${lowItems.length === 1 ? "item precisa" : "itens precisam"} de atenção` : "Tudo em ordem por aqui"}</h2>
                   <p>{lowItems.length ? "Revise a sugestão de compra e mantenha a copa abastecida para a equipe." : "O estoque está acima dos mínimos definidos. Continue registrando o consumo para melhorar as previsões."}</p>
                   <div className="quick-actions">
-                    <button onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
-                    <button onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
-                    <button onClick={() => setModal({ kind: "movement", type: "consume" })}><TrendingDown /> Lançar consumo</button>
-                    <button onClick={() => setModal({ kind: "movement", type: "adjust" })}><Settings2 /> Conferir saldo</button>
+                    <button disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
+                    <button disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
+                    <button disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "consume" })}><TrendingDown /> Lançar consumo</button>
+                    <button disabled={!isAdmin} onClick={() => setModal({ kind: "movement", type: "adjust" })}><Settings2 /> Conferir saldo</button>
                   </div>
                 </div>
                 <div className="hero-status">
                   <span className={lowItems.length ? "needs-attention" : "healthy"}>{lowItems.length ? <TriangleAlert /> : <PackageCheck />}</span>
-                  <small>Saúde do estoque</small>
+                  <small>Situação atual</small>
                   <strong>{lowItems.length ? "Atenção" : "Em dia"}</strong>
-                  <p>{items.length ? `${items.length - lowItems.length} de ${items.length} itens saudáveis` : "Cadastre o primeiro item"}</p>
+                  <p>{items.length ? `${items.length - lowItems.length} de ${items.length} itens dentro do mínimo` : "Cadastre o primeiro item"}</p>
                 </div>
               </section>
 
               <div className="stats-grid">
                 <article className="stat-card"><span className="stat-icon blue"><Box /></span><div><small>Itens cadastrados</small><strong>{items.length}</strong><p>{fmt(totalUnits)} unidades no total</p></div></article>
                 <article className="stat-card"><span className="stat-icon amber"><PackageOpen /></span><div><small>Em uso agora</small><strong>{openItems.length}</strong><p>{openItems.length ? "Com embalagem aberta" : "Nada aberto"}</p></div></article>
-                <article className={`stat-card ${lowItems.length ? "attention" : ""}`}><span className="stat-icon red"><TriangleAlert /></span><div><small>Precisam de reposição</small><strong>{lowItems.length}</strong><p>{lowItems.length ? "No estoque mínimo ou abaixo" : "Estoque saudável"}</p></div></article>
+                <article className={`stat-card ${lowItems.length ? "attention" : ""}`}><span className="stat-icon red"><TriangleAlert /></span><div><small>Precisam de reposição</small><strong>{lowItems.length}</strong><p>{lowItems.length ? "No estoque mínimo ou abaixo" : "Tudo dentro do mínimo"}</p></div></article>
                 <article className="stat-card"><span className="stat-icon green"><CalendarClock /></span><div><small>Previsões confiáveis</small><strong>{measuredItems.length}</strong><p>{measuredItems.length ? "Com ciclo de consumo completo" : "Ainda coletando histórico"}</p></div></article>
               </div>
 
@@ -228,7 +254,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><button className="secondary-button" onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><button className="secondary-button" disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>
@@ -246,11 +272,11 @@ export default function Home() {
               ) : (
                 <div className="stock-list">
                   <div className="list-head"><span>Item</span><span>Saldo atual</span><span>Situação</span><span>Duração média</span><span>Última abertura</span><span>Ações</span></div>
-                  {filtered.map((item) => <StockRow key={item.id} item={item} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} />)}
+                  {filtered.map((item) => <StockRow key={item.id} item={item} role={currentUser?.role ?? "viewer"} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} />)}
                 </div>
               )}
             </>
-          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -260,7 +286,7 @@ export default function Home() {
   );
 }
 
-function StockRow({ item, onAction, onEdit }: { item: Item; onAction: (type: Movement["type"]) => void; onEdit: () => void }) {
+function StockRow({ item, role, onAction, onEdit }: { item: Item; role: MemberRole; onAction: (type: Movement["type"]) => void; onEdit: () => void }) {
   const total = item.unopenedQty + item.openedQty;
   const isLow = total <= item.minimumQty;
   const initial = item.name.slice(0, 2).toUpperCase();
@@ -272,11 +298,11 @@ function StockRow({ item, onAction, onEdit }: { item: Item; onAction: (type: Mov
       <div className="duration-cell">{item.analytics.averageDurationDays !== null ? <><strong>{fmt(item.analytics.averageDurationDays)} dias</strong><small>{item.analytics.monthlyRecommendation} {item.unit}/30 dias</small></> : item.analytics.activeDays !== null ? <><strong>Em medição</strong><small>Há {fmt(item.analytics.activeDays)} dias</small></> : <><strong>Sem histórico</strong><small>Registre abertura e consumo</small></>}</div>
       <div className="opened-cell"><strong>{relativeDate(item.lastOpenedAt)}</strong>{item.lastOpenedAt && <small>{new Intl.DateTimeFormat("pt-BR").format(new Date(item.lastOpenedAt))}</small>}</div>
       <div className="row-actions">
-        <button title="Registrar abertura" disabled={item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
-        <button title="Registrar consumo" disabled={item.openedQty <= 0} onClick={() => onAction("consume")}><TrendingDown size={17} /></button>
-        <button title="Registrar compra" onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
-        <button title="Ajustar saldo" onClick={() => onAction("adjust")}><Settings2 size={17} /></button>
-        <button title="Editar item" onClick={onEdit}><Pencil size={16} /></button>
+        <button title="Registrar abertura" disabled={role === "viewer" || item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
+        <button title="Registrar consumo" disabled={role === "viewer" || item.openedQty <= 0} onClick={() => onAction("consume")}><TrendingDown size={17} /></button>
+        <button title="Registrar compra" disabled={role === "viewer"} onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
+        <button title="Ajustar saldo" disabled={role !== "admin"} onClick={() => onAction("adjust")}><Settings2 size={17} /></button>
+        <button title="Editar item" disabled={role !== "admin"} onClick={onEdit}><Pencil size={16} /></button>
       </div>
     </article>
   );
@@ -311,6 +337,33 @@ function PlanningView({ items, loading }: { items: Item[]; loading: boolean }) {
           })}
         </div>
       )}
+    </>
+  );
+}
+
+function TeamView({ members, currentUser, saving, onUpdateRole }: { members: Member[]; currentUser: CurrentUser | null; saving: boolean; onUpdateRole: (userId: string, role: MemberRole) => void }) {
+  return (
+    <>
+      <div className="team-intro">
+        <span className="team-intro-icon"><Users /></span>
+        <div><p className="eyebrow">ACESSO INDIVIDUAL</p><h2>Equipe e permissões</h2><p>Cada pessoa entra com sua própria conta. Os lançamentos ficam associados ao usuário e as permissões são verificadas pelo servidor.</p></div>
+      </div>
+      <div className="permission-cards">
+        <article><strong>Administrador</strong><p>Gerencia itens, confere saldos, altera permissões e registra movimentações.</p></article>
+        <article><strong>Membro</strong><p>Registra compras, aberturas e consumos, sem alterar cadastros ou permissões.</p></article>
+        <article><strong>Somente leitura</strong><p>Consulta estoque, planejamento e histórico, sem fazer lançamentos.</p></article>
+      </div>
+      <div className="team-panel">
+        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Novos usuários autorizados no Site entram automaticamente como membros.</p></div><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span></div>
+        <div className="team-table">
+          <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Entrada</span></div>
+          {members.map((member) => <div className="team-row" key={member.userId}>
+            <div className="member-cell"><span className="avatar member-avatar">{member.name.slice(0,2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.email}{member.userId === currentUser?.userId ? " · você" : ""}</small></div></div>
+            <select aria-label={`Permissão de ${member.name}`} disabled={saving || member.userId === currentUser?.userId} value={member.role} onChange={(event) => onUpdateRole(member.userId, event.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select>
+            <span className="member-date">{new Intl.DateTimeFormat("pt-BR").format(new Date(member.createdAt))}</span>
+          </div>)}
+        </div>
+      </div>
     </>
   );
 }

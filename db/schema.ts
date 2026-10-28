@@ -38,3 +38,13 @@ export const openBatches = sqliteTable("open_batches", {
   closedAt: text("closed_at"),
   closedReason: text("closed_reason", { enum: ["consumed", "adjusted"] }),
 });
+
+export const members = sqliteTable("members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull().unique(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  role: text("role", { enum: ["admin", "member", "viewer"] }).notNull().default("member"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
