@@ -10,7 +10,7 @@ export default async function Home() {
   return (
     <main className="login-page">
       <section className="login-card">
-        <div className="login-brand"><span>☕</span><div><strong>Estoque da Copa</strong><small>Controle interno da equipe</small></div></div>
+        <div className="login-brand"><span>☕</span><div><strong>Estoque da Firma</strong><small>Café e lanches da galera</small></div></div>
         <div className="login-visual"><span>🍪</span><span>☕</span><span>🥛</span></div>
         <p className="eyebrow">ACESSO SEGURO</p>
         <h1>Identifique-se antes de acessar o estoque</h1>

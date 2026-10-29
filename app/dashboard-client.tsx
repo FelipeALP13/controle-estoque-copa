@@ -146,21 +146,21 @@ function playfulGreeting(name: string, lowItem?: string, openCount = 0) {
     `${firstName}, o estoque baixou e todo mundo olhou pra você. Coincidência? Sei…`,
     `${firstName}, deixa um pouco de ${lowItem.toLocaleLowerCase("pt-BR")} pros outros também, campeão.`,
     `${firstName}, desse jeito o ${lowItem.toLocaleLowerCase("pt-BR")} vai pedir medida protetiva.`,
-    `${firstName}, passa reto pela copa pelo menos uma vez. Só pra gente ver uma coisa.`,
+    `${firstName}, passa reto pelo cantinho do café pelo menos uma vez. Só pra gente ver uma coisa.`,
     `${firstName}, o ${lowItem.toLocaleLowerCase("pt-BR")} sumiu de novo. Quer contar alguma coisa pra equipe?`,
   ] : openCount > 0 ? [
-    `${firstName}, abriu de novo? A copa já decorou até o barulho dos seus passos.`,
+    `${firstName}, abriu de novo? O armário já decorou até o barulho dos seus passos.`,
     `${firstName}, ${openCount === 1 ? "tem um item aberto" : `tem ${openCount} itens abertos`}. Foi você, né? Pode falar.`,
     `${firstName}, calma aí. O expediente é longo e o biscoito não vai fugir.`,
-    `${firstName}, você veio trabalhar ou fazer vistoria diária na copa?`,
-    `${firstName}, mais uma visita à copa? Já pode pedir transferência pra lá.`,
+    `${firstName}, você veio trabalhar ou fazer vistoria diária no cantinho do café?`,
+    `${firstName}, mais uma visita ao armário? Já pode pedir uma mesa do lado dele.`,
     `${firstName}, a embalagem mal abriu e você já apareceu. Impressionante.`,
   ] : [
     `${firstName}, nada aberto ainda. Você está bem? A equipe ficou preocupada.`,
     `${firstName}, os biscoitos sobreviveram ao dia. Ninguém esperava isso de você.`,
-    `${firstName}, estoque em ordem. Hoje você resolveu dar folga pra copa?`,
+    `${firstName}, estoque em ordem. Hoje você resolveu dar folga pro cantinho do café?`,
     `${firstName}, nenhuma baixa suspeita. Estamos verificando se você realmente veio trabalhar.`,
-    `${firstName}, a copa está intacta. Pode admitir: você almoçou antes de chegar.`,
+    `${firstName}, o armário está intacto. Pode admitir: você almoçou antes de chegar.`,
     `${firstName}, tudo abastecido. Tenta não transformar isso num desafio pessoal.`,
   ];
   const dailySeed = `${firstName}${new Date().toISOString().slice(0, 10)}`.split("").reduce((total, character) => total + character.charCodeAt(0), 0);
@@ -285,7 +285,7 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
-        <div className="brand"><span className="brand-mark"><Coffee size={21} /></span><div><strong>Estoque</strong><small>Copa da empresa</small></div></div>
+        <div className="brand"><span className="brand-mark"><Coffee size={21} /></span><div><strong>Estoque</strong><small>Lanches da firma</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
           <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
@@ -304,7 +304,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
+          <div><p className="eyebrow">RANGO DA FIRMA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
           {isAdmin || permissions.manageItems ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
@@ -318,8 +318,8 @@ export default function Home() {
                 <div className="hero-copy">
                   <p className="hero-date">{todayLabel}</p>
                   <h2>{lowItems.length ? `${lowItems.length} ${lowItems.length === 1 ? "item precisa" : "itens precisam"} de atenção` : "Tudo em ordem por aqui"}</h2>
-                  <p>{lowItems.length ? "Revise a sugestão de compra e mantenha a copa abastecida para a equipe." : "O estoque está acima dos mínimos definidos. Continue registrando o consumo para melhorar as previsões."}</p>
-                  <div className="hero-joke"><span>😄</span><div><small>RECADO DA COPA</small><strong>{playfulNote}</strong></div></div>
+                  <p>{lowItems.length ? "Revise a sugestão de compra e mantenha o armário abastecido pra galera." : "O estoque está acima dos mínimos definidos. Continue registrando o consumo para melhorar as previsões."}</p>
+                  <div className="hero-joke"><span>😄</span><div><small>RECADO DO ARMÁRIO</small><strong>{playfulNote}</strong></div></div>
                   <div className="quick-actions">
                     <button disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
                     <button disabled={!permissions.openItems} onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
