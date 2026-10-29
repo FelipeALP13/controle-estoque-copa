@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { getSessionMember, hashPassword, normalizeUsername, validatePassword } from "../../auth-session";
+import { getSessionMember, hashPassword, normalizeUsername, validatePassword, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
 import { items, members, movements, openBatches } from "../../../db/schema";
 
@@ -198,12 +198,14 @@ export async function POST(request: Request) {
       const email = String(body.email ?? currentMember.email).trim().toLocaleLowerCase("pt-BR");
       const username = normalizeUsername(String(body.username ?? currentMember.username ?? ""));
       const password = String(body.password ?? "");
+      const currentPassword = String(body.currentPassword ?? "");
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
       if (!name) return Response.json({ error: "Informe seu nome." }, { status: 400 });
       if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
       if (username.length < 3) return Response.json({ error: "O usuário precisa ter pelo menos 3 caracteres." }, { status: 400 });
       if (password && !validatePassword(password)) return Response.json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
+      if (password && (!currentMember.passwordHash || !currentMember.passwordSalt || !(await verifyPassword(currentPassword, currentMember.passwordHash, currentMember.passwordSalt)))) return Response.json({ error: "A senha atual está incorreta." }, { status: 400 });
       const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
       if (duplicate.length && duplicate[0].userId !== currentMember.userId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
       const credentials = password ? await hashPassword(password) : null;

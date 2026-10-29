@@ -66,3 +66,14 @@ export const sessions = sqliteTable("sessions", {
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

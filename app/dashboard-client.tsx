@@ -525,6 +525,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   const [memberName, setMemberName] = useState(editingMember?.name ?? profile?.name ?? "");
   const [memberEmail, setMemberEmail] = useState(editingMember?.email ?? profile?.email ?? "");
   const [memberUsername, setMemberUsername] = useState(editingMember?.username ?? profile?.username ?? "");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [memberPassword, setMemberPassword] = useState("");
   const [memberRole, setMemberRole] = useState<MemberRole>(editingMember?.role ?? profile?.role ?? "member");
   const [memberPermissions, setMemberPermissions] = useState<MemberPermissions>(editingMember?.permissions ?? profile?.permissions ?? permissionPresets.member);
@@ -559,7 +560,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
       if (state.kind === "profile" || state.kind === "member") {
         const uploadedAvatarKey = avatarMode === "image" && avatarFile ? await uploadImage(avatarFile, "profile") : avatarMode === "image" ? avatarKey : null;
         if (state.kind === "profile") {
-          await onSubmit({ action: "updateProfile", name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil atualizado.");
+          await onSubmit({ action: "updateProfile", name: memberName, email: memberEmail, username: memberUsername, currentPassword, password: memberPassword, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil e acesso atualizados.");
         } else {
           await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
         }
@@ -590,8 +591,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
           <VisualEditor label={state.kind === "profile" ? "Sua imagem" : "Imagem do membro"} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
-          <label><span>Nova senha</span><input minLength={6} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="Deixe em branco para manter" /></label>
           <label className="full"><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
+          <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input minLength={6} type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input minLength={6} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" /></label></div></div>
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>
           <VisualEditor label="Avatar do usuário" mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />

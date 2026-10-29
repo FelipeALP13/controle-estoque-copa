@@ -17,9 +17,13 @@ function randomHex(length: number) {
   return toHex(crypto.getRandomValues(new Uint8Array(length)));
 }
 
-async function sha256(value: string) {
+export async function hashToken(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return toHex(new Uint8Array(digest));
+}
+
+export function createSecureToken() {
+  return randomHex(32);
 }
 
 export function normalizeUsername(value: string) {
@@ -59,7 +63,7 @@ export async function verifyPassword(password: string, expectedHash: string, sal
 export async function getSessionMember(db = getDb()): Promise<SessionMember | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  const tokenHash = await sha256(token);
+  const tokenHash = await hashToken(token);
   const now = new Date().toISOString();
   const [row] = await db
     .select({ member: members })
@@ -72,7 +76,7 @@ export async function getSessionMember(db = getDb()): Promise<SessionMember | nu
 
 export async function createSession(memberId: number, db = getDb()) {
   const token = randomHex(32);
-  const tokenHash = await sha256(token);
+  const tokenHash = await hashToken(token);
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000);
   await db.insert(sessions).values({ memberId, tokenHash, expiresAt: expiresAt.toISOString() });
   (await cookies()).set(SESSION_COOKIE, token, {
@@ -87,6 +91,6 @@ export async function createSession(memberId: number, db = getDb()) {
 export async function destroySession(db = getDb()) {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (token) await db.delete(sessions).where(eq(sessions.tokenHash, await sha256(token)));
+  if (token) await db.delete(sessions).where(eq(sessions.tokenHash, await hashToken(token)));
   cookieStore.set(SESSION_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
 }
