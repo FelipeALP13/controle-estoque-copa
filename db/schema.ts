@@ -51,5 +51,18 @@ export const members = sqliteTable("members", {
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   avatarIcon: text("avatar_icon").notNull().default("👤"),
   avatarKey: text("avatar_key"),
+  username: text("username").unique(),
+  passwordHash: text("password_hash"),
+  passwordSalt: text("password_salt"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const sessions = sqliteTable("sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

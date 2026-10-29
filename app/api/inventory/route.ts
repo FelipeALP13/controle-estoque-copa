@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { headers } from "next/headers";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getSessionMember, hashPassword, normalizeUsername, validatePassword } from "../../auth-session";
 import { getDb } from "../../../db";
 import { items, members, movements, openBatches } from "../../../db/schema";
 
@@ -66,39 +65,10 @@ function hasPermission(member: { role: MemberRole; permissions?: string }, permi
   return resolvePermissions(member.role, member.permissions)[permission];
 }
 
-async function getOrCreateMember(db: ReturnType<typeof getDb>) {
-  const user = await getChatGPTUser();
-  if (!user) {
-    const host = (await headers()).get("host") ?? "";
-    if (host.startsWith("127.0.0.1") || host.startsWith("localhost")) {
-      return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, permissions: "{}", active: true, avatarIcon: "👤", avatarKey: null };
-    }
-    throw new Error("AUTH_REQUIRED");
-  }
-  const email = user.email.trim().toLowerCase();
-
-  const [existing] = await db.select().from(members).where(eq(members.userId, user.userId)).limit(1);
-  if (existing) {
-    if (existing.email !== email) {
-      await db.update(members).set({ email }).where(eq(members.id, existing.id));
-    }
-    return { ...existing, email };
-  }
-
-  const [invited] = await db.select().from(members).where(eq(members.email, email)).limit(1);
-  if (invited) {
-    const [claimed] = await db.update(members).set({ userId: user.userId, email }).where(eq(members.id, invited.id)).returning();
-    return claimed;
-  }
-
-  const anyMember = await db.select({ id: members.id }).from(members).limit(1);
-  const [created] = await db.insert(members).values({
-    userId: user.userId,
-    name: user.displayName,
-    email,
-    role: anyMember.length ? "member" : "admin",
-  }).returning();
-  return created;
+async function requireMember(db: ReturnType<typeof getDb>) {
+  const member = await getSessionMember(db);
+  if (!member) throw new Error("AUTH_REQUIRED");
+  return member;
 }
 
 function canManage(role: MemberRole) {
@@ -139,7 +109,7 @@ function suggestedIcon(name: string, current: string) {
 export async function GET() {
   try {
     const db = getDb();
-    const currentMember = await getOrCreateMember(db);
+    const currentMember = await requireMember(db);
     if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado. Fale com um administrador." }, { status: 403 });
     const [itemRows, movementRows, batchRows, memberRows] = await Promise.all([
       db.select().from(items).orderBy(items.name),
@@ -161,7 +131,7 @@ export async function GET() {
         .limit(80),
       db.select().from(openBatches).orderBy(desc(openBatches.openedAt)).limit(800),
       canManage(currentMember.role)
-        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, role: members.role, permissions: members.permissions, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
+        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, username: members.username, role: members.role, permissions: members.permissions, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
         : Promise.resolve([]),
     ]);
 
@@ -200,20 +170,18 @@ export async function GET() {
       };
     });
 
-    const visibleMembers = (currentMember.userId === "local-preview"
-      ? [{ id: 0, ...currentMember, createdAt: new Date().toISOString() }, ...memberRows]
-      : memberRows).map((member) => ({ ...member, permissions: resolvePermissions(member.role, member.permissions) }));
+    const visibleMembers = memberRows.map((member) => ({ ...member, permissions: resolvePermissions(member.role, member.permissions) }));
     const currentPermissions = resolvePermissions(currentMember.role, currentMember.permissions);
 
     return Response.json({
       items: enrichedItems,
       movements: currentPermissions.viewHistory ? movementRows : [],
-      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, role: currentMember.role, permissions: currentPermissions, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
+      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, username: currentMember.username, role: currentMember.role, permissions: currentPermissions, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
       members: visibleMembers,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2Fpainel" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
+    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com seu usuário e senha para acessar o sistema.", signInPath: "/" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
 }
 
@@ -222,16 +190,24 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>;
     const action = String(body.action ?? "");
     const db = getDb();
-    const currentMember = await getOrCreateMember(db);
+    const currentMember = await requireMember(db);
     if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado." }, { status: 403 });
 
     if (action === "updateProfile") {
       const name = String(body.name ?? "").trim();
+      const email = String(body.email ?? currentMember.email).trim().toLocaleLowerCase("pt-BR");
+      const username = normalizeUsername(String(body.username ?? currentMember.username ?? ""));
+      const password = String(body.password ?? "");
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
       if (!name) return Response.json({ error: "Informe seu nome." }, { status: 400 });
-      if (currentMember.userId === "local-preview") return Response.json({ member: { ...currentMember, name, avatarIcon, avatarKey } });
-      const [updated] = await db.update(members).set({ name, avatarIcon, avatarKey }).where(eq(members.userId, currentMember.userId)).returning();
+      if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
+      if (username.length < 3) return Response.json({ error: "O usuário precisa ter pelo menos 3 caracteres." }, { status: 400 });
+      if (password && !validatePassword(password)) return Response.json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
+      const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
+      if (duplicate.length && duplicate[0].userId !== currentMember.userId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      const credentials = password ? await hashPassword(password) : null;
+      const [updated] = await db.update(members).set({ name, email, username, avatarIcon, avatarKey, ...(credentials ? { passwordHash: credentials.hash, passwordSalt: credentials.salt } : {}) }).where(eq(members.userId, currentMember.userId)).returning();
       return Response.json({ member: updated });
     }
 
@@ -250,16 +226,21 @@ export async function POST(request: Request) {
       if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem adicionar membros." }, { status: 403 });
       const name = String(body.name ?? "").trim();
       const email = String(body.email ?? "").trim().toLowerCase();
+      const username = normalizeUsername(String(body.username ?? ""));
+      const password = String(body.password ?? "");
       const role = String(body.role ?? "member") as MemberRole;
       if (!name) return Response.json({ error: "Informe o nome do membro." }, { status: 400 });
       if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
+      if (username.length < 3) return Response.json({ error: "O usuário precisa ter pelo menos 3 caracteres." }, { status: 400 });
+      if (!validatePassword(password)) return Response.json({ error: "A senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
       if (!["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Permissão inválida." }, { status: 400 });
-      const existing = await db.select({ id: members.id }).from(members).where(eq(members.email, email)).limit(1);
-      if (existing.length) return Response.json({ error: "Já existe um membro cadastrado com este e-mail." }, { status: 409 });
+      const existing = await db.select({ id: members.id }).from(members).where(eq(members.username, username)).limit(1);
+      if (existing.length) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
       const permissions = permissionJson(role, body.permissions);
-      const [member] = await db.insert(members).values({ userId: `pending:${email}`, name, email, role, permissions, active: true, avatarIcon, avatarKey }).returning();
+      const credentials = await hashPassword(password);
+      const [member] = await db.insert(members).values({ userId: `member:${crypto.randomUUID()}`, name, email, username, passwordHash: credentials.hash, passwordSalt: credentials.salt, role, permissions, active: true, avatarIcon, avatarKey }).returning();
       return Response.json({ member }, { status: 201 });
     }
 
@@ -268,15 +249,19 @@ export async function POST(request: Request) {
       const targetUserId = String(body.userId ?? "");
       const name = String(body.name ?? "").trim();
       const email = String(body.email ?? "").trim().toLowerCase();
+      const username = normalizeUsername(String(body.username ?? ""));
+      const password = String(body.password ?? "");
       const role = String(body.role ?? "member") as MemberRole;
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
       const permissions = permissionJson(role, body.permissions);
-      if (!targetUserId || !name || !email.includes("@") || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Dados do membro inválidos." }, { status: 400 });
+      if (!targetUserId || !name || !email.includes("@") || username.length < 3 || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Dados do membro inválidos." }, { status: 400 });
+      if (password && !validatePassword(password)) return Response.json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
       if (targetUserId === currentMember.userId) return Response.json({ error: "Edite seus dados em Meu perfil." }, { status: 400 });
-      const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.email, email)).limit(1);
-      if (duplicate.length && duplicate[0].userId !== targetUserId) return Response.json({ error: "Este e-mail já pertence a outro membro." }, { status: 409 });
-      const [updated] = await db.update(members).set({ name, email, role, permissions, active: body.active !== false, avatarIcon, avatarKey }).where(eq(members.userId, targetUserId)).returning();
+      const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
+      if (duplicate.length && duplicate[0].userId !== targetUserId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      const credentials = password ? await hashPassword(password) : null;
+      const [updated] = await db.update(members).set({ name, email, username, role, permissions, active: body.active !== false, avatarIcon, avatarKey, ...(credentials ? { passwordHash: credentials.hash, passwordSalt: credentials.salt } : {}) }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       return Response.json({ member: updated });
     }
@@ -456,6 +441,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Ação desconhecida." }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2Fpainel" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
+    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com seu usuário e senha para acessar o sistema.", signInPath: "/" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
 }

@@ -1,11 +1,10 @@
 import { env } from "cloudflare:workers";
-import { headers } from "next/headers";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getDb } from "../../../db";
+import { getSessionMember } from "../../auth-session";
 
 async function hasAccess() {
-  if (await getChatGPTUser()) return true;
-  const host = (await headers()).get("host") ?? "";
-  return host.startsWith("127.0.0.1") || host.startsWith("localhost");
+  const member = await getSessionMember(getDb());
+  return Boolean(member?.active);
 }
 
 function getBucket() {

@@ -61,6 +61,7 @@ type Member = {
   userId: string;
   name: string;
   email: string;
+  username: string | null;
   role: MemberRole;
   permissions: MemberPermissions;
   active: boolean;
@@ -69,7 +70,7 @@ type Member = {
   createdAt: string;
 };
 
-type CurrentUser = Pick<Member, "userId" | "name" | "email" | "role" | "permissions" | "active" | "avatarIcon" | "avatarKey">;
+type CurrentUser = Pick<Member, "userId" | "name" | "email" | "username" | "role" | "permissions" | "active" | "avatarIcon" | "avatarKey">;
 
 type Item = {
   id: number;
@@ -220,6 +221,7 @@ export default function Home() {
       setError("");
       const response = await fetch("/api/inventory", { cache: "no-store" });
       const data = await response.json();
+      if (response.status === 401) { window.location.replace("/"); return; }
       if (!response.ok) throw new Error(data.error || "Não foi possível carregar o estoque.");
       setItems(data.items);
       setMovements(data.movements);
@@ -282,6 +284,11 @@ export default function Home() {
     await submit({ action: "deleteItem", itemId: item.id }, "Item excluído.");
   }
 
+  async function logout() {
+    await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
+    window.location.assign("/");
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
@@ -298,7 +305,7 @@ export default function Home() {
           <p>Registre a abertura antes de lançar o consumo. Assim você sempre saberá o que está em uso.</p>
         </div>
         <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div><CircleUserRound size={18} /></button>
-        <a className="signout-link" href="/signout-with-chatgpt?return_to=%2F" target="_top"><LogOut size={15} /> Sair do sistema</a>
+        <button className="signout-link" onClick={logout}><LogOut size={15} /> Sair do sistema</button>
       </aside>
 
       <main>
@@ -460,18 +467,18 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onU
         <article><strong>Somente leitura</strong><p>Serve como ponto de partida para quem pode apenas consultar as áreas liberadas.</p></article>
       </div>
       <div className="team-panel">
-        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Cadastre a equipe por e-mail e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
+        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário, a senha inicial e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
         <div className="team-table">
           <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Status</span><span>Entrada</span><span>Ações</span></div>
           {members.map((member) => <div className="team-row" key={member.userId}>
-            <div className="member-cell"><MemberVisual member={member} /><div><strong>{member.name}</strong><small>{member.email}{member.userId === currentUser?.userId ? " · você" : ""}</small></div></div>
+            <div className="member-cell"><MemberVisual member={member} /><div><strong>{member.name}</strong><small>@{member.username || "acesso-pendente"} · {member.email}{member.userId === currentUser?.userId ? " · você" : ""}</small></div></div>
             <select aria-label={`Permissão de ${member.name}`} disabled={saving || member.userId === currentUser?.userId} value={member.role} onChange={(event) => onUpdateRole(member.userId, event.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select>
             <button className={`access-toggle ${member.active ? "active" : "inactive"}`} disabled={saving || member.userId === currentUser?.userId} onClick={() => onUpdateActive(member.userId, !member.active)}>{member.active ? "Ativo" : "Desativado"}</button>
             <span className="member-date">{new Intl.DateTimeFormat("pt-BR").format(new Date(member.createdAt))}</span>
             <button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button>
           </div>)}
         </div>
-        <p className="team-access-note">O cadastro define as permissões dentro do sistema. A pessoa também precisa estar autorizada a abrir este Site privado.</p>
+        <p className="team-access-note">O usuário e a senha dão acesso ao sistema. As permissões são verificadas novamente pelo servidor em cada operação.</p>
       </div>
     </>
   );
@@ -517,6 +524,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   const profile = state.kind === "profile" ? currentUser : null;
   const [memberName, setMemberName] = useState(editingMember?.name ?? profile?.name ?? "");
   const [memberEmail, setMemberEmail] = useState(editingMember?.email ?? profile?.email ?? "");
+  const [memberUsername, setMemberUsername] = useState(editingMember?.username ?? profile?.username ?? "");
+  const [memberPassword, setMemberPassword] = useState("");
   const [memberRole, setMemberRole] = useState<MemberRole>(editingMember?.role ?? profile?.role ?? "member");
   const [memberPermissions, setMemberPermissions] = useState<MemberPermissions>(editingMember?.permissions ?? profile?.permissions ?? permissionPresets.member);
   const [memberActive, setMemberActive] = useState(editingMember?.active ?? true);
@@ -529,7 +538,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   const [formError, setFormError] = useState("");
 
   const title = state.kind === "profile" ? "Meu perfil" : state.kind === "member" ? (editingMember ? "Editar membro" : "Adicionar membro") : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : movementCopy[state.type].label;
-  const description = state.kind === "profile" ? "Personalize como seu nome e sua imagem aparecem nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, a permissão e o status deste usuário." : "Cadastre a pessoa e escolha a permissão inicial. O acesso será reconhecido pelo e-mail informado.") : state.kind === "item" ? "Edite nome, categoria, unidade, mínimo e aparência do produto." : {
+  const description = state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite nome, categoria, unidade, mínimo e aparência do produto." : {
     purchase: "A quantidade comprada será adicionada ao estoque fechado.",
     open: "A quantidade sairá do estoque fechado e passará para aberto.",
     consume: "O consumo será descontado somente das embalagens abertas.",
@@ -550,9 +559,9 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
       if (state.kind === "profile" || state.kind === "member") {
         const uploadedAvatarKey = avatarMode === "image" && avatarFile ? await uploadImage(avatarFile, "profile") : avatarMode === "image" ? avatarKey : null;
         if (state.kind === "profile") {
-          await onSubmit({ action: "updateProfile", name: memberName, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil atualizado.");
+          await onSubmit({ action: "updateProfile", name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil atualizado.");
         } else {
-          await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
+          await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
         }
         return;
       }
@@ -580,16 +589,19 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
         {state.kind === "profile" ? <>
           <VisualEditor label={state.kind === "profile" ? "Sua imagem" : "Imagem do membro"} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
-          <label className="full"><span>E-mail da conta</span><input required readOnly={state.kind === "profile"} type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /><small>{state.kind === "profile" ? "O e-mail vem da conta usada no login." : "Use o mesmo e-mail que a pessoa utiliza para acessar o Site."}</small></label>
+          <label><span>Usuário</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
+          <label><span>Nova senha</span><input minLength={6} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="Deixe em branco para manter" /></label>
+          <label className="full"><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>
           <VisualEditor label="Avatar do usuário" mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
-          <label><span>Senha</span><input type="password" disabled value="" placeholder="Protegida pela conta" /><small>A senha é definida pelo próprio usuário no acesso seguro.</small></label>
-          <label className="full"><span>E-mail / usuário de acesso</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /><small>Use o mesmo e-mail que a pessoa utiliza para entrar no Site.</small></label>
+          <label><span>Usuário de acesso</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
+          <label><span>{editingMember ? "Redefinir senha" : "Senha inicial"}</span><input required={!editingMember} minLength={6} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder={editingMember ? "Deixe em branco para manter" : "Mínimo de 6 caracteres"} /><small>{editingMember ? "Preencha apenas para trocar a senha." : "A pessoa usará esta senha no primeiro acesso."}</small></label>
+          <label><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
             <label><span>Perfil base</span><select value={memberRole} onChange={(e) => { const role = e.target.value as MemberRole; setMemberRole(role); setMemberPermissions(permissionPresets[role]); }}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
             <label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>
-          <div className="account-security-note full"><span>🔐</span><div><strong>Credenciais protegidas</strong><small>O administrador cadastra o usuário e as permissões, mas não visualiza nem armazena a senha.</small></div></div>
+          <div className="account-security-note full"><span>🔐</span><div><strong>Credenciais protegidas</strong><small>A senha é transformada em um código seguro e não pode ser visualizada depois de salva.</small></div></div>
         </> : <>
           <div className="permission-editor full">
             <div className="permission-editor-head"><div><strong>Permissões individuais</strong><small>{memberRole === "admin" ? "Administradores possuem acesso total obrigatório." : `Defina exatamente o que ${memberName || "este usuário"} poderá fazer.`}</small></div><span>{memberRole === "admin" ? "Acesso total" : `${Object.values(memberPermissions).filter(Boolean).length} de ${permissionOptions.length}`}</span></div>
