@@ -30,7 +30,7 @@ export default async function Home() {
         )}
 
         <a className="login-button" href={accessPath} target="_top">
-          {user ? `Continuar como ${displayName}` : "Entrar com minha conta"}<span>→</span>
+          {user ? `Continuar como ${displayName}` : "Entrar com usuário e senha"}<span>→</span>
         </a>
         <small className="login-note">O administrador cadastra cada membro pelo mesmo e-mail usado no acesso.</small>
       </section>

@@ -36,6 +36,13 @@
       "when": 1793211971441,
       "tag": "0004_material_rage",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793281494034,
+      "tag": "0005_military_praxagora",
+      "breakpoints": true
     }
   ]
 }

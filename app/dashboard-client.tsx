@@ -30,6 +30,31 @@ import {
 } from "lucide-react";
 
 type MemberRole = "admin" | "member" | "viewer";
+type MemberPermissions = {
+  manageItems: boolean;
+  registerPurchases: boolean;
+  openItems: boolean;
+  consumeItems: boolean;
+  adjustStock: boolean;
+  viewPlanning: boolean;
+  viewHistory: boolean;
+};
+
+const permissionPresets: Record<MemberRole, MemberPermissions> = {
+  admin: { manageItems: true, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: true, viewPlanning: true, viewHistory: true },
+  member: { manageItems: false, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: false, viewPlanning: true, viewHistory: true },
+  viewer: { manageItems: false, registerPurchases: false, openItems: false, consumeItems: false, adjustStock: false, viewPlanning: true, viewHistory: true },
+};
+
+const permissionOptions: { key: keyof MemberPermissions; label: string; description: string }[] = [
+  { key: "manageItems", label: "Gerenciar itens", description: "Cadastrar, editar e excluir produtos" },
+  { key: "registerPurchases", label: "Registrar compras", description: "Adicionar novas unidades ao estoque" },
+  { key: "openItems", label: "Abrir produtos", description: "Mover unidades fechadas para em uso" },
+  { key: "consumeItems", label: "Lançar consumo", description: "Baixar quantidades já abertas" },
+  { key: "adjustStock", label: "Ajustar saldo", description: "Corrigir a contagem física" },
+  { key: "viewPlanning", label: "Ver planejamento", description: "Consultar duração e previsão de compras" },
+  { key: "viewHistory", label: "Ver histórico", description: "Consultar movimentações da equipe" },
+];
 
 type Member = {
   id: number;
@@ -37,13 +62,14 @@ type Member = {
   name: string;
   email: string;
   role: MemberRole;
+  permissions: MemberPermissions;
   active: boolean;
   avatarIcon: string;
   avatarKey: string | null;
   createdAt: string;
 };
 
-type CurrentUser = Pick<Member, "userId" | "name" | "email" | "role" | "active" | "avatarIcon" | "avatarKey">;
+type CurrentUser = Pick<Member, "userId" | "name" | "email" | "role" | "permissions" | "active" | "avatarIcon" | "avatarKey">;
 
 type Item = {
   id: number;
@@ -184,7 +210,7 @@ export default function Home() {
   const openItems = items.filter((item) => item.openedQty > 0);
   const totalUnits = items.reduce((sum, item) => sum + item.unopenedQty + item.openedQty, 0);
   const measuredItems = items.filter((item) => item.analytics.averageDurationDays !== null);
-  const canWrite = Boolean(currentUser && currentUser.role !== "viewer");
+  const permissions = currentUser?.permissions ?? permissionPresets.viewer;
   const isAdmin = currentUser?.role === "admin";
   const todayLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
   const filtered = useMemo(() => {
@@ -234,8 +260,8 @@ export default function Home() {
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
           <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
-          <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>
-          <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>
+          {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>}
+          {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>}
           {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setMobileMenu(false); }}><Users /> Equipe</button>}
         </nav>
         <div className="sidebar-tip">
@@ -250,7 +276,7 @@ export default function Home() {
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
           <div><p className="eyebrow">CONTROLE DA COPA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
-          {isAdmin ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
+          {isAdmin || permissions.manageItems ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
         <section className="content">
@@ -265,10 +291,10 @@ export default function Home() {
                   <h2>{lowItems.length ? `${lowItems.length} ${lowItems.length === 1 ? "item precisa" : "itens precisam"} de atenção` : "Tudo em ordem por aqui"}</h2>
                   <p>{lowItems.length ? "Revise a sugestão de compra e mantenha a copa abastecida para a equipe." : "O estoque está acima dos mínimos definidos. Continue registrando o consumo para melhorar as previsões."}</p>
                   <div className="quick-actions">
-                    <button disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
-                    <button disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
-                    <button disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "consume" })}><TrendingDown /> Lançar consumo</button>
-                    <button disabled={!isAdmin} onClick={() => setModal({ kind: "movement", type: "adjust" })}><Settings2 /> Conferir saldo</button>
+                    <button disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
+                    <button disabled={!permissions.openItems} onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
+                    <button disabled={!permissions.consumeItems} onClick={() => setModal({ kind: "movement", type: "consume" })}><TrendingDown /> Lançar consumo</button>
+                    <button disabled={!permissions.adjustStock} onClick={() => setModal({ kind: "movement", type: "adjust" })}><Settings2 /> Conferir saldo</button>
                   </div>
                 </div>
                 <div className="hero-status">
@@ -304,7 +330,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><button className="secondary-button" disabled={!canWrite} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>
@@ -316,13 +342,13 @@ export default function Home() {
               </div>
 
               {loading ? <LoadingRows /> : items.length === 0 ? (
-                <div className="empty-state"><span><Coffee /></span><h3>Seu estoque começa aqui</h3><p>Adicione seus próprios itens ou carregue uma lista inicial com café, açúcar, biscoito, leite e chá.</p><div><button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={17} /> Adicionar item</button><button className="secondary-button" onClick={seed} disabled={saving}><Sparkles size={17} /> Usar lista inicial</button></div></div>
+                <div className="empty-state"><span><Coffee /></span><h3>Seu estoque começa aqui</h3><p>Adicione seus próprios itens ou carregue uma lista inicial com café, açúcar, biscoito, leite e chá.</p><div><button className="primary-button" onClick={() => setModal({ kind: "item" })} disabled={!permissions.manageItems}><Plus size={17} /> Adicionar item</button><button className="secondary-button" onClick={seed} disabled={saving || !permissions.manageItems}><Sparkles size={17} /> Usar lista inicial</button></div></div>
               ) : filtered.length === 0 ? (
                 <div className="empty-state compact"><Search /><h3>Nenhum item encontrado</h3><p>Tente outro nome ou remova o filtro selecionado.</p></div>
               ) : (
                 <div className="stock-list">
                   <div className="list-head"><span>Item</span><span>Saldo atual</span><span>Situação</span><span>Duração média</span><span>Última abertura</span><span>Ações</span></div>
-                  {filtered.map((item) => <StockRow key={item.id} item={item} role={currentUser?.role ?? "viewer"} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} onDelete={() => deleteItem(item)} />)}
+                  {filtered.map((item) => <StockRow key={item.id} item={item} permissions={permissions} onAction={(type) => setModal({ kind: "movement", type, item })} onEdit={() => setModal({ kind: "item", item })} onDelete={() => deleteItem(item)} />)}
                 </div>
               )}
             </>
@@ -336,7 +362,7 @@ export default function Home() {
   );
 }
 
-function StockRow({ item, role, onAction, onEdit, onDelete }: { item: Item; role: MemberRole; onAction: (type: Movement["type"]) => void; onEdit: () => void; onDelete: () => void }) {
+function StockRow({ item, permissions, onAction, onEdit, onDelete }: { item: Item; permissions: MemberPermissions; onAction: (type: Movement["type"]) => void; onEdit: () => void; onDelete: () => void }) {
   const total = item.unopenedQty + item.openedQty;
   const isLow = total <= item.minimumQty;
   return (
@@ -347,12 +373,12 @@ function StockRow({ item, role, onAction, onEdit, onDelete }: { item: Item; role
       <div className="duration-cell">{item.analytics.averageDurationDays !== null ? <><strong>{fmt(item.analytics.averageDurationDays)} dias</strong><small>{item.analytics.monthlyRecommendation} {item.unit}/30 dias</small></> : item.analytics.activeDays !== null ? <><strong>Em medição</strong><small>Há {fmt(item.analytics.activeDays)} dias</small></> : <><strong>Sem histórico</strong><small>Registre abertura e consumo</small></>}</div>
       <div className="opened-cell"><strong>{relativeDate(item.lastOpenedAt)}</strong>{item.lastOpenedAt && <small>{new Intl.DateTimeFormat("pt-BR").format(new Date(item.lastOpenedAt))}</small>}</div>
       <div className="row-actions">
-        <button title="Registrar abertura" disabled={role === "viewer" || item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
-        <button title="Registrar consumo" disabled={role === "viewer" || item.openedQty <= 0} onClick={() => onAction("consume")}><TrendingDown size={17} /></button>
-        <button title="Registrar compra" disabled={role === "viewer"} onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
-        <button title="Ajustar saldo" disabled={role !== "admin"} onClick={() => onAction("adjust")}><Settings2 size={17} /></button>
-        <button title="Editar item" disabled={role !== "admin"} onClick={onEdit}><Pencil size={16} /></button>
-        <button className="danger-action" title="Excluir item" aria-label={`Excluir ${item.name}`} disabled={role !== "admin"} onClick={onDelete}><Trash2 size={16} /></button>
+        <button title="Registrar abertura" disabled={!permissions.openItems || item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
+        <button title="Registrar consumo" disabled={!permissions.consumeItems || item.openedQty <= 0} onClick={() => onAction("consume")}><TrendingDown size={17} /></button>
+        <button title="Registrar compra" disabled={!permissions.registerPurchases} onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
+        <button title="Ajustar saldo" disabled={!permissions.adjustStock} onClick={() => onAction("adjust")}><Settings2 size={17} /></button>
+        <button title="Editar item" disabled={!permissions.manageItems} onClick={onEdit}><Pencil size={16} /></button>
+        <button className="danger-action" title="Excluir item" aria-label={`Excluir ${item.name}`} disabled={!permissions.manageItems} onClick={onDelete}><Trash2 size={16} /></button>
       </div>
     </article>
   );
@@ -400,8 +426,8 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onU
       </div>
       <div className="permission-cards">
         <article><strong>Administrador</strong><p>Gerencia itens, confere saldos, altera permissões e registra movimentações.</p></article>
-        <article><strong>Membro</strong><p>Registra compras, aberturas e consumos, sem alterar cadastros ou permissões.</p></article>
-        <article><strong>Somente leitura</strong><p>Consulta estoque, planejamento e histórico, sem fazer lançamentos.</p></article>
+        <article><strong>Membro personalizado</strong><p>O administrador escolhe individualmente quais operações cada pessoa pode realizar.</p></article>
+        <article><strong>Somente leitura</strong><p>Serve como ponto de partida para quem pode apenas consultar as áreas liberadas.</p></article>
       </div>
       <div className="team-panel">
         <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Cadastre a equipe por e-mail e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
@@ -462,6 +488,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   const [memberName, setMemberName] = useState(editingMember?.name ?? profile?.name ?? "");
   const [memberEmail, setMemberEmail] = useState(editingMember?.email ?? profile?.email ?? "");
   const [memberRole, setMemberRole] = useState<MemberRole>(editingMember?.role ?? profile?.role ?? "member");
+  const [memberPermissions, setMemberPermissions] = useState<MemberPermissions>(editingMember?.permissions ?? profile?.permissions ?? permissionPresets.member);
   const [memberActive, setMemberActive] = useState(editingMember?.active ?? true);
   const [avatarIcon, setAvatarIcon] = useState(editingMember?.avatarIcon ?? profile?.avatarIcon ?? "👤");
   const [avatarKey, setAvatarKey] = useState<string | null>(editingMember?.avatarKey ?? profile?.avatarKey ?? null);
@@ -494,7 +521,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
         if (state.kind === "profile") {
           await onSubmit({ action: "updateProfile", name: memberName, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil atualizado.");
         } else {
-          await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, role: memberRole, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
+          await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
         }
         return;
       }
@@ -522,7 +549,16 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
           <VisualEditor label={state.kind === "profile" ? "Sua imagem" : "Imagem do membro"} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label className="full"><span>E-mail da conta</span><input required readOnly={state.kind === "profile"} type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /><small>{state.kind === "profile" ? "O e-mail vem da conta usada no login." : "Use o mesmo e-mail que a pessoa utiliza para acessar o Site."}</small></label>
-          {state.kind === "member" ? <><label><span>Permissão</span><select value={memberRole} onChange={(e) => setMemberRole(e.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label><label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label></> : <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>}
+          {state.kind === "member" ? <>
+            <label><span>Perfil base</span><select value={memberRole} onChange={(e) => { const role = e.target.value as MemberRole; setMemberRole(role); setMemberPermissions(permissionPresets[role]); }}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
+            <label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>
+            <div className="permission-editor full">
+              <div className="permission-editor-head"><div><strong>Permissões individuais</strong><small>{memberRole === "admin" ? "Administradores possuem acesso total obrigatório." : "Ative somente as funções necessárias para este membro."}</small></div><span>{memberRole === "admin" ? "Acesso total" : `${Object.values(memberPermissions).filter(Boolean).length} de ${permissionOptions.length}`}</span></div>
+              <div className="permission-options">
+                {permissionOptions.map((option) => <label key={option.key} className={memberRole === "admin" ? "locked" : ""}><input type="checkbox" checked={memberRole === "admin" || memberPermissions[option.key]} disabled={memberRole === "admin"} onChange={(event) => setMemberPermissions((current) => ({ ...current, [option.key]: event.target.checked }))} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}
+              </div>
+            </div>
+          </> : <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>}
         </> : state.kind === "item" ? <>
           <VisualEditor label="Aparência do item" mode={itemVisualMode} setMode={setItemVisualMode} icon={itemIcon} setIcon={setItemIcon} imageKey={itemImageKey} file={itemFile} setFile={setItemFile} />
           <label className="full"><span>Nome do item</span><input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Café em pó" /></label>

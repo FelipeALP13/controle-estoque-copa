@@ -6,13 +6,72 @@ import { items, members, movements, openBatches } from "../../../db/schema";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 type MemberRole = "admin" | "member" | "viewer";
+type MemberPermissions = {
+  manageItems: boolean;
+  registerPurchases: boolean;
+  openItems: boolean;
+  consumeItems: boolean;
+  adjustStock: boolean;
+  viewPlanning: boolean;
+  viewHistory: boolean;
+};
+
+const allPermissions: MemberPermissions = {
+  manageItems: true,
+  registerPurchases: true,
+  openItems: true,
+  consumeItems: true,
+  adjustStock: true,
+  viewPlanning: true,
+  viewHistory: true,
+};
+
+const memberPermissions: MemberPermissions = {
+  manageItems: false,
+  registerPurchases: true,
+  openItems: true,
+  consumeItems: true,
+  adjustStock: false,
+  viewPlanning: true,
+  viewHistory: true,
+};
+
+const viewerPermissions: MemberPermissions = {
+  manageItems: false,
+  registerPurchases: false,
+  openItems: false,
+  consumeItems: false,
+  adjustStock: false,
+  viewPlanning: true,
+  viewHistory: true,
+};
+
+function resolvePermissions(role: MemberRole, value: unknown): MemberPermissions {
+  if (role === "admin") return allPermissions;
+  const fallback = role === "viewer" ? viewerPermissions : memberPermissions;
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = typeof value === "string" ? JSON.parse(value) : value && typeof value === "object" ? value as Record<string, unknown> : {};
+  } catch {
+    parsed = {};
+  }
+  return Object.fromEntries(Object.entries(fallback).map(([key, defaultValue]) => [key, typeof parsed[key] === "boolean" ? parsed[key] : defaultValue])) as MemberPermissions;
+}
+
+function permissionJson(role: MemberRole, value: unknown) {
+  return JSON.stringify(resolvePermissions(role, value));
+}
+
+function hasPermission(member: { role: MemberRole; permissions?: string }, permission: keyof MemberPermissions) {
+  return resolvePermissions(member.role, member.permissions)[permission];
+}
 
 async function getOrCreateMember(db: ReturnType<typeof getDb>) {
   const user = await getChatGPTUser();
   if (!user) {
     const host = (await headers()).get("host") ?? "";
     if (host.startsWith("127.0.0.1") || host.startsWith("localhost")) {
-      return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, active: true, avatarIcon: "👤", avatarKey: null };
+      return { userId: "local-preview", name: "Equipe local", email: "local@preview", role: "admin" as MemberRole, permissions: "{}", active: true, avatarIcon: "👤", avatarKey: null };
     }
     throw new Error("AUTH_REQUIRED");
   }
@@ -102,7 +161,7 @@ export async function GET() {
         .limit(80),
       db.select().from(openBatches).orderBy(desc(openBatches.openedAt)).limit(800),
       canManage(currentMember.role)
-        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, role: members.role, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
+        ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, role: members.role, permissions: members.permissions, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
         : Promise.resolve([]),
     ]);
 
@@ -141,14 +200,15 @@ export async function GET() {
       };
     });
 
-    const visibleMembers = currentMember.userId === "local-preview"
+    const visibleMembers = (currentMember.userId === "local-preview"
       ? [{ id: 0, ...currentMember, createdAt: new Date().toISOString() }, ...memberRows]
-      : memberRows;
+      : memberRows).map((member) => ({ ...member, permissions: resolvePermissions(member.role, member.permissions) }));
+    const currentPermissions = resolvePermissions(currentMember.role, currentMember.permissions);
 
     return Response.json({
       items: enrichedItems,
-      movements: movementRows,
-      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, role: currentMember.role, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
+      movements: currentPermissions.viewHistory ? movementRows : [],
+      currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, role: currentMember.role, permissions: currentPermissions, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
       members: visibleMembers,
     });
   } catch (error) {
@@ -175,15 +235,13 @@ export async function POST(request: Request) {
       return Response.json({ member: updated });
     }
 
-    if (currentMember.role === "viewer") return Response.json({ error: "Seu perfil permite somente visualizar o estoque." }, { status: 403 });
-
     if (action === "updateMemberRole") {
       if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem alterar permissões." }, { status: 403 });
       const targetUserId = String(body.userId ?? "");
       const role = String(body.role ?? "") as MemberRole;
       if (!targetUserId || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Permissão inválida." }, { status: 400 });
       if (targetUserId === currentMember.userId) return Response.json({ error: "Para evitar bloqueio acidental, você não pode alterar sua própria permissão." }, { status: 400 });
-      const [updated] = await db.update(members).set({ role }).where(eq(members.userId, targetUserId)).returning();
+      const [updated] = await db.update(members).set({ role, permissions: permissionJson(role, {}) }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       return Response.json({ member: updated });
     }
@@ -200,7 +258,8 @@ export async function POST(request: Request) {
       if (existing.length) return Response.json({ error: "Já existe um membro cadastrado com este e-mail." }, { status: 409 });
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
-      const [member] = await db.insert(members).values({ userId: `pending:${email}`, name, email, role, active: true, avatarIcon, avatarKey }).returning();
+      const permissions = permissionJson(role, body.permissions);
+      const [member] = await db.insert(members).values({ userId: `pending:${email}`, name, email, role, permissions, active: true, avatarIcon, avatarKey }).returning();
       return Response.json({ member }, { status: 201 });
     }
 
@@ -212,11 +271,12 @@ export async function POST(request: Request) {
       const role = String(body.role ?? "member") as MemberRole;
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      const permissions = permissionJson(role, body.permissions);
       if (!targetUserId || !name || !email.includes("@") || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Dados do membro inválidos." }, { status: 400 });
       if (targetUserId === currentMember.userId) return Response.json({ error: "Edite seus dados em Meu perfil." }, { status: 400 });
       const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.email, email)).limit(1);
       if (duplicate.length && duplicate[0].userId !== targetUserId) return Response.json({ error: "Este e-mail já pertence a outro membro." }, { status: 409 });
-      const [updated] = await db.update(members).set({ name, email, role, active: body.active !== false, avatarIcon, avatarKey }).where(eq(members.userId, targetUserId)).returning();
+      const [updated] = await db.update(members).set({ name, email, role, permissions, active: body.active !== false, avatarIcon, avatarKey }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       return Response.json({ member: updated });
     }
@@ -232,7 +292,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "addItem") {
-      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem cadastrar itens." }, { status: 403 });
+      if (!hasPermission(currentMember, "manageItems")) return Response.json({ error: "Você não tem permissão para cadastrar itens." }, { status: 403 });
       const name = String(body.name ?? "").trim();
       const category = String(body.category ?? "Outros").trim() || "Outros";
       const unit = String(body.unit ?? "un.").trim() || "un.";
@@ -245,7 +305,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "seed") {
-      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem carregar a lista inicial." }, { status: 403 });
+      if (!hasPermission(currentMember, "manageItems")) return Response.json({ error: "Você não tem permissão para carregar a lista inicial." }, { status: 403 });
       const existing = await db.select({ id: items.id }).from(items).limit(1);
       if (existing.length) return Response.json({ error: "A lista já possui itens." }, { status: 409 });
       const now = Date.now();
@@ -260,7 +320,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "updateItem") {
-      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem editar itens." }, { status: 403 });
+      if (!hasPermission(currentMember, "manageItems")) return Response.json({ error: "Você não tem permissão para editar itens." }, { status: 403 });
       const itemId = number(body.itemId);
       const name = String(body.name ?? "").trim();
       const category = String(body.category ?? "Outros").trim() || "Outros";
@@ -274,7 +334,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "deleteItem") {
-      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem excluir itens." }, { status: 403 });
+      if (!hasPermission(currentMember, "manageItems")) return Response.json({ error: "Você não tem permissão para excluir itens." }, { status: 403 });
       const itemId = number(body.itemId);
       if (!itemId) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [deleted] = await db.delete(items).where(eq(items.id, itemId)).returning();
@@ -290,7 +350,13 @@ export async function POST(request: Request) {
       if (!itemId || !["purchase", "open", "consume", "adjust"].includes(type)) {
         return Response.json({ error: "Movimentação inválida." }, { status: 400 });
       }
-      if (type === "adjust" && !canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem ajustar a contagem física." }, { status: 403 });
+      const permissionByType: Record<MovementType, keyof MemberPermissions> = {
+        purchase: "registerPurchases",
+        open: "openItems",
+        consume: "consumeItems",
+        adjust: "adjustStock",
+      };
+      if (!hasPermission(currentMember, permissionByType[type])) return Response.json({ error: "Você não tem permissão para registrar esta movimentação." }, { status: 403 });
 
       const [current] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
       if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });

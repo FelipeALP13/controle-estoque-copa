@@ -47,6 +47,7 @@ export const members = sqliteTable("members", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   role: text("role", { enum: ["admin", "member", "viewer"] }).notNull().default("member"),
+  permissions: text("permissions").notNull().default("{}"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   avatarIcon: text("avatar_icon").notNull().default("👤"),
   avatarKey: text("avatar_key"),
