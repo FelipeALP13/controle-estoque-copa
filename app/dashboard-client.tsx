@@ -142,20 +142,26 @@ function roleLabel(role: MemberRole) {
 function playfulGreeting(name: string, lowItem?: string, openCount = 0) {
   const firstName = name.trim().split(/\s+/)[0] || "Chefe";
   const messages = lowItem ? [
-    `${firstName}, o ${lowItem.toLocaleLowerCase("pt-BR")} está quase virando item de colecionador.`,
-    `${firstName}, alguém precisa salvar o ${lowItem.toLocaleLowerCase("pt-BR")} antes que a equipe abra uma CPI.`,
-    `${firstName}, o ${lowItem.toLocaleLowerCase("pt-BR")} pediu reforço. Disse que não aguenta mais essa pressão.`,
-    `${firstName}, corre que o ${lowItem.toLocaleLowerCase("pt-BR")} está ensaiando uma fuga do estoque.`,
+    `${firstName}, já vai comer de novo? O ${lowItem.toLocaleLowerCase("pt-BR")} nem teve tempo de se despedir.`,
+    `${firstName}, o estoque baixou e todo mundo olhou pra você. Coincidência? Sei…`,
+    `${firstName}, deixa um pouco de ${lowItem.toLocaleLowerCase("pt-BR")} pros outros também, campeão.`,
+    `${firstName}, desse jeito o ${lowItem.toLocaleLowerCase("pt-BR")} vai pedir medida protetiva.`,
+    `${firstName}, passa reto pela copa pelo menos uma vez. Só pra gente ver uma coisa.`,
+    `${firstName}, o ${lowItem.toLocaleLowerCase("pt-BR")} sumiu de novo. Quer contar alguma coisa pra equipe?`,
   ] : openCount > 0 ? [
-    `${firstName}, tem coisa aberta na copa. Esperamos que não seja investigação interna.`,
-    `${firstName}, ${openCount === 1 ? "um item está" : `${openCount} itens estão`} em uso. A copa está trabalhando mais que muita gente.`,
-    `${firstName}, tudo sob controle — desde que ninguém ataque os biscoitos escondido.`,
-    `${firstName}, a copa está de olho em você. Sem pressão… só um pouquinho.`,
+    `${firstName}, abriu de novo? A copa já decorou até o barulho dos seus passos.`,
+    `${firstName}, ${openCount === 1 ? "tem um item aberto" : `tem ${openCount} itens abertos`}. Foi você, né? Pode falar.`,
+    `${firstName}, calma aí. O expediente é longo e o biscoito não vai fugir.`,
+    `${firstName}, você veio trabalhar ou fazer vistoria diária na copa?`,
+    `${firstName}, mais uma visita à copa? Já pode pedir transferência pra lá.`,
+    `${firstName}, a embalagem mal abriu e você já apareceu. Impressionante.`,
   ] : [
-    `${firstName}, estoque em ordem. Milagre corporativo oficialmente confirmado.`,
-    `${firstName}, nada aberto por enquanto. Os biscoitos estão seguros… por enquanto.`,
-    `${firstName}, hoje a copa está tão organizada que até dá desconfiança.`,
-    `${firstName}, missão cumprida: nenhum pacote abandonado no campo de batalha.`,
+    `${firstName}, nada aberto ainda. Você está bem? A equipe ficou preocupada.`,
+    `${firstName}, os biscoitos sobreviveram ao dia. Ninguém esperava isso de você.`,
+    `${firstName}, estoque em ordem. Hoje você resolveu dar folga pra copa?`,
+    `${firstName}, nenhuma baixa suspeita. Estamos verificando se você realmente veio trabalhar.`,
+    `${firstName}, a copa está intacta. Pode admitir: você almoçou antes de chegar.`,
+    `${firstName}, tudo abastecido. Tenta não transformar isso num desafio pessoal.`,
   ];
   const dailySeed = `${firstName}${new Date().toISOString().slice(0, 10)}`.split("").reduce((total, character) => total + character.charCodeAt(0), 0);
   return messages[dailySeed % messages.length];
