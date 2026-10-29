@@ -153,7 +153,7 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2F" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
+    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2Fpainel" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
 }
 
@@ -390,6 +390,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Ação desconhecida." }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2F" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
+    return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com sua conta para acessar o sistema.", signInPath: "/signin-with-chatgpt?return_to=%2Fpainel" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
 }
