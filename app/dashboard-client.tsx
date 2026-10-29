@@ -139,6 +139,28 @@ function roleLabel(role: MemberRole) {
   return role === "admin" ? "Administrador" : role === "member" ? "Membro" : "Somente leitura";
 }
 
+function playfulGreeting(name: string, lowItem?: string, openCount = 0) {
+  const firstName = name.trim().split(/\s+/)[0] || "Chefe";
+  const messages = lowItem ? [
+    `${firstName}, o ${lowItem.toLocaleLowerCase("pt-BR")} está quase virando item de colecionador.`,
+    `${firstName}, alguém precisa salvar o ${lowItem.toLocaleLowerCase("pt-BR")} antes que a equipe abra uma CPI.`,
+    `${firstName}, o ${lowItem.toLocaleLowerCase("pt-BR")} pediu reforço. Disse que não aguenta mais essa pressão.`,
+    `${firstName}, corre que o ${lowItem.toLocaleLowerCase("pt-BR")} está ensaiando uma fuga do estoque.`,
+  ] : openCount > 0 ? [
+    `${firstName}, tem coisa aberta na copa. Esperamos que não seja investigação interna.`,
+    `${firstName}, ${openCount === 1 ? "um item está" : `${openCount} itens estão`} em uso. A copa está trabalhando mais que muita gente.`,
+    `${firstName}, tudo sob controle — desde que ninguém ataque os biscoitos escondido.`,
+    `${firstName}, a copa está de olho em você. Sem pressão… só um pouquinho.`,
+  ] : [
+    `${firstName}, estoque em ordem. Milagre corporativo oficialmente confirmado.`,
+    `${firstName}, nada aberto por enquanto. Os biscoitos estão seguros… por enquanto.`,
+    `${firstName}, hoje a copa está tão organizada que até dá desconfiança.`,
+    `${firstName}, missão cumprida: nenhum pacote abandonado no campo de batalha.`,
+  ];
+  const dailySeed = `${firstName}${new Date().toISOString().slice(0, 10)}`.split("").reduce((total, character) => total + character.charCodeAt(0), 0);
+  return messages[dailySeed % messages.length];
+}
+
 function mediaUrl(key: string | null) {
   return key ? `/api/media?key=${encodeURIComponent(key)}` : "";
 }
@@ -213,6 +235,7 @@ export default function Home() {
   const permissions = currentUser?.permissions ?? permissionPresets.viewer;
   const isAdmin = currentUser?.role === "admin";
   const todayLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date());
+  const playfulNote = playfulGreeting(currentUser?.name || "Equipe", lowItems[0]?.name, openItems.length);
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("pt-BR");
     return items.filter((item) => {
@@ -290,6 +313,7 @@ export default function Home() {
                   <p className="hero-date">{todayLabel}</p>
                   <h2>{lowItems.length ? `${lowItems.length} ${lowItems.length === 1 ? "item precisa" : "itens precisam"} de atenção` : "Tudo em ordem por aqui"}</h2>
                   <p>{lowItems.length ? "Revise a sugestão de compra e mantenha a copa abastecida para a equipe." : "O estoque está acima dos mínimos definidos. Continue registrando o consumo para melhorar as previsões."}</p>
+                  <div className="hero-joke"><span>😄</span><div><small>RECADO DA COPA</small><strong>{playfulNote}</strong></div></div>
                   <div className="quick-actions">
                     <button disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ShoppingCart /> Registrar compra</button>
                     <button disabled={!permissions.openItems} onClick={() => setModal({ kind: "movement", type: "open" })}><PackageOpen /> Abrir item</button>
