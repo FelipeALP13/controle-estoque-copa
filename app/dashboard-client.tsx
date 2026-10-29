@@ -490,6 +490,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   const [memberRole, setMemberRole] = useState<MemberRole>(editingMember?.role ?? profile?.role ?? "member");
   const [memberPermissions, setMemberPermissions] = useState<MemberPermissions>(editingMember?.permissions ?? profile?.permissions ?? permissionPresets.member);
   const [memberActive, setMemberActive] = useState(editingMember?.active ?? true);
+  const [memberTab, setMemberTab] = useState<"general" | "permissions">("general");
   const [avatarIcon, setAvatarIcon] = useState(editingMember?.avatarIcon ?? profile?.avatarIcon ?? "👤");
   const [avatarKey, setAvatarKey] = useState<string | null>(editingMember?.avatarKey ?? profile?.avatarKey ?? null);
   const [avatarMode, setAvatarMode] = useState<"icon" | "image">((editingMember?.avatarKey ?? profile?.avatarKey) ? "image" : "icon");
@@ -542,23 +543,31 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   }
 
   return (
-    <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={handleSubmit}>
+    <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className={`modal ${state.kind === "member" ? "member-modal" : ""}`} onSubmit={handleSubmit}>
       <div className="modal-head"><div><p className="eyebrow">{state.kind === "profile" ? "CONFIGURAÇÕES PESSOAIS" : state.kind === "member" ? "GESTÃO DE ACESSO" : state.kind === "item" ? "CADASTRO EDITÁVEL" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
+      {state.kind === "member" && <div className="member-tabs"><button type="button" className={memberTab === "general" ? "active" : ""} onClick={() => setMemberTab("general")}>Geral</button><button type="button" className={memberTab === "permissions" ? "active" : ""} onClick={() => setMemberTab("permissions")}>Permissões</button></div>}
       <div className="form-grid">
-        {state.kind === "profile" || state.kind === "member" ? <>
+        {state.kind === "profile" ? <>
           <VisualEditor label={state.kind === "profile" ? "Sua imagem" : "Imagem do membro"} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label className="full"><span>E-mail da conta</span><input required readOnly={state.kind === "profile"} type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /><small>{state.kind === "profile" ? "O e-mail vem da conta usada no login." : "Use o mesmo e-mail que a pessoa utiliza para acessar o Site."}</small></label>
-          {state.kind === "member" ? <>
+          <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
+        </> : state.kind === "member" ? memberTab === "general" ? <>
+          <VisualEditor label="Avatar do usuário" mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
+          <label><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
+          <label><span>Senha</span><input type="password" disabled value="" placeholder="Protegida pela conta" /><small>A senha é definida pelo próprio usuário no acesso seguro.</small></label>
+          <label className="full"><span>E-mail / usuário de acesso</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /><small>Use o mesmo e-mail que a pessoa utiliza para entrar no Site.</small></label>
             <label><span>Perfil base</span><select value={memberRole} onChange={(e) => { const role = e.target.value as MemberRole; setMemberRole(role); setMemberPermissions(permissionPresets[role]); }}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
             <label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>
-            <div className="permission-editor full">
-              <div className="permission-editor-head"><div><strong>Permissões individuais</strong><small>{memberRole === "admin" ? "Administradores possuem acesso total obrigatório." : "Ative somente as funções necessárias para este membro."}</small></div><span>{memberRole === "admin" ? "Acesso total" : `${Object.values(memberPermissions).filter(Boolean).length} de ${permissionOptions.length}`}</span></div>
-              <div className="permission-options">
-                {permissionOptions.map((option) => <label key={option.key} className={memberRole === "admin" ? "locked" : ""}><input type="checkbox" checked={memberRole === "admin" || memberPermissions[option.key]} disabled={memberRole === "admin"} onChange={(event) => setMemberPermissions((current) => ({ ...current, [option.key]: event.target.checked }))} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}
-              </div>
+          <div className="account-security-note full"><span>🔐</span><div><strong>Credenciais protegidas</strong><small>O administrador cadastra o usuário e as permissões, mas não visualiza nem armazena a senha.</small></div></div>
+        </> : <>
+          <div className="permission-editor full">
+            <div className="permission-editor-head"><div><strong>Permissões individuais</strong><small>{memberRole === "admin" ? "Administradores possuem acesso total obrigatório." : `Defina exatamente o que ${memberName || "este usuário"} poderá fazer.`}</small></div><span>{memberRole === "admin" ? "Acesso total" : `${Object.values(memberPermissions).filter(Boolean).length} de ${permissionOptions.length}`}</span></div>
+            <div className="permission-options">
+              {permissionOptions.map((option) => <label key={option.key} className={memberRole === "admin" ? "locked" : ""}><input type="checkbox" checked={memberRole === "admin" || memberPermissions[option.key]} disabled={memberRole === "admin"} onChange={(event) => setMemberPermissions((current) => ({ ...current, [option.key]: event.target.checked }))} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}
             </div>
-          </> : <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>}
+          </div>
+          <div className="permission-help full"><strong>Perfil base: {roleLabel(memberRole)}</strong><p>Você pode personalizar as opções acima. Administradores sempre mantêm acesso completo ao sistema.</p><button type="button" onClick={() => setMemberTab("general")}>Voltar aos dados gerais</button></div>
         </> : state.kind === "item" ? <>
           <VisualEditor label="Aparência do item" mode={itemVisualMode} setMode={setItemVisualMode} icon={itemIcon} setIcon={setItemIcon} imageKey={itemImageKey} file={itemFile} setFile={setItemFile} />
           <label className="full"><span>Nome do item</span><input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Café em pó" /></label>
