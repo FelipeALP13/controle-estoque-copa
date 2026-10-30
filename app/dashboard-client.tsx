@@ -3,34 +3,32 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  Archive,
-  ArrowDownToLine,
-  BarChart3,
-  Box,
-  CalendarClock,
-  CircleUserRound,
-  Coffee,
-  Download,
-  History,
-  ImagePlus,
-  LogOut,
-  Menu,
-  PackageCheck,
-  PackageOpen,
-  Pencil,
-  Plus,
-  Search,
-  Settings2,
-  ShoppingCart,
-  Sparkles,
-  Trash2,
-  TrendingDown,
-  TriangleAlert,
-  UserPlus,
-  Users,
-  X,
-} from "lucide-react";
+import Archive from "lucide-react/icons/archive";
+import ArrowDownToLine from "lucide-react/icons/arrow-down-to-line";
+import BarChart3 from "lucide-react/icons/bar-chart-3";
+import Box from "lucide-react/icons/box";
+import CalendarClock from "lucide-react/icons/calendar-clock";
+import CircleUserRound from "lucide-react/icons/circle-user-round";
+import Coffee from "lucide-react/icons/coffee";
+import Download from "lucide-react/icons/download";
+import History from "lucide-react/icons/history";
+import ImagePlus from "lucide-react/icons/image-plus";
+import LogOut from "lucide-react/icons/log-out";
+import Menu from "lucide-react/icons/menu";
+import PackageCheck from "lucide-react/icons/package-check";
+import PackageOpen from "lucide-react/icons/package-open";
+import Pencil from "lucide-react/icons/pencil";
+import Plus from "lucide-react/icons/plus";
+import Search from "lucide-react/icons/search";
+import Settings2 from "lucide-react/icons/settings-2";
+import ShoppingCart from "lucide-react/icons/shopping-cart";
+import Sparkles from "lucide-react/icons/sparkles";
+import Trash2 from "lucide-react/icons/trash-2";
+import TrendingDown from "lucide-react/icons/trending-down";
+import TriangleAlert from "lucide-react/icons/triangle-alert";
+import UserPlus from "lucide-react/icons/user-plus";
+import Users from "lucide-react/icons/users";
+import X from "lucide-react/icons/x";
 
 type MemberRole = "admin" | "member" | "viewer";
 type MemberPermissions = {

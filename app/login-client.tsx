@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react";
+import Eye from "lucide-react/icons/eye";
+import EyeOff from "lucide-react/icons/eye-off";
+import LockKeyhole from "lucide-react/icons/lock-keyhole";
+import UserRound from "lucide-react/icons/user-round";
 import { useRouter } from "next/navigation";
 
 export default function LoginScreen() {

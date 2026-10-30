@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, KeyRound } from "lucide-react";
+import Eye from "lucide-react/icons/eye";
+import EyeOff from "lucide-react/icons/eye-off";
+import KeyRound from "lucide-react/icons/key-round";
 import Link from "next/link";
 
 export default function ResetPasswordScreen() {
