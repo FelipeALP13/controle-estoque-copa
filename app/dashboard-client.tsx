@@ -362,7 +362,7 @@ export default function Home() {
 
               <div className="overview-insights">
                 <article className="insight-card attention-card">
-                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></div>
+                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions"><a href="/api/export?type=restock" download><Download size={14} /> Baixar lista</a><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></span></div>
                   {lowItems.length ? <div className="restock-list">{lowItems.slice(0,4).map((item) => {
                     const total = item.unopenedQty + item.openedQty;
                     const suggested = Math.max(1, Math.ceil((item.analytics.monthlyRecommendation ?? item.minimumQty + 1) - total));
@@ -378,7 +378,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions"><a className="secondary-button" href="/api/export?type=stock" download><Download size={17} /> Exportar</a><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions"><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>
@@ -478,7 +478,7 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onD
         <article><strong>Somente leitura</strong><p>Serve como ponto de partida para quem pode apenas consultar as áreas liberadas.</p></article>
       </div>
       <div className="team-panel">
-        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário, a senha inicial e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><a className="secondary-button" href="/api/export?type=members" download><Download size={16} /> Usuários</a><a className="secondary-button" href="/api/export?type=audit" download><Download size={16} /> Auditoria</a><a className="secondary-button" href="/api/export?type=backup" download><Download size={16} /> Backup</a><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
+        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário, a senha inicial e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
         <div className="team-table">
           <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Status</span><span>Entrada</span><span>Ações</span></div>
           {members.map((member) => <div className="team-row" key={member.userId}>
@@ -499,7 +499,7 @@ function HistoryView({ movements, loading }: { movements: Movement[]; loading: b
   if (loading) return <LoadingRows />;
   return (
     <>
-      <div className="section-heading history-title"><div><h2>Atividade recente</h2><p>Compras, aberturas, consumos e ajustes registrados no sistema.</p></div><a className="secondary-button" href="/api/export?type=movements" download><Download size={16} /> Exportar histórico</a></div>
+      <div className="section-heading history-title"><div><h2>Atividade recente</h2><p>Compras, aberturas, consumos e ajustes registrados no sistema.</p></div></div>
       {movements.length === 0 ? <div className="empty-state"><span><History /></span><h3>Nenhuma movimentação ainda</h3><p>Quando você registrar uma compra, abertura ou consumo, o evento aparecerá aqui.</p></div> : (
         <div className="history-list">
           {movements.map((movement) => {

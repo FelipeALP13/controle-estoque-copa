@@ -1,7 +1,7 @@
-import { and, eq, gt, isNotNull, lt, or } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb } from "../db";
-import { authRateLimits, members, passwordResetTokens, sessions } from "../db/schema";
+import { authRateLimits, members, sessions } from "../db/schema";
 import { normalizeUsername } from "./auth-policy";
 
 export { normalizeUsername, passwordPolicyError, validatePassword } from "./auth-policy";
@@ -95,7 +95,6 @@ export async function cleanupAuthData(db = getDb()) {
   const staleRateLimit = new Date(Date.now() - 2 * 86400000).toISOString();
   await db.batch([
     db.delete(sessions).where(lt(sessions.expiresAt, now)),
-    db.delete(passwordResetTokens).where(or(lt(passwordResetTokens.expiresAt, now), isNotNull(passwordResetTokens.usedAt))),
     db.delete(authRateLimits).where(lt(authRateLimits.updatedAt, staleRateLimit)),
   ]);
 }
