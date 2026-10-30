@@ -30,7 +30,6 @@ import TriangleAlert from "lucide-react/icons/triangle-alert";
 import UserPlus from "lucide-react/icons/user-plus";
 import Users from "lucide-react/icons/users";
 import X from "lucide-react/icons/x";
-import { calculateReorderPoint } from "./inventory-policy";
 
 type MemberRole = "admin" | "member" | "viewer";
 type MemberPermissions = {
@@ -85,12 +84,8 @@ type Item = {
   minimumQty: number;
   icon: string;
   imageKey: string | null;
-  supplier: string;
-  leadTimeDays: number;
-  safetyStock: number;
   scanCode: string | null;
   lastOpenedAt: string | null;
-  lots: { id: number; quantity: number; expiresAt: string | null; createdAt: string }[];
   analytics: {
     averageDurationDays: number | null;
     lastDurationDays: number | null;
@@ -133,7 +128,7 @@ function fmt(value: number) {
 }
 
 function itemReorderPoint(item: Item) {
-  return calculateReorderPoint(item);
+  return item.minimumQty;
 }
 
 function relativeDate(value: string | null) {
@@ -264,7 +259,7 @@ export default function Home() {
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("pt-BR");
     return items.filter((item) => {
-      const matchesSearch = !query || `${item.name} ${item.category} ${item.supplier} ${item.scanCode || ""}`.toLocaleLowerCase("pt-BR").includes(query);
+      const matchesSearch = !query || `${item.name} ${item.category} ${item.scanCode || ""}`.toLocaleLowerCase("pt-BR").includes(query);
       const matchesFilter = filter === "all" || (filter === "low" && item.unopenedQty + item.openedQty <= itemReorderPoint(item)) || (filter === "open" && item.openedQty > 0);
       return matchesSearch && matchesFilter;
     });
@@ -425,10 +420,9 @@ export default function Home() {
 function StockRow({ item, permissions, onAction, onEdit, onDelete }: { item: Item; permissions: MemberPermissions; onAction: (type: Movement["type"]) => void; onEdit: () => void; onDelete: () => void }) {
   const total = item.unopenedQty + item.openedQty;
   const isLow = total <= itemReorderPoint(item);
-  const nextExpiry = item.lots.find((lot) => lot.expiresAt)?.expiresAt;
   return (
     <article className="stock-row">
-      <div className="item-cell"><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{item.category} · mínimo {fmt(item.minimumQty)} {item.unit}</small>{(nextExpiry || item.supplier) && <small className="item-extra">{nextExpiry ? `Validade ${new Intl.DateTimeFormat("pt-BR").format(new Date(nextExpiry))}` : ""}{nextExpiry && item.supplier ? " · " : ""}{item.supplier || ""}</small>}</div></div>
+      <div className="item-cell"><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{item.category} · mínimo {fmt(item.minimumQty)} {item.unit}</small></div></div>
       <div className="balance-cell"><strong>{fmt(total)} <small>{item.unit}</small></strong><div><span>{fmt(item.unopenedQty)} fechado</span><i /> <span>{fmt(item.openedQty)} aberto</span></div></div>
       <div><span className={`status ${isLow ? "low" : "ok"}`}>{isLow ? <TriangleAlert size={14} /> : <PackageCheck size={14} />}{isLow ? "Repor" : "Em dia"}</span></div>
       <div className="duration-cell">{item.analytics.averageDurationDays !== null ? <><strong>{fmt(item.analytics.averageDurationDays)} dias</strong><small>{item.analytics.monthlyRecommendation} {item.unit}/30 dias</small></> : item.analytics.activeDays !== null ? <><strong>Em medição</strong><small>Há {fmt(item.analytics.activeDays)} dias</small></> : <><strong>Sem histórico</strong><small>Registre abertura e consumo</small></>}</div>
@@ -536,16 +530,12 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   const [category, setCategory] = useState(editing?.category ?? "Bebidas");
   const [unit, setUnit] = useState(editing?.unit ?? "pacote");
   const [minimumQty, setMinimumQty] = useState(String(editing?.minimumQty ?? 2));
-  const [supplier, setSupplier] = useState(editing?.supplier ?? "");
-  const [leadTimeDays, setLeadTimeDays] = useState(String(editing?.leadTimeDays ?? 0));
-  const [safetyStock, setSafetyStock] = useState(String(editing?.safetyStock ?? 0));
   const [scanCode, setScanCode] = useState(editing?.scanCode ?? "");
   const [itemIcon, setItemIcon] = useState(editing?.icon ?? "📦");
   const [itemImageKey, setItemImageKey] = useState<string | null>(editing?.imageKey ?? null);
   const [itemVisualMode, setItemVisualMode] = useState<"icon" | "image">(editing?.imageKey ? "image" : "icon");
   const [itemFile, setItemFile] = useState<File | null>(null);
   const [quantity, setQuantity] = useState("1");
-  const [expiresAt, setExpiresAt] = useState("");
   const selected = items.find((item) => item.id === Number(itemId));
   const [unopenedQty, setUnopenedQty] = useState(String(preselected?.unopenedQty ?? selected?.unopenedQty ?? 0));
   const [openedQty, setOpenedQty] = useState(String(preselected?.openedQty ?? selected?.openedQty ?? 0));
@@ -597,7 +587,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   }, [state.kind]);
 
   const title = state.kind === "profile" ? "Meu perfil" : state.kind === "member" ? (editingMember ? "Editar membro" : "Adicionar membro") : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : state.kind === "scanner" ? "Ler código do item" : movementCopy[state.type].label;
-  const description = state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite dados, fornecedor, prazo, segurança e código de leitura." : state.kind === "scanner" ? "Use a câmera ou digite o código para localizar rapidamente um produto." : {
+  const description = state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite os dados, a aparência e o código de leitura do item." : state.kind === "scanner" ? "Use a câmera ou digite o código para localizar rapidamente um produto." : {
     purchase: "A quantidade comprada será adicionada ao estoque fechado.",
     open: "A quantidade sairá do estoque fechado e passará para aberto.",
     consume: "O consumo será descontado somente das embalagens abertas.",
@@ -607,7 +597,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   function changeSelected(value: string) {
     setItemId(value);
     const item = items.find((entry) => entry.id === Number(value));
-    if (item) { setUnopenedQty(String(item.unopenedQty)); setOpenedQty(String(item.openedQty)); setSupplier(item.supplier); }
+    if (item) { setUnopenedQty(String(item.unopenedQty)); setOpenedQty(String(item.openedQty)); }
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -633,10 +623,10 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
       if (state.kind === "item") {
         const uploadedItemKey = itemVisualMode === "image" && itemFile ? await uploadImage(itemFile, "item") : itemVisualMode === "image" ? itemImageKey : null;
         setItemImageKey(uploadedItemKey);
-        await onSubmit({ action: editing ? "updateItem" : "addItem", itemId: editing?.id, name, category, unit, minimumQty: Number(minimumQty), supplier, leadTimeDays: Number(leadTimeDays), safetyStock: Number(safetyStock), scanCode, icon: itemIcon, imageKey: uploadedItemKey }, editing ? "Item atualizado." : "Novo item cadastrado.");
+        await onSubmit({ action: editing ? "updateItem" : "addItem", itemId: editing?.id, name, category, unit, minimumQty: Number(minimumQty), scanCode, icon: itemIcon, imageKey: uploadedItemKey }, editing ? "Item atualizado." : "Novo item cadastrado.");
         return;
       }
-      const payload: Record<string, unknown> = { action: "movement", type: state.type, itemId: Number(itemId), quantity: Number(quantity), note, expiresAt };
+      const payload: Record<string, unknown> = { action: "movement", type: state.type, itemId: Number(itemId), quantity: Number(quantity), note };
       if (state.type === "adjust") { payload.unopenedQty = Number(unopenedQty); payload.openedQty = Number(openedQty); }
       await onSubmit(payload, `${movementCopy[state.type].label} registrada.`);
     } catch (error) {
@@ -681,9 +671,6 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
           <label><span>Categoria</span><input required value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: Lanches" /></label>
           <label><span>Unidade de controle</span><input required value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Ex.: pacote" /></label>
           <label><span>Estoque mínimo</span><input required min="0" step="0.01" type="number" value={minimumQty} onChange={(e) => setMinimumQty(e.target.value)} /><small>Aviso de reposição.</small></label>
-          <label><span>Estoque de segurança</span><input required min="0" step="0.01" type="number" value={safetyStock} onChange={(e) => setSafetyStock(e.target.value)} /><small>Reserva contra variações.</small></label>
-          <label><span>Fornecedor</span><input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Ex.: Mercado Central" /></label>
-          <label><span>Prazo de entrega</span><input min="0" step="1" type="number" value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} placeholder="Dias" /></label>
           <label className="full"><span>Código de barras ou QR</span><input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Leia ou digite o código do produto" /><small>Usado no botão “Ler código” para localizar o item.</small></label>
         </> : state.kind === "scanner" ? <>
           <div className="scanner-view full"><video ref={videoRef} muted playsInline /><p>{scannerMessage}</p></div>
@@ -695,7 +682,6 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
             <label><span>Quantidade fechada</span><input min="0" step="0.01" type="number" required value={unopenedQty} onChange={(e) => setUnopenedQty(e.target.value)} /></label>
             <label><span>Quantidade aberta</span><input min="0" step="0.01" type="number" required value={openedQty} onChange={(e) => setOpenedQty(e.target.value)} /></label>
           </> : <label className="full"><span>Quantidade ({selected?.unit ?? "un."})</span><input autoFocus min="0.01" step="0.01" type="number" required value={quantity} onChange={(e) => setQuantity(e.target.value)} /><small>{selected && state.type === "open" ? `Disponível fechado: ${fmt(selected.unopenedQty)} ${selected.unit}` : selected && state.type === "consume" ? `Disponível aberto: ${fmt(selected.openedQty)} ${selected.unit}` : "Use números decimais quando necessário."}</small></label>}
-          {state.type === "purchase" && <label className="full"><span>Validade do lote <em>opcional</em></span><input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /><small>Permite avisar quando o alimento estiver próximo de vencer.</small></label>}
           <label className="full"><span>Observação <em>opcional</em></span><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: compra mensal, contagem feita pela manhã..." /></label>
         </>}
       </div>

@@ -2,10 +2,9 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 import { createSession, getSessionMember, hashPassword, normalizeUsername, passwordPolicyError, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
-import { inventoryLocks, items, members, movements, openBatches, purchaseRequests, sessions, stockCounts, stockLots } from "../../../db/schema";
+import { inventoryLocks, items, members, movements, openBatches, sessions } from "../../../db/schema";
 import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
-import { canTransitionPurchase, reconcileStockCount, type PurchaseStatus } from "../../inventory-policy";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 type MemberRole = "admin" | "member" | "viewer";
@@ -129,7 +128,7 @@ export async function GET() {
     const db = getDb();
     const currentMember = await requireMember(db);
     if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado. Fale com um administrador." }, { status: 403 });
-    const [itemRows, movementRows, batchRows, memberRows, lotRows, purchaseRows, countRows] = await Promise.all([
+    const [itemRows, movementRows, batchRows, memberRows] = await Promise.all([
       db.select().from(items).orderBy(items.name),
       db
         .select({
@@ -151,9 +150,6 @@ export async function GET() {
       canManage(currentMember.role)
         ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, username: members.username, role: members.role, permissions: members.permissions, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
         : Promise.resolve([]),
-      db.select().from(stockLots).orderBy(asc(stockLots.expiresAt), asc(stockLots.id)),
-      db.select({ id: purchaseRequests.id, itemId: purchaseRequests.itemId, itemName: items.name, unit: items.unit, quantity: purchaseRequests.quantity, status: purchaseRequests.status, supplier: purchaseRequests.supplier, assignedTo: purchaseRequests.assignedTo, note: purchaseRequests.note, createdByName: purchaseRequests.createdByName, createdAt: purchaseRequests.createdAt, updatedAt: purchaseRequests.updatedAt }).from(purchaseRequests).innerJoin(items, eq(purchaseRequests.itemId, items.id)).orderBy(desc(purchaseRequests.updatedAt), desc(purchaseRequests.id)).limit(200),
-      db.select({ id: stockCounts.id, itemId: stockCounts.itemId, itemName: items.name, unit: items.unit, expectedQty: stockCounts.expectedQty, actualQty: stockCounts.actualQty, difference: stockCounts.difference, note: stockCounts.note, createdByName: stockCounts.createdByName, createdAt: stockCounts.createdAt }).from(stockCounts).innerJoin(items, eq(stockCounts.itemId, items.id)).orderBy(desc(stockCounts.createdAt), desc(stockCounts.id)).limit(200),
     ]);
 
     const now = Date.now();
@@ -180,7 +176,6 @@ export async function GET() {
       return {
         ...item,
         icon: suggestedIcon(item.name, item.icon),
-        lots: lotRows.filter((lot) => lot.itemId === item.id && lot.quantity > 0),
         analytics: {
           averageDurationDays: averageDurationDays ? roundDays(averageDurationDays) : null,
           lastDurationDays: unitDurations.length ? roundDays(unitDurations[0]) : null,
@@ -194,22 +189,11 @@ export async function GET() {
 
     const visibleMembers = memberRows.map((member) => ({ ...member, permissions: resolvePermissions(member.role, member.permissions) }));
     const currentPermissions = resolvePermissions(currentMember.role, currentMember.permissions);
-    const expiringLots = lotRows.filter((lot) => lot.quantity > 0 && lot.expiresAt && new Date(lot.expiresAt).getTime() <= now + 14 * 86400000);
-    const lastCountByItem = new Map<number, number>();
-    for (const count of countRows) if (!lastCountByItem.has(count.itemId)) lastCountByItem.set(count.itemId, new Date(count.createdAt).getTime());
-    const overdueCountItems = itemRows.filter((item) => !lastCountByItem.get(item.id) || lastCountByItem.get(item.id)! < now - 30 * 86400000);
-
     return Response.json({
       items: enrichedItems,
       movements: currentPermissions.viewHistory ? movementRows : [],
       currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, username: currentMember.username, role: currentMember.role, permissions: currentPermissions, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
       members: visibleMembers,
-      purchaseRequests: purchaseRows,
-      stockCounts: countRows,
-      alerts: {
-        expiring: expiringLots.map((lot) => ({ ...lot, itemName: itemRows.find((item) => item.id === lot.itemId)?.name ?? "Item" })),
-        overdueCounts: overdueCountItems.map((item) => ({ itemId: item.id, itemName: item.name })),
-      },
     });
   } catch (error) {
     console.error("inventory load failed", error);
@@ -358,14 +342,11 @@ export async function POST(request: Request) {
       const category = String(body.category ?? "Outros").trim() || "Outros";
       const unit = String(body.unit ?? "un.").trim() || "un.";
       const minimumQty = Math.max(0, number(body.minimumQty, 1));
-      const supplier = String(body.supplier ?? "").trim();
-      const leadTimeDays = Math.max(0, Math.round(number(body.leadTimeDays)));
-      const safetyStock = Math.max(0, number(body.safetyStock));
       const scanCode = String(body.scanCode ?? "").trim() || null;
       const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
       const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!name) return Response.json({ error: "Informe o nome do item." }, { status: 400 });
-      const [item] = await db.insert(items).values({ name, category, unit, minimumQty, supplier, leadTimeDays, safetyStock, scanCode, icon, imageKey }).returning();
+      const [item] = await db.insert(items).values({ name, category, unit, minimumQty, scanCode, icon, imageKey }).returning();
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_created", targetType: "item", targetId: item.id, details: item.name });
       return Response.json({ item }, { status: 201 });
     }
@@ -393,16 +374,13 @@ export async function POST(request: Request) {
       const category = String(body.category ?? "Outros").trim() || "Outros";
       const unit = String(body.unit ?? "un.").trim() || "un.";
       const minimumQty = Math.max(0, number(body.minimumQty, 1));
-      const supplier = String(body.supplier ?? "").trim();
-      const leadTimeDays = Math.max(0, Math.round(number(body.leadTimeDays)));
-      const safetyStock = Math.max(0, number(body.safetyStock));
       const scanCode = String(body.scanCode ?? "").trim() || null;
       const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
       const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!itemId || !name) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [previous] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
       if (!previous) return Response.json({ error: "Item não encontrado." }, { status: 404 });
-      const [item] = await db.update(items).set({ name, category, unit, minimumQty, supplier, leadTimeDays, safetyStock, scanCode, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
+      const [item] = await db.update(items).set({ name, category, unit, minimumQty, scanCode, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
       if (previous.imageKey && previous.imageKey !== imageKey) await removeMedia(previous.imageKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_updated", targetType: "item", targetId: item.id, details: item.name });
       return Response.json({ item });
@@ -419,90 +397,11 @@ export async function POST(request: Request) {
       return Response.json({ item: deleted });
     }
 
-    if (action === "createPurchaseRequest") {
-      if (!hasPermission(currentMember, "registerPurchases")) return Response.json({ error: "Você não tem permissão para criar pedidos de compra." }, { status: 403 });
-      const itemId = number(body.itemId);
-      const quantity = number(body.quantity);
-      const supplier = String(body.supplier ?? "").trim();
-      const assignedTo = String(body.assignedTo ?? "").trim();
-      const note = String(body.note ?? "").trim();
-      if (!itemId || !(quantity > 0)) return Response.json({ error: "Informe o item e uma quantidade válida." }, { status: 400 });
-      const [created] = await db.insert(purchaseRequests).values({ itemId, quantity, supplier, assignedTo, note, createdByName: currentMember.name }).returning();
-      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "purchase_request_created", targetType: "purchase_request", targetId: created.id, details: `${quantity}` });
-      return Response.json({ request: created }, { status: 201 });
-    }
-
-    if (action === "updatePurchaseRequest") {
-      if (!hasPermission(currentMember, "registerPurchases")) return Response.json({ error: "Você não tem permissão para atualizar compras." }, { status: 403 });
-      const requestId = number(body.requestId);
-      const status = String(body.status ?? "");
-      if (!requestId || !["needed", "approved", "ordered", "received", "cancelled"].includes(status)) return Response.json({ error: "Atualização de compra inválida." }, { status: 400 });
-      const [requestRow] = await db.select().from(purchaseRequests).where(eq(purchaseRequests.id, requestId)).limit(1);
-      if (!requestRow) return Response.json({ error: "Solicitação não encontrada." }, { status: 404 });
-      if (!canTransitionPurchase(requestRow.status as PurchaseStatus, status as PurchaseStatus)) return Response.json({ error: "Esta compra já foi encerrada ou não pode voltar de etapa." }, { status: 409 });
-      const timestamp = new Date().toISOString();
-      if (status === "received" && requestRow.status !== "received") {
-        const [item] = await db.select().from(items).where(eq(items.id, requestRow.itemId)).limit(1);
-        if (!item) return Response.json({ error: "Item não encontrado." }, { status: 404 });
-        const expiresAt = body.expiresAt ? String(body.expiresAt) : null;
-        await db.batch([
-          db.update(items).set({ unopenedQty: item.unopenedQty + requestRow.quantity, updatedAt: timestamp }).where(eq(items.id, item.id)),
-          db.update(purchaseRequests).set({ status: "received", updatedAt: timestamp }).where(eq(purchaseRequests.id, requestId)),
-          db.insert(movements).values({ itemId: item.id, type: "purchase", quantity: requestRow.quantity, note: `Recebido pelo fluxo de compras${requestRow.note ? ` · ${requestRow.note}` : ""}`, createdByUserId: currentMember.userId, createdByName: currentMember.name }),
-          ...(expiresAt ? [db.insert(stockLots).values({ itemId: item.id, quantity: requestRow.quantity, expiresAt })] : []),
-        ]);
-      } else {
-        await db.update(purchaseRequests).set({ status: status as "needed" | "approved" | "ordered" | "received" | "cancelled", assignedTo: String(body.assignedTo ?? requestRow.assignedTo), updatedAt: timestamp }).where(eq(purchaseRequests.id, requestId));
-      }
-      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "purchase_request_updated", targetType: "purchase_request", targetId: requestId, details: status });
-      return Response.json({ ok: true });
-    }
-
-    if (action === "stockCount") {
-      if (!hasPermission(currentMember, "adjustStock")) return Response.json({ error: "Você não tem permissão para fazer conferências." }, { status: 403 });
-      const itemId = number(body.itemId);
-      const actualQty = Math.max(0, number(body.actualQty));
-      const note = String(body.note ?? "").trim();
-      const [item] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
-      if (!item) return Response.json({ error: "Item não encontrado." }, { status: 404 });
-      const { expectedQty, difference, openedQty, unopenedQty } = reconcileStockCount({ unopenedQty: item.unopenedQty, openedQty: item.openedQty, actualQty });
-      const timestamp = new Date().toISOString();
-      if (openedQty < item.openedQty) {
-        let toRemove = item.openedQty - openedQty;
-        const activeBatches = await db.select().from(openBatches).where(and(eq(openBatches.itemId, itemId), isNull(openBatches.closedAt))).orderBy(desc(openBatches.openedAt), desc(openBatches.id));
-        for (const batch of activeBatches) {
-          if (toRemove <= 0) break;
-          const removed = Math.min(toRemove, batch.remainingQty);
-          const remainingQty = batch.remainingQty - removed;
-          await db.update(openBatches).set({ remainingQty, closedAt: remainingQty <= 0 ? timestamp : null, closedReason: remainingQty <= 0 ? "adjusted" : null }).where(eq(openBatches.id, batch.id));
-          toRemove -= removed;
-        }
-      }
-      if (unopenedQty < item.unopenedQty) {
-        let toRemove = item.unopenedQty - unopenedQty;
-        const lots = (await db.select().from(stockLots).where(eq(stockLots.itemId, itemId))).filter((lot) => lot.quantity > 0).sort((a, b) => (a.expiresAt ? new Date(a.expiresAt).getTime() : Number.MAX_SAFE_INTEGER) - (b.expiresAt ? new Date(b.expiresAt).getTime() : Number.MAX_SAFE_INTEGER));
-        for (const lot of lots) {
-          if (toRemove <= 0) break;
-          const removed = Math.min(toRemove, lot.quantity);
-          await db.update(stockLots).set({ quantity: lot.quantity - removed }).where(eq(stockLots.id, lot.id));
-          toRemove -= removed;
-        }
-      }
-      await db.batch([
-        db.update(items).set({ unopenedQty, openedQty, updatedAt: timestamp }).where(eq(items.id, itemId)),
-        db.insert(stockCounts).values({ itemId, expectedQty, actualQty, difference, note, createdByName: currentMember.name }),
-        db.insert(movements).values({ itemId, type: "adjust", quantity: difference, note: `Conferência física${note ? ` · ${note}` : ""}`, createdByUserId: currentMember.userId, createdByName: currentMember.name }),
-      ]);
-      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "stock_count_completed", targetType: "item", targetId: itemId, details: `Diferença ${difference}` });
-      return Response.json({ ok: true });
-    }
-
     if (action === "movement") {
       const itemId = number(body.itemId);
       const type = String(body.type ?? "") as MovementType;
       const quantity = number(body.quantity);
       const note = String(body.note ?? "").trim();
-      const expiresAt = body.expiresAt ? String(body.expiresAt) : null;
       if (!itemId || !["purchase", "open", "consume", "adjust"].includes(type)) {
         return Response.json({ error: "Movimentação inválida." }, { status: 400 });
       }
@@ -567,16 +466,6 @@ export async function POST(request: Request) {
           openedQty += quantity;
           lastOpenedAt = timestamp;
           await db.insert(openBatches).values({ itemId, quantity, remainingQty: quantity, openedAt: timestamp });
-          const lots = (await db.select().from(stockLots).where(eq(stockLots.itemId, itemId)))
-            .filter((lot) => lot.quantity > 0)
-            .sort((a, b) => (a.expiresAt ? new Date(a.expiresAt).getTime() : Number.MAX_SAFE_INTEGER) - (b.expiresAt ? new Date(b.expiresAt).getTime() : Number.MAX_SAFE_INTEGER));
-          let toOpen = quantity;
-          for (const lot of lots) {
-            if (toOpen <= 0) break;
-            const removed = Math.min(toOpen, lot.quantity);
-            await db.update(stockLots).set({ quantity: lot.quantity - removed }).where(eq(stockLots.id, lot.id));
-            toOpen -= removed;
-          }
         }
         if (type === "consume") {
           if (quantity > openedQty) return Response.json({ error: `Só existem ${openedQty} ${current.unit} abertos. Registre a abertura antes do consumo.` }, { status: 400 });
@@ -625,7 +514,6 @@ export async function POST(request: Request) {
             createdByName: currentMember.name,
           }),
         ]);
-        if (type === "purchase" && expiresAt) await db.insert(stockLots).values({ itemId, quantity, expiresAt });
         await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}` });
         return Response.json({ ok: true });
       } finally {
