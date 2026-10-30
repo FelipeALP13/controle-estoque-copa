@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   ArrowDownToLine,
@@ -9,6 +11,7 @@ import {
   CalendarClock,
   CircleUserRound,
   Coffee,
+  Download,
   History,
   ImagePlus,
   LogOut,
@@ -173,11 +176,11 @@ function mediaUrl(key: string | null) {
 }
 
 function ItemVisual({ item, className = "item-avatar" }: { item: Pick<Item, "name" | "icon" | "imageKey">; className?: string }) {
-  return <span className={`${className} visual-avatar`}>{item.imageKey ? <img src={mediaUrl(item.imageKey)} alt="" /> : <span>{item.icon || item.name.slice(0, 2).toUpperCase()}</span>}</span>;
+  return <span className={`${className} visual-avatar`}>{item.imageKey ? <Image src={mediaUrl(item.imageKey)} alt="" fill sizes="64px" unoptimized /> : <span>{item.icon || item.name.slice(0, 2).toUpperCase()}</span>}</span>;
 }
 
 function MemberVisual({ member, className = "avatar member-avatar" }: { member: Pick<Member, "name" | "avatarIcon" | "avatarKey">; className?: string }) {
-  return <span className={`${className} visual-avatar`}>{member.avatarKey ? <img src={mediaUrl(member.avatarKey)} alt="" /> : <span>{member.avatarIcon || member.name.slice(0, 2).toUpperCase()}</span>}</span>;
+  return <span className={`${className} visual-avatar`}>{member.avatarKey ? <Image src={mediaUrl(member.avatarKey)} alt="" fill sizes="64px" unoptimized /> : <span>{member.avatarIcon || member.name.slice(0, 2).toUpperCase()}</span>}</span>;
 }
 
 const visualIcons = ["📦", "☕", "🍪", "🍬", "🥛", "🍵", "🧃", "🧻", "🧼", "🥄", "👤", "🧑‍💼"];
@@ -197,11 +200,12 @@ function VisualEditor({ label, mode, setMode, icon, setIcon, imageKey, file, set
   return <div className="visual-editor full">
     <span className="field-label">{label}</span>
     <div className="visual-mode"><button type="button" className={mode === "icon" ? "active" : ""} onClick={() => setMode("icon")}>Usar ícone</button><button type="button" className={mode === "image" ? "active" : ""} onClick={() => setMode("image")}>Usar foto</button></div>
-    {mode === "icon" ? <><div className="icon-options">{visualIcons.map((option) => <button type="button" key={option} className={icon === option ? "active" : ""} onClick={() => setIcon(option)}>{option}</button>)}</div><label className="custom-icon"><span>Outro ícone ou emoji</span><input value={icon} onChange={(event) => setIcon(event.target.value.slice(0, 8))} maxLength={8} /></label></> : <label className="image-upload"><span className="image-preview">{preview ? <img src={preview} alt="Prévia" /> : <ImagePlus />}</span><span><strong>{file ? file.name : imageKey ? "Trocar imagem" : "Selecionar imagem"}</strong><small>PNG, JPG ou WebP · até 3 MB</small></span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>}
+    {mode === "icon" ? <><div className="icon-options">{visualIcons.map((option) => <button type="button" key={option} className={icon === option ? "active" : ""} onClick={() => setIcon(option)}>{option}</button>)}</div><label className="custom-icon"><span>Outro ícone ou emoji</span><input value={icon} onChange={(event) => setIcon(event.target.value.slice(0, 8))} maxLength={8} /></label></> : <label className="image-upload"><span className="image-preview">{preview ? <Image src={preview} alt="Prévia" fill sizes="64px" unoptimized /> : <ImagePlus />}</span><span><strong>{file ? file.name : imageKey ? "Trocar imagem" : "Selecionar imagem"}</strong><small>PNG, JPG ou WebP · até 3 MB</small></span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>}
   </div>;
 }
 
 export default function Home() {
+  const router = useRouter();
   const [items, setItems] = useState<Item[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -216,12 +220,12 @@ export default function Home() {
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setError("");
       const response = await fetch("/api/inventory", { cache: "no-store" });
       const data = await response.json();
-      if (response.status === 401) { window.location.replace("/"); return; }
+      if (response.status === 401) { router.replace("/"); return; }
       if (!response.ok) throw new Error(data.error || "Não foi possível carregar o estoque.");
       setItems(data.items);
       setMovements(data.movements);
@@ -232,9 +236,12 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [load]);
 
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= item.minimumQty);
   const openItems = items.filter((item) => item.openedQty > 0);
@@ -284,9 +291,15 @@ export default function Home() {
     await submit({ action: "deleteItem", itemId: item.id }, "Item excluído.");
   }
 
+  async function deleteMember(member: Member) {
+    if (!window.confirm(`Excluir o acesso de ${member.name}? Esta ação remove a conta, mas preserva o histórico do estoque.`)) return;
+    await submit({ action: "deleteMember", userId: member.userId }, "Membro excluído.");
+  }
+
   async function logout() {
     await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
-    window.location.assign("/");
+    router.push("/");
+    router.refresh();
   }
 
   return (
@@ -367,7 +380,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions"><a className="secondary-button" href="/api/export?type=stock" download><Download size={17} /> Exportar</a><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>
@@ -389,7 +402,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -454,7 +467,7 @@ function PlanningView({ items, loading }: { items: Item[]; loading: boolean }) {
   );
 }
 
-function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onUpdateRole, onUpdateActive }: { members: Member[]; currentUser: CurrentUser | null; saving: boolean; onAddMember: () => void; onEditMember: (member: Member) => void; onUpdateRole: (userId: string, role: MemberRole) => void; onUpdateActive: (userId: string, active: boolean) => void }) {
+function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onDeleteMember, onUpdateRole, onUpdateActive }: { members: Member[]; currentUser: CurrentUser | null; saving: boolean; onAddMember: () => void; onEditMember: (member: Member) => void; onDeleteMember: (member: Member) => void; onUpdateRole: (userId: string, role: MemberRole) => void; onUpdateActive: (userId: string, active: boolean) => void }) {
   return (
     <>
       <div className="team-intro">
@@ -467,7 +480,7 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onU
         <article><strong>Somente leitura</strong><p>Serve como ponto de partida para quem pode apenas consultar as áreas liberadas.</p></article>
       </div>
       <div className="team-panel">
-        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário, a senha inicial e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
+        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário, a senha inicial e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><a className="secondary-button" href="/api/export?type=members" download><Download size={16} /> Usuários</a><a className="secondary-button" href="/api/export?type=audit" download><Download size={16} /> Auditoria</a><a className="secondary-button" href="/api/export?type=backup" download><Download size={16} /> Backup</a><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
         <div className="team-table">
           <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Status</span><span>Entrada</span><span>Ações</span></div>
           {members.map((member) => <div className="team-row" key={member.userId}>
@@ -475,7 +488,7 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onU
             <select aria-label={`Permissão de ${member.name}`} disabled={saving || member.userId === currentUser?.userId} value={member.role} onChange={(event) => onUpdateRole(member.userId, event.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select>
             <button className={`access-toggle ${member.active ? "active" : "inactive"}`} disabled={saving || member.userId === currentUser?.userId} onClick={() => onUpdateActive(member.userId, !member.active)}>{member.active ? "Ativo" : "Desativado"}</button>
             <span className="member-date">{new Intl.DateTimeFormat("pt-BR").format(new Date(member.createdAt))}</span>
-            <button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button>
+            <div className="member-actions"><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button><button className="member-delete" disabled={member.userId === currentUser?.userId} onClick={() => onDeleteMember(member)} aria-label={`Excluir ${member.name}`} title="Excluir membro"><Trash2 size={15} /></button></div>
           </div>)}
         </div>
         <p className="team-access-note">O usuário e a senha dão acesso ao sistema. As permissões são verificadas novamente pelo servidor em cada operação.</p>
@@ -488,7 +501,7 @@ function HistoryView({ movements, loading }: { movements: Movement[]; loading: b
   if (loading) return <LoadingRows />;
   return (
     <>
-      <div className="section-heading history-title"><div><h2>Atividade recente</h2><p>Compras, aberturas, consumos e ajustes registrados no sistema.</p></div></div>
+      <div className="section-heading history-title"><div><h2>Atividade recente</h2><p>Compras, aberturas, consumos e ajustes registrados no sistema.</p></div><a className="secondary-button" href="/api/export?type=movements" download><Download size={16} /> Exportar histórico</a></div>
       {movements.length === 0 ? <div className="empty-state"><span><History /></span><h3>Nenhuma movimentação ainda</h3><p>Quando você registrar uma compra, abertura ou consumo, o evento aparecerá aqui.</p></div> : (
         <div className="history-list">
           {movements.map((movement) => {
@@ -532,7 +545,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
   const [memberActive, setMemberActive] = useState(editingMember?.active ?? true);
   const [memberTab, setMemberTab] = useState<"general" | "permissions">("general");
   const [avatarIcon, setAvatarIcon] = useState(editingMember?.avatarIcon ?? profile?.avatarIcon ?? "👤");
-  const [avatarKey, setAvatarKey] = useState<string | null>(editingMember?.avatarKey ?? profile?.avatarKey ?? null);
+  const [avatarKey] = useState<string | null>(editingMember?.avatarKey ?? profile?.avatarKey ?? null);
   const [avatarMode, setAvatarMode] = useState<"icon" | "image">((editingMember?.avatarKey ?? profile?.avatarKey) ? "image" : "icon");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -592,13 +605,13 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit }: { state
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
           <label className="full"><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
-          <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input minLength={6} type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input minLength={6} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" /></label></div></div>
+          <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input minLength={8} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /></label></div></div>
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>
           <VisualEditor label="Avatar do usuário" mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário de acesso</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
-          <label><span>{editingMember ? "Redefinir senha" : "Senha inicial"}</span><input required={!editingMember} minLength={6} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder={editingMember ? "Deixe em branco para manter" : "Mínimo de 6 caracteres"} /><small>{editingMember ? "Preencha apenas para trocar a senha." : "A pessoa usará esta senha no primeiro acesso."}</small></label>
+          <label><span>{editingMember ? "Redefinir senha" : "Senha inicial"}</span><input required={!editingMember} minLength={8} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder={editingMember ? "Deixe em branco para manter" : "8+ caracteres, letras e números"} /><small>{editingMember ? "Preencha apenas para trocar a senha." : "A pessoa usará esta senha no primeiro acesso."}</small></label>
           <label><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
             <label><span>Perfil base</span><select value={memberRole} onChange={(e) => { const role = e.target.value as MemberRole; setMemberRole(role); setMemberPermissions(permissionPresets[role]); }}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
             <label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>

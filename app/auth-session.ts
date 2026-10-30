@@ -1,7 +1,10 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNotNull, lt, or } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb } from "../db";
-import { members, sessions } from "../db/schema";
+import { authRateLimits, members, passwordResetTokens, sessions } from "../db/schema";
+import { normalizeUsername } from "./auth-policy";
+
+export { normalizeUsername, passwordPolicyError, validatePassword } from "./auth-policy";
 
 const SESSION_COOKIE = "estoque_session";
 const SESSION_DAYS = 30;
@@ -24,14 +27,6 @@ export async function hashToken(value: string) {
 
 export function createSecureToken() {
   return randomHex(32);
-}
-
-export function normalizeUsername(value: string) {
-  return value.trim().toLocaleLowerCase("pt-BR").replace(/\s+/g, "");
-}
-
-export function validatePassword(value: string) {
-  return value.length >= 6;
 }
 
 export async function hashPassword(password: string, salt = randomHex(16)) {
@@ -93,4 +88,41 @@ export async function destroySession(db = getDb()) {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) await db.delete(sessions).where(eq(sessions.tokenHash, await hashToken(token)));
   cookieStore.set(SESSION_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+}
+
+export async function cleanupAuthData(db = getDb()) {
+  const now = new Date().toISOString();
+  const staleRateLimit = new Date(Date.now() - 2 * 86400000).toISOString();
+  await db.batch([
+    db.delete(sessions).where(lt(sessions.expiresAt, now)),
+    db.delete(passwordResetTokens).where(or(lt(passwordResetTokens.expiresAt, now), isNotNull(passwordResetTokens.usedAt))),
+    db.delete(authRateLimits).where(lt(authRateLimits.updatedAt, staleRateLimit)),
+  ]);
+}
+
+export async function rateLimitKey(scope: string, identifier: string, ip: string) {
+  return hashToken(`${scope}:${normalizeUsername(identifier)}:${ip}`);
+}
+
+export async function checkRateLimit(key: string, db = getDb()) {
+  const [row] = await db.select().from(authRateLimits).where(eq(authRateLimits.key, key)).limit(1);
+  const blockedUntil = row?.blockedUntil ? new Date(row.blockedUntil).getTime() : 0;
+  if (blockedUntil > Date.now()) return { blocked: true, retryAfterSeconds: Math.max(1, Math.ceil((blockedUntil - Date.now()) / 1000)) };
+  return { blocked: false, retryAfterSeconds: 0 };
+}
+
+export async function recordRateLimitFailure(key: string, options: { maxAttempts: number; windowMinutes: number; blockMinutes: number }, db = getDb()) {
+  const now = new Date();
+  const [current] = await db.select().from(authRateLimits).where(eq(authRateLimits.key, key)).limit(1);
+  const windowExpired = !current || new Date(current.windowStartedAt).getTime() < now.getTime() - options.windowMinutes * 60000;
+  const attempts = windowExpired ? 1 : current.attempts + 1;
+  const blockedUntil = attempts >= options.maxAttempts ? new Date(now.getTime() + options.blockMinutes * 60000).toISOString() : null;
+  const values = { attempts, windowStartedAt: windowExpired ? now.toISOString() : current!.windowStartedAt, blockedUntil, updatedAt: now.toISOString() };
+  if (current) await db.update(authRateLimits).set(values).where(eq(authRateLimits.key, key));
+  else await db.insert(authRateLimits).values({ key, ...values });
+  return { blocked: Boolean(blockedUntil), retryAfterSeconds: blockedUntil ? options.blockMinutes * 60 : 0 };
+}
+
+export async function clearRateLimit(key: string, db = getDb()) {
+  await db.delete(authRateLimits).where(eq(authRateLimits.key, key));
 }

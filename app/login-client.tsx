@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -22,14 +24,14 @@ export default function LoginScreen() {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Não foi possível verificar o acesso.");
-        if (data.authenticated) window.location.replace("/painel");
+        if (data.authenticated) router.replace("/painel");
         else setSetupRequired(Boolean(data.setupRequired));
       })
       .catch((reason) => {
         setError(reason instanceof Error ? reason.message : "Não foi possível verificar o acesso.");
         setSetupRequired(false);
       });
-  }, []);
+  }, [router]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -43,7 +45,8 @@ export default function LoginScreen() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível entrar.");
-      window.location.assign("/painel");
+      router.push("/painel");
+      router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível entrar.");
       setLoading(false);
@@ -101,7 +104,7 @@ export default function LoginScreen() {
             <label><span>E-mail</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@empresa.com" /></label>
           </>}
           <label><span>Usuário</span><div className="login-input"><UserRound /><input autoFocus={!setupRequired} required autoCapitalize="none" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Ex.: felipe" /></div></label>
-          <label><span>Senha</span><div className="login-input"><LockKeyhole /><input required minLength={6} type={showPassword ? "text" : "password"} autoComplete={setupRequired ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Mínimo de 6 caracteres" /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
+          <label><span>Senha</span><div className="login-input"><LockKeyhole /><input required minLength={setupRequired ? 8 : 1} type={showPassword ? "text" : "password"} autoComplete={setupRequired ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={setupRequired ? "8+ caracteres, letras e números" : "Digite sua senha"} /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
           {!setupRequired && <button className="forgot-password" type="button" onClick={() => { setForgotPassword(true); setError(""); }}>Esqueceu a senha?</button>}</>}
           {error && <p className="login-error">{error}</p>}
           <button className="login-submit" disabled={loading || setupRequired === null}>{loading ? "Aguarde..." : setupRequired === null ? "Verificando..." : forgotPassword ? "Enviar link por e-mail" : setupRequired ? "Criar acesso e entrar" : "Entrar"}<span>→</span></button>

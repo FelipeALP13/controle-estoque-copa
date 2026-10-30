@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
+import Link from "next/link";
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState("");
@@ -38,12 +39,12 @@ export default function ResetPasswordScreen() {
     <div className="reset-icon"><KeyRound /></div>
     <p className="eyebrow">NOVA SENHA</p>
     <h1>Crie uma nova senha</h1>
-    <p>Escolha uma senha com pelo menos 6 caracteres. Ao concluir, os acessos antigos serão encerrados.</p>
+    <p>Escolha uma senha com pelo menos 8 caracteres, combinando letras e números. Ao concluir, os acessos antigos serão encerrados.</p>
     {!success && <>
-      <label><span>Nova senha</span><div className="login-input"><KeyRound /><input autoFocus required minLength={6} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Mínimo de 6 caracteres" /><button type="button" onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
-      <label><span>Confirmar nova senha</span><div className="login-input"><KeyRound /><input required minLength={6} type={showPassword ? "text" : "password"} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="Digite novamente" /></div></label>
+      <label><span>Nova senha</span><div className="login-input"><KeyRound /><input autoFocus required minLength={8} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="8+ caracteres, com letras e números" /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
+      <label><span>Confirmar nova senha</span><div className="login-input"><KeyRound /><input required minLength={8} type={showPassword ? "text" : "password"} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="Digite novamente" /></div></label>
     </>}
     {error && <p className="login-error">{error}</p>}
-    {success ? <><p className="login-success">{success}</p><a className="login-submit reset-login-link" href="/">Voltar para o login <span>→</span></a></> : <button className="login-submit" disabled={loading}>{loading ? "Alterando..." : "Alterar senha"}<span>→</span></button>}
+    {success ? <><p className="login-success">{success}</p><Link className="login-submit reset-login-link" href="/">Voltar para o login <span>→</span></Link></> : <button className="login-submit" disabled={loading}>{loading ? "Alterando..." : "Alterar senha"}<span>→</span></button>}
   </form></main>;
 }

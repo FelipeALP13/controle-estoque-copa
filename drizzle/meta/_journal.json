@@ -57,6 +57,20 @@
       "when": 1793293530529,
       "tag": "0007_colorful_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793295524959,
+      "tag": "0008_shallow_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793295667170,
+      "tag": "0009_parched_proteus",
+      "breakpoints": true
     }
   ]
 }

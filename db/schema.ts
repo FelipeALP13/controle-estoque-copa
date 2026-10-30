@@ -41,11 +41,19 @@ export const openBatches = sqliteTable("open_batches", {
   closedReason: text("closed_reason", { enum: ["consumed", "adjusted"] }),
 });
 
+export const inventoryLocks = sqliteTable("inventory_locks", {
+  itemId: integer("item_id")
+    .primaryKey()
+    .references(() => items.id, { onDelete: "cascade" }),
+  ownerToken: text("owner_token").notNull(),
+  acquiredAt: text("acquired_at").notNull(),
+});
+
 export const members = sqliteTable("members", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").notNull().unique(),
   name: text("name").notNull(),
-  email: text("email").notNull(),
+  email: text("email").notNull().unique(),
   role: text("role", { enum: ["admin", "member", "viewer"] }).notNull().default("member"),
   permissions: text("permissions").notNull().default("{}"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
@@ -75,5 +83,24 @@ export const passwordResetTokens = sqliteTable("password_reset_tokens", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: text("expires_at").notNull(),
   usedAt: text("used_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const authRateLimits = sqliteTable("auth_rate_limits", {
+  key: text("key").primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  windowStartedAt: text("window_started_at").notNull(),
+  blockedUntil: text("blocked_until"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const auditLogs = sqliteTable("audit_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  actorUserId: text("actor_user_id"),
+  actorName: text("actor_name").notNull().default("Sistema"),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id"),
+  details: text("details").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

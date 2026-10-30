@@ -1,7 +1,10 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { getSessionMember, hashPassword, normalizeUsername, validatePassword, verifyPassword } from "../../auth-session";
+import { env } from "cloudflare:workers";
+import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { createSession, getSessionMember, hashPassword, normalizeUsername, passwordPolicyError, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
-import { items, members, movements, openBatches } from "../../../db/schema";
+import { inventoryLocks, items, members, movements, openBatches, sessions } from "../../../db/schema";
+import { writeAudit } from "../../audit";
+import { hasTrustedOrigin } from "../../request-security";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 type MemberRole = "admin" | "member" | "viewer";
@@ -80,7 +83,21 @@ function errorMessage(error: unknown) {
   if (message.includes("no such table")) {
     return "O banco de dados ainda não foi preparado. Publique novamente para aplicar as tabelas.";
   }
-  return message;
+  return "Não foi possível concluir esta operação agora.";
+}
+
+async function removeMedia(key: string | null | undefined) {
+  if (!key?.startsWith("media/")) return;
+  try {
+    const bucket = (env as unknown as { BUCKET?: R2Bucket }).BUCKET;
+    await bucket?.delete(key);
+  } catch (error) {
+    console.error("media cleanup failed", error);
+  }
+}
+
+async function safeAudit(db: ReturnType<typeof getDb>, entry: Parameters<typeof writeAudit>[1]) {
+  try { await writeAudit(db, entry); } catch (error) { console.error("audit log failed", error); }
 }
 
 function number(value: unknown, fallback = 0) {
@@ -180,6 +197,7 @@ export async function GET() {
       members: visibleMembers,
     });
   } catch (error) {
+    console.error("inventory load failed", error);
     const message = error instanceof Error ? error.message : "";
     return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com seu usuário e senha para acessar o sistema.", signInPath: "/" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
@@ -187,6 +205,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!hasTrustedOrigin(request)) return Response.json({ error: "Origem da solicitação não autorizada." }, { status: 403 });
     const body = (await request.json()) as Record<string, unknown>;
     const action = String(body.action ?? "");
     const db = getDb();
@@ -204,12 +223,21 @@ export async function POST(request: Request) {
       if (!name) return Response.json({ error: "Informe seu nome." }, { status: 400 });
       if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
       if (username.length < 3) return Response.json({ error: "O usuário precisa ter pelo menos 3 caracteres." }, { status: 400 });
-      if (password && !validatePassword(password)) return Response.json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
+      const passwordError = password ? passwordPolicyError(password) : null;
+      if (passwordError) return Response.json({ error: passwordError }, { status: 400 });
       if (password && (!currentMember.passwordHash || !currentMember.passwordSalt || !(await verifyPassword(currentPassword, currentMember.passwordHash, currentMember.passwordSalt)))) return Response.json({ error: "A senha atual está incorreta." }, { status: 400 });
-      const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
-      if (duplicate.length && duplicate[0].userId !== currentMember.userId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      const [duplicateUsername] = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
+      if (duplicateUsername && duplicateUsername.userId !== currentMember.userId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      const [duplicateEmail] = await db.select({ userId: members.userId }).from(members).where(eq(members.email, email)).limit(1);
+      if (duplicateEmail && duplicateEmail.userId !== currentMember.userId) return Response.json({ error: "Este e-mail já pertence a outro usuário." }, { status: 409 });
       const credentials = password ? await hashPassword(password) : null;
       const [updated] = await db.update(members).set({ name, email, username, avatarIcon, avatarKey, ...(credentials ? { passwordHash: credentials.hash, passwordSalt: credentials.salt } : {}) }).where(eq(members.userId, currentMember.userId)).returning();
+      if (credentials) {
+        await db.delete(sessions).where(eq(sessions.memberId, currentMember.id));
+        await createSession(currentMember.id, db);
+      }
+      if (currentMember.avatarKey && currentMember.avatarKey !== avatarKey) await removeMedia(currentMember.avatarKey);
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: name, action: credentials ? "profile_and_password_updated" : "profile_updated", targetType: "member", targetId: currentMember.id });
       return Response.json({ member: updated });
     }
 
@@ -221,6 +249,7 @@ export async function POST(request: Request) {
       if (targetUserId === currentMember.userId) return Response.json({ error: "Para evitar bloqueio acidental, você não pode alterar sua própria permissão." }, { status: 400 });
       const [updated] = await db.update(members).set({ role, permissions: permissionJson(role, {}) }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_role_updated", targetType: "member", targetId: updated.id, details: `Perfil alterado para ${role}` });
       return Response.json({ member: updated });
     }
 
@@ -234,15 +263,19 @@ export async function POST(request: Request) {
       if (!name) return Response.json({ error: "Informe o nome do membro." }, { status: 400 });
       if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
       if (username.length < 3) return Response.json({ error: "O usuário precisa ter pelo menos 3 caracteres." }, { status: 400 });
-      if (!validatePassword(password)) return Response.json({ error: "A senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
+      const passwordError = passwordPolicyError(password);
+      if (passwordError) return Response.json({ error: passwordError }, { status: 400 });
       if (!["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Permissão inválida." }, { status: 400 });
       const existing = await db.select({ id: members.id }).from(members).where(eq(members.username, username)).limit(1);
       if (existing.length) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      const emailExisting = await db.select({ id: members.id }).from(members).where(eq(members.email, email)).limit(1);
+      if (emailExisting.length) return Response.json({ error: "Este e-mail já pertence a outro usuário." }, { status: 409 });
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
       const permissions = permissionJson(role, body.permissions);
       const credentials = await hashPassword(password);
       const [member] = await db.insert(members).values({ userId: `member:${crypto.randomUUID()}`, name, email, username, passwordHash: credentials.hash, passwordSalt: credentials.salt, role, permissions, active: true, avatarIcon, avatarKey }).returning();
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_created", targetType: "member", targetId: member.id, details: `Usuário ${username} criado como ${role}` });
       return Response.json({ member }, { status: 201 });
     }
 
@@ -258,13 +291,21 @@ export async function POST(request: Request) {
       const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
       const permissions = permissionJson(role, body.permissions);
       if (!targetUserId || !name || !email.includes("@") || username.length < 3 || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Dados do membro inválidos." }, { status: 400 });
-      if (password && !validatePassword(password)) return Response.json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, { status: 400 });
+      const passwordError = password ? passwordPolicyError(password) : null;
+      if (passwordError) return Response.json({ error: passwordError }, { status: 400 });
       if (targetUserId === currentMember.userId) return Response.json({ error: "Edite seus dados em Meu perfil." }, { status: 400 });
+      const [target] = await db.select().from(members).where(eq(members.userId, targetUserId)).limit(1);
+      if (!target) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
       if (duplicate.length && duplicate[0].userId !== targetUserId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      const duplicateEmail = await db.select({ userId: members.userId }).from(members).where(eq(members.email, email)).limit(1);
+      if (duplicateEmail.length && duplicateEmail[0].userId !== targetUserId) return Response.json({ error: "Este e-mail já pertence a outro usuário." }, { status: 409 });
       const credentials = password ? await hashPassword(password) : null;
       const [updated] = await db.update(members).set({ name, email, username, role, permissions, active: body.active !== false, avatarIcon, avatarKey, ...(credentials ? { passwordHash: credentials.hash, passwordSalt: credentials.salt } : {}) }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      if (credentials || !updated.active) await db.delete(sessions).where(eq(sessions.memberId, updated.id));
+      if (target.avatarKey && target.avatarKey !== avatarKey) await removeMedia(target.avatarKey);
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: credentials ? "member_updated_and_password_reset" : "member_updated", targetType: "member", targetId: updated.id, details: `Usuário ${username} atualizado` });
       return Response.json({ member: updated });
     }
 
@@ -275,7 +316,25 @@ export async function POST(request: Request) {
       if (targetUserId === currentMember.userId) return Response.json({ error: "Para evitar bloqueio acidental, você não pode desativar seu próprio acesso." }, { status: 400 });
       const [updated] = await db.update(members).set({ active: body.active === true }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      if (!updated.active) await db.delete(sessions).where(eq(sessions.memberId, updated.id));
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: updated.active ? "member_activated" : "member_deactivated", targetType: "member", targetId: updated.id, details: updated.name });
       return Response.json({ member: updated });
+    }
+
+    if (action === "deleteMember") {
+      if (!canManage(currentMember.role)) return Response.json({ error: "Somente administradores podem excluir membros." }, { status: 403 });
+      const targetUserId = String(body.userId ?? "");
+      if (!targetUserId || targetUserId === currentMember.userId) return Response.json({ error: "Você não pode excluir sua própria conta." }, { status: 400 });
+      const [target] = await db.select().from(members).where(eq(members.userId, targetUserId)).limit(1);
+      if (!target) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      if (target.role === "admin" && target.active) {
+        const activeAdmins = await db.select({ id: members.id }).from(members).where(and(eq(members.role, "admin"), eq(members.active, true)));
+        if (activeAdmins.length <= 1) return Response.json({ error: "O sistema precisa manter pelo menos um administrador ativo." }, { status: 400 });
+      }
+      await db.delete(members).where(eq(members.id, target.id));
+      await removeMedia(target.avatarKey);
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_deleted", targetType: "member", targetId: target.id, details: `${target.name} (${target.username || target.email})` });
+      return Response.json({ ok: true });
     }
 
     if (action === "addItem") {
@@ -288,6 +347,7 @@ export async function POST(request: Request) {
       const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!name) return Response.json({ error: "Informe o nome do item." }, { status: 400 });
       const [item] = await db.insert(items).values({ name, category, unit, minimumQty, icon, imageKey }).returning();
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_created", targetType: "item", targetId: item.id, details: item.name });
       return Response.json({ item }, { status: 201 });
     }
 
@@ -303,6 +363,7 @@ export async function POST(request: Request) {
         { name: "Leite", category: "Bebidas", unit: "caixa", icon: "🥛", unopenedQty: 1, openedQty: 1, minimumQty: 4, lastOpenedAt: new Date(now - 86400000).toISOString() },
         { name: "Chá", category: "Bebidas", unit: "caixa", icon: "🍵", unopenedQty: 2, openedQty: 0, minimumQty: 1 },
       ]).returning();
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "initial_items_created", targetType: "item", details: `${created.length} itens adicionados` });
       return Response.json({ items: created }, { status: 201 });
     }
 
@@ -316,7 +377,11 @@ export async function POST(request: Request) {
       const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
       const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!itemId || !name) return Response.json({ error: "Item inválido." }, { status: 400 });
+      const [previous] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
+      if (!previous) return Response.json({ error: "Item não encontrado." }, { status: 404 });
       const [item] = await db.update(items).set({ name, category, unit, minimumQty, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
+      if (previous.imageKey && previous.imageKey !== imageKey) await removeMedia(previous.imageKey);
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_updated", targetType: "item", targetId: item.id, details: item.name });
       return Response.json({ item });
     }
 
@@ -326,6 +391,8 @@ export async function POST(request: Request) {
       if (!itemId) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [deleted] = await db.delete(items).where(eq(items.id, itemId)).returning();
       if (!deleted) return Response.json({ error: "Item não encontrado." }, { status: 404 });
+      await removeMedia(deleted.imageKey);
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_deleted", targetType: "item", targetId: deleted.id, details: deleted.name });
       return Response.json({ item: deleted });
     }
 
@@ -345,14 +412,23 @@ export async function POST(request: Request) {
       };
       if (!hasPermission(currentMember, permissionByType[type])) return Response.json({ error: "Você não tem permissão para registrar esta movimentação." }, { status: 403 });
 
-      const [current] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
-      if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });
+      const lockToken = crypto.randomUUID();
+      await db.delete(inventoryLocks).where(and(eq(inventoryLocks.itemId, itemId), lt(inventoryLocks.acquiredAt, new Date(Date.now() - 30000).toISOString())));
+      try {
+        await db.insert(inventoryLocks).values({ itemId, ownerToken: lockToken, acquiredAt: new Date().toISOString() });
+      } catch {
+        return Response.json({ error: "Este item está sendo atualizado por outra pessoa. Tente novamente em alguns segundos." }, { status: 409 });
+      }
 
-      const timestamp = new Date().toISOString();
-      let unopenedQty = current.unopenedQty;
-      let openedQty = current.openedQty;
-      let lastOpenedAt = current.lastOpenedAt;
-      let movementQuantity = quantity;
+      try {
+        const [current] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
+        if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });
+
+        const timestamp = new Date().toISOString();
+        let unopenedQty = current.unopenedQty;
+        let openedQty = current.openedQty;
+        let lastOpenedAt = current.lastOpenedAt;
+        let movementQuantity = quantity;
 
       if (type === "adjust") {
         unopenedQty = Math.max(0, number(body.unopenedQty));
@@ -426,22 +502,27 @@ export async function POST(request: Request) {
         }
       }
 
-      await db.batch([
-        db.update(items).set({ unopenedQty, openedQty, lastOpenedAt, updatedAt: timestamp }).where(eq(items.id, itemId)),
-        db.insert(movements).values({
-          itemId,
-          type,
-          quantity: movementQuantity,
-          note,
-          createdByUserId: currentMember.userId,
-          createdByName: currentMember.name,
-        }),
-      ]);
-      return Response.json({ ok: true });
+        await db.batch([
+          db.update(items).set({ unopenedQty, openedQty, lastOpenedAt, updatedAt: timestamp }).where(eq(items.id, itemId)),
+          db.insert(movements).values({
+            itemId,
+            type,
+            quantity: movementQuantity,
+            note,
+            createdByUserId: currentMember.userId,
+            createdByName: currentMember.name,
+          }),
+        ]);
+        await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}` });
+        return Response.json({ ok: true });
+      } finally {
+        await db.delete(inventoryLocks).where(and(eq(inventoryLocks.itemId, itemId), eq(inventoryLocks.ownerToken, lockToken)));
+      }
     }
 
     return Response.json({ error: "Ação desconhecida." }, { status: 400 });
   } catch (error) {
+    console.error("inventory mutation failed", error);
     const message = error instanceof Error ? error.message : "";
     return Response.json(message === "AUTH_REQUIRED" ? { error: "Entre com seu usuário e senha para acessar o sistema.", signInPath: "/" } : { error: errorMessage(error) }, { status: message === "AUTH_REQUIRED" ? 401 : 500 });
   }
