@@ -8,7 +8,9 @@ export { normalizeUsername, passwordPolicyError, validatePassword } from "./auth
 
 const SESSION_COOKIE = "estoque_session";
 const SESSION_DAYS = 30;
-const PASSWORD_ITERATIONS = 210_000;
+// Cloudflare Workers caps each Web Crypto PBKDF2 operation at 100,000
+// iterations. Chaining stages preserves the intended 210,000-iteration cost.
+const PASSWORD_ITERATION_STAGES = [100_000, 100_000, 10_000] as const;
 
 export type SessionMember = typeof members.$inferSelect;
 
@@ -30,19 +32,17 @@ export function createSecureToken() {
 }
 
 export async function hashPassword(password: string, salt = randomHex(16)) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: PASSWORD_ITERATIONS },
-    key,
-    256,
-  );
-  return { hash: toHex(new Uint8Array(bits)), salt };
+  const encoder = new TextEncoder();
+  let material: BufferSource = encoder.encode(password);
+  for (let stage = 0; stage < PASSWORD_ITERATION_STAGES.length; stage += 1) {
+    const key = await crypto.subtle.importKey("raw", material, "PBKDF2", false, ["deriveBits"]);
+    material = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(`${salt}:${stage}`), iterations: PASSWORD_ITERATION_STAGES[stage] },
+      key,
+      256,
+    );
+  }
+  return { hash: toHex(new Uint8Array(material as ArrayBuffer)), salt };
 }
 
 export async function verifyPassword(password: string, expectedHash: string, salt: string) {
