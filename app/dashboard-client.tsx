@@ -362,7 +362,7 @@ export default function Home() {
 
               <div className="overview-insights">
                 <article className="insight-card attention-card">
-                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions"><a href="/api/export?type=restock" download><Download size={14} /> Baixar lista</a><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></span></div>
+                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions"><a href="/api/export?type=restock" download><Download size={14} /> Exportar itens</a><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></span></div>
                   {lowItems.length ? <div className="restock-list">{lowItems.slice(0,4).map((item) => {
                     const total = item.unopenedQty + item.openedQty;
                     const suggested = Math.max(1, Math.ceil((item.analytics.monthlyRecommendation ?? item.minimumQty + 1) - total));
@@ -378,7 +378,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions"><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions"><a className="secondary-button restock-export" href="/api/export?type=restock" download><Download size={17} /> Exportar itens para compra{lowItems.length > 0 && <b>{lowItems.length}</b>}</a><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>
