@@ -6,11 +6,9 @@ import { useRouter } from "next/navigation";
 import Archive from "lucide-react/icons/archive";
 import ArrowDownToLine from "lucide-react/icons/arrow-down-to-line";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
-import Bell from "lucide-react/icons/bell";
 import Box from "lucide-react/icons/box";
 import CalendarClock from "lucide-react/icons/calendar-clock";
 import CircleUserRound from "lucide-react/icons/circle-user-round";
-import ClipboardCheck from "lucide-react/icons/clipboard-check";
 import Coffee from "lucide-react/icons/coffee";
 import Download from "lucide-react/icons/download";
 import History from "lucide-react/icons/history";
@@ -28,12 +26,11 @@ import ShoppingCart from "lucide-react/icons/shopping-cart";
 import Sparkles from "lucide-react/icons/sparkles";
 import Trash2 from "lucide-react/icons/trash-2";
 import TrendingDown from "lucide-react/icons/trending-down";
-import Truck from "lucide-react/icons/truck";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
 import UserPlus from "lucide-react/icons/user-plus";
 import Users from "lucide-react/icons/users";
 import X from "lucide-react/icons/x";
-import { calculateReorderPoint, suggestedPurchaseQuantity } from "./inventory-policy";
+import { calculateReorderPoint } from "./inventory-policy";
 
 type MemberRole = "admin" | "member" | "viewer";
 type MemberPermissions = {
@@ -104,15 +101,6 @@ type Item = {
   };
 };
 
-type PurchaseRequest = {
-  id: number; itemId: number; itemName: string; unit: string; quantity: number;
-  status: "needed" | "approved" | "ordered" | "received" | "cancelled";
-  supplier: string; assignedTo: string; note: string; createdByName: string; createdAt: string; updatedAt: string;
-};
-
-type StockCount = { id: number; itemId: number; itemName: string; unit: string; expectedQty: number; actualQty: number; difference: number; note: string; createdByName: string; createdAt: string };
-type InventoryAlerts = { expiring: { id: number; itemId: number; itemName: string; quantity: number; expiresAt: string | null }[]; overdueCounts: { itemId: number; itemName: string }[] };
-
 type Movement = {
   id: number;
   itemId: number;
@@ -130,8 +118,6 @@ type ModalState =
   | { kind: "member"; member?: Member }
   | { kind: "profile" }
   | { kind: "movement"; type: Movement["type"]; item?: Item }
-  | { kind: "purchaseRequest"; item?: Item }
-  | { kind: "stockCount"; item?: Item }
   | { kind: "scanner" }
   | null;
 
@@ -234,16 +220,13 @@ export default function Home() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
-  const [stockCounts, setStockCounts] = useState<StockCount[]>([]);
-  const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlerts>({ expiring: [], overdueCounts: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"stock" | "planning" | "purchases" | "counts" | "history" | "team">("stock");
+  const [tab, setTab] = useState<"stock" | "planning" | "history" | "team">("stock");
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -258,9 +241,6 @@ export default function Home() {
       setMovements(data.movements);
       setCurrentUser(data.currentUser);
       setMembers(data.members || []);
-      setPurchaseRequests(data.purchaseRequests || []);
-      setStockCounts(data.stockCounts || []);
-      setInventoryAlerts(data.alerts || { expiring: [], overdueCounts: [] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
@@ -340,8 +320,6 @@ export default function Home() {
         <nav>
           <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
           {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>}
-          {permissions.registerPurchases && <button className={tab === "purchases" ? "active" : ""} onClick={() => { setTab("purchases"); setMobileMenu(false); }}><Truck /> Compras</button>}
-          {permissions.adjustStock && <button className={tab === "counts" ? "active" : ""} onClick={() => { setTab("counts"); setMobileMenu(false); }}><ClipboardCheck /> Conferências</button>}
           {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>}
           {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setMobileMenu(false); }}><Users /> Equipe</button>}
         </nav>
@@ -356,8 +334,8 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">RANGO DA FIRMA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "purchases" ? "Fluxo de compras" : tab === "counts" ? "Conferências físicas" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
-          {tab === "purchases" ? <button className="primary-button" onClick={() => setModal({ kind: "purchaseRequest" })}><Plus size={18} /> Nova solicitação</button> : tab === "counts" ? <button className="primary-button" onClick={() => setModal({ kind: "stockCount" })}><ClipboardCheck size={18} /> Nova conferência</button> : isAdmin || permissions.manageItems ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
+          <div><p className="eyebrow">RANGO DA FIRMA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
+          {isAdmin || permissions.manageItems ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
         <section className="content">
@@ -366,7 +344,6 @@ export default function Home() {
 
           {tab === "stock" ? (
             <>
-              {(inventoryAlerts.expiring.length > 0 || inventoryAlerts.overdueCounts.length > 0) && <div className="inventory-alerts"><Bell size={18} /><div><strong>Avisos do estoque</strong><span>{inventoryAlerts.expiring.length > 0 && `${inventoryAlerts.expiring.length} lote(s) vencendo em até 14 dias. `}{inventoryAlerts.overdueCounts.length > 0 && `${inventoryAlerts.overdueCounts.length} item(ns) sem conferência há 30 dias.`}</span></div>{permissions.adjustStock && <button onClick={() => setTab("counts")}>Revisar</button>}</div>}
               <section className="overview-hero">
                 <div className="hero-copy">
                   <p className="hero-date">{todayLabel}</p>
@@ -400,8 +377,7 @@ export default function Home() {
                   <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions"><a href="/api/export?type=restock" download><Download size={14} /> Exportar itens</a><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></span></div>
                   {lowItems.length ? <div className="restock-list">{lowItems.slice(0,4).map((item) => {
                     const total = item.unopenedQty + item.openedQty;
-                    const suggested = suggestedPurchaseQuantity({ available: total, reorderPoint: itemReorderPoint(item), monthlyRecommendation: item.analytics.monthlyRecommendation });
-                    return <div key={item.id}><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{fmt(total)} {item.unit} disponíveis</small></div><button className="restock-request" onClick={() => setModal({ kind: "purchaseRequest", item })}>Solicitar {suggested}</button></div>;
+                    return <div key={item.id}><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{fmt(total)} {item.unit} disponíveis</small></div></div>;
                   })}</div> : <div className="insight-empty"><PackageCheck /><div><strong>Nada para comprar agora</strong><p>Todos os itens estão acima do mínimo.</p></div></div>}
                 </article>
                 <article className="insight-card activity-card">
@@ -436,7 +412,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "purchases" ? <PurchasesView requests={purchaseRequests} items={items} loading={loading} onAdd={() => setModal({ kind: "purchaseRequest" })} onStatus={(requestId, status, expiresAt) => submit({ action: "updatePurchaseRequest", requestId, status, expiresAt }, "Compra atualizada.")} /> : tab === "counts" ? <CountsView counts={stockCounts} items={items} loading={loading} onAdd={(item) => setModal({ kind: "stockCount", item })} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -502,30 +478,6 @@ function PlanningView({ items, loading }: { items: Item[]; loading: boolean }) {
   );
 }
 
-const purchaseStatusLabel: Record<PurchaseRequest["status"], string> = { needed: "Precisa comprar", approved: "Aprovado", ordered: "Pedido feito", received: "Recebido", cancelled: "Cancelado" };
-
-function PurchasesView({ requests, items, loading, onAdd, onStatus }: { requests: PurchaseRequest[]; items: Item[]; loading: boolean; onAdd: () => void; onStatus: (id: number, status: PurchaseRequest["status"], expiresAt?: string) => void }) {
-  if (loading) return <LoadingRows />;
-  const active = requests.filter((request) => !["received", "cancelled"].includes(request.status));
-  return <>
-    <div className="workflow-summary"><article><Truck /><div><small>Compras em andamento</small><strong>{active.length}</strong><p>Da solicitação ao recebimento</p></div></article><article><PackageCheck /><div><small>Recebidas</small><strong>{requests.filter((request) => request.status === "received").length}</strong><p>Entraram automaticamente no estoque</p></div></article></div>
-    <div className="section-heading"><div><h2>Solicitações e pedidos</h2><p>Acompanhe quem vai comprar e evite pedidos duplicados.</p></div><button className="secondary-button" onClick={onAdd}><Plus size={17} /> Nova solicitação</button></div>
-    {requests.length === 0 ? <div className="empty-state"><span><ShoppingCart /></span><h3>Nenhuma compra em andamento</h3><p>Crie uma solicitação a partir dos itens que precisam de reposição.</p></div> : <div className="workflow-list">{requests.map((request) => <article key={request.id}><div><strong>{request.itemName}</strong><small>{fmt(request.quantity)} {request.unit} · {request.supplier || items.find((item) => item.id === request.itemId)?.supplier || "Fornecedor não informado"}</small><p>{request.note || `Criado por ${request.createdByName}`}</p></div><span className={`workflow-status ${request.status}`}>{purchaseStatusLabel[request.status]}</span><select aria-label={`Status da compra de ${request.itemName}`} value={request.status} onChange={(event) => { const status = event.target.value as PurchaseRequest["status"]; const expiry = status === "received" ? window.prompt("Validade do lote (AAAA-MM-DD), opcional:") || "" : ""; onStatus(request.id, status, expiry); }}><option value="needed">Precisa comprar</option><option value="approved">Aprovado</option><option value="ordered">Pedido feito</option><option value="received">Recebido</option><option value="cancelled">Cancelado</option></select></article>)}</div>}
-  </>;
-}
-
-function CountsView({ counts, items, loading, onAdd }: { counts: StockCount[]; items: Item[]; loading: boolean; onAdd: (item?: Item) => void }) {
-  const [referenceTime] = useState(() => Date.now());
-  if (loading) return <LoadingRows />;
-  const lastByItem = new Map<number, StockCount>();
-  for (const count of counts) if (!lastByItem.has(count.itemId)) lastByItem.set(count.itemId, count);
-  return <>
-    <div className="section-heading"><div><h2>Rotina de conferência</h2><p>Conte fisicamente os itens e registre qualquer diferença encontrada.</p></div><button className="secondary-button" onClick={() => onAdd()}><ClipboardCheck size={17} /> Nova conferência</button></div>
-    <div className="count-grid">{items.map((item) => { const last = lastByItem.get(item.id); const overdue = !last || referenceTime - new Date(last.createdAt).getTime() > 30 * 86400000; return <article key={item.id} className={overdue ? "overdue" : ""}><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{last ? `Última: ${new Intl.DateTimeFormat("pt-BR").format(new Date(last.createdAt))}` : "Nunca conferido"}</small><p>{last ? `Diferença: ${last.difference > 0 ? "+" : ""}${fmt(last.difference)} ${item.unit}` : "Faça a primeira contagem física"}</p></div><button onClick={() => onAdd(item)}>Conferir</button></article>; })}</div>
-    {counts.length > 0 && <><div className="section-heading compact-heading"><div><h2>Conferências recentes</h2></div></div><div className="history-list">{counts.slice(0, 20).map((count) => <article key={count.id}><span className={`history-icon ${count.difference === 0 ? "green" : "amber"}`}><ClipboardCheck /></span><div><strong>{count.itemName}</strong><p>{count.createdByName} · {count.note || "Sem observações"}</p></div><div className="history-meta"><strong>{count.actualQty} {count.unit}</strong><small>{exactDate(count.createdAt)}</small></div></article>)}</div></>}
-  </>;
-}
-
 function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onDeleteMember, onUpdateRole, onUpdateActive }: { members: Member[]; currentUser: CurrentUser | null; saving: boolean; onAddMember: () => void; onEditMember: (member: Member) => void; onDeleteMember: (member: Member) => void; onUpdateRole: (userId: string, role: MemberRole) => void; onUpdateActive: (userId: string, active: boolean) => void }) {
   return (
     <>
@@ -578,7 +530,7 @@ function HistoryView({ movements, loading }: { movements: Movement[]; loading: b
 function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanItem }: { state: NonNullable<ModalState>; items: Item[]; currentUser: CurrentUser | null; saving: boolean; onClose: () => void; onSubmit: (payload: Record<string, unknown>, success: string) => Promise<void>; onScanItem: (item: Item) => void }) {
   const editing = state.kind === "item" ? state.item : undefined;
   const editingMember = state.kind === "member" ? state.member : undefined;
-  const preselected = state.kind === "movement" || state.kind === "purchaseRequest" || state.kind === "stockCount" ? state.item : undefined;
+  const preselected = state.kind === "movement" ? state.item : undefined;
   const [itemId, setItemId] = useState(String(preselected?.id ?? items[0]?.id ?? ""));
   const [name, setName] = useState(editing?.name ?? "");
   const [category, setCategory] = useState(editing?.category ?? "Bebidas");
@@ -592,14 +544,12 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   const [itemImageKey, setItemImageKey] = useState<string | null>(editing?.imageKey ?? null);
   const [itemVisualMode, setItemVisualMode] = useState<"icon" | "image">(editing?.imageKey ? "image" : "icon");
   const [itemFile, setItemFile] = useState<File | null>(null);
-  const [quantity, setQuantity] = useState(String(state.kind === "purchaseRequest" && state.item ? suggestedPurchaseQuantity({ available: state.item.unopenedQty + state.item.openedQty, reorderPoint: itemReorderPoint(state.item), monthlyRecommendation: state.item.analytics.monthlyRecommendation }) : 1));
+  const [quantity, setQuantity] = useState("1");
   const [expiresAt, setExpiresAt] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
   const selected = items.find((item) => item.id === Number(itemId));
   const [unopenedQty, setUnopenedQty] = useState(String(preselected?.unopenedQty ?? selected?.unopenedQty ?? 0));
   const [openedQty, setOpenedQty] = useState(String(preselected?.openedQty ?? selected?.openedQty ?? 0));
   const [note, setNote] = useState("");
-  const [actualQty, setActualQty] = useState(String(preselected ? preselected.unopenedQty + preselected.openedQty : items[0] ? items[0].unopenedQty + items[0].openedQty : 0));
   const profile = state.kind === "profile" ? currentUser : null;
   const [memberName, setMemberName] = useState(editingMember?.name ?? profile?.name ?? "");
   const [memberEmail, setMemberEmail] = useState(editingMember?.email ?? profile?.email ?? "");
@@ -646,8 +596,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
     return () => { stopped = true; window.clearTimeout(timer); stream?.getTracks().forEach((track) => track.stop()); };
   }, [state.kind]);
 
-  const title = state.kind === "profile" ? "Meu perfil" : state.kind === "member" ? (editingMember ? "Editar membro" : "Adicionar membro") : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : state.kind === "purchaseRequest" ? "Nova solicitação de compra" : state.kind === "stockCount" ? "Conferência física" : state.kind === "scanner" ? "Ler código do item" : movementCopy[state.type].label;
-  const description = state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite dados, fornecedor, prazo, segurança e código de leitura." : state.kind === "purchaseRequest" ? "Defina o item, a quantidade, o responsável e acompanhe até o recebimento." : state.kind === "stockCount" ? "Informe a quantidade total encontrada para reconciliar o saldo." : state.kind === "scanner" ? "Use a câmera ou digite o código para localizar rapidamente um produto." : {
+  const title = state.kind === "profile" ? "Meu perfil" : state.kind === "member" ? (editingMember ? "Editar membro" : "Adicionar membro") : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : state.kind === "scanner" ? "Ler código do item" : movementCopy[state.type].label;
+  const description = state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite dados, fornecedor, prazo, segurança e código de leitura." : state.kind === "scanner" ? "Use a câmera ou digite o código para localizar rapidamente um produto." : {
     purchase: "A quantidade comprada será adicionada ao estoque fechado.",
     open: "A quantidade sairá do estoque fechado e passará para aberto.",
     consume: "O consumo será descontado somente das embalagens abertas.",
@@ -657,7 +607,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   function changeSelected(value: string) {
     setItemId(value);
     const item = items.find((entry) => entry.id === Number(value));
-    if (item) { setUnopenedQty(String(item.unopenedQty)); setOpenedQty(String(item.openedQty)); setActualQty(String(item.unopenedQty + item.openedQty)); setSupplier(item.supplier); }
+    if (item) { setUnopenedQty(String(item.unopenedQty)); setOpenedQty(String(item.openedQty)); setSupplier(item.supplier); }
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -686,14 +636,6 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         await onSubmit({ action: editing ? "updateItem" : "addItem", itemId: editing?.id, name, category, unit, minimumQty: Number(minimumQty), supplier, leadTimeDays: Number(leadTimeDays), safetyStock: Number(safetyStock), scanCode, icon: itemIcon, imageKey: uploadedItemKey }, editing ? "Item atualizado." : "Novo item cadastrado.");
         return;
       }
-      if (state.kind === "purchaseRequest") {
-        await onSubmit({ action: "createPurchaseRequest", itemId: Number(itemId), quantity: Number(quantity), supplier, assignedTo, note }, "Solicitação de compra criada.");
-        return;
-      }
-      if (state.kind === "stockCount") {
-        await onSubmit({ action: "stockCount", itemId: Number(itemId), actualQty: Number(actualQty), note }, "Conferência registrada.");
-        return;
-      }
       const payload: Record<string, unknown> = { action: "movement", type: state.type, itemId: Number(itemId), quantity: Number(quantity), note, expiresAt };
       if (state.type === "adjust") { payload.unopenedQty = Number(unopenedQty); payload.openedQty = Number(openedQty); }
       await onSubmit(payload, `${movementCopy[state.type].label} registrada.`);
@@ -706,7 +648,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
 
   return (
     <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className={`modal ${state.kind === "member" ? "member-modal" : ""}`} onSubmit={handleSubmit}>
-      <div className="modal-head"><div><p className="eyebrow">{state.kind === "profile" ? "CONFIGURAÇÕES PESSOAIS" : state.kind === "member" ? "GESTÃO DE ACESSO" : state.kind === "item" ? "CADASTRO EDITÁVEL" : state.kind === "purchaseRequest" ? "FLUXO DE COMPRAS" : state.kind === "stockCount" ? "CONTAGEM FÍSICA" : state.kind === "scanner" ? "LEITURA RÁPIDA" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
+      <div className="modal-head"><div><p className="eyebrow">{state.kind === "profile" ? "CONFIGURAÇÕES PESSOAIS" : state.kind === "member" ? "GESTÃO DE ACESSO" : state.kind === "item" ? "CADASTRO EDITÁVEL" : state.kind === "scanner" ? "LEITURA RÁPIDA" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
       {state.kind === "member" && <div className="member-tabs"><button type="button" className={memberTab === "general" ? "active" : ""} onClick={() => setMemberTab("general")}>Geral</button><button type="button" className={memberTab === "permissions" ? "active" : ""} onClick={() => setMemberTab("permissions")}>Permissões</button></div>}
       <div className="form-grid">
         {state.kind === "profile" ? <>
@@ -743,16 +685,6 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
           <label><span>Fornecedor</span><input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Ex.: Mercado Central" /></label>
           <label><span>Prazo de entrega</span><input min="0" step="1" type="number" value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} placeholder="Dias" /></label>
           <label className="full"><span>Código de barras ou QR</span><input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Leia ou digite o código do produto" /><small>Usado no botão “Ler código” para localizar o item.</small></label>
-        </> : state.kind === "purchaseRequest" ? <>
-          <label className="full"><span>Item</span><select required value={itemId} onChange={(e) => changeSelected(e.target.value)}>{items.map((item) => <option key={item.id} value={item.id}>{item.name} — {fmt(item.unopenedQty + item.openedQty)} {item.unit}</option>)}</select></label>
-          <label><span>Quantidade para comprar</span><input autoFocus min="0.01" step="0.01" type="number" required value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label>
-          <label><span>Fornecedor</span><input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder={selected?.supplier || "Opcional"} /></label>
-          <label className="full"><span>Responsável pela compra</span><input value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} placeholder="Nome de quem vai comprar" /></label>
-          <label className="full"><span>Observação <em>opcional</em></span><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: comprar até sexta-feira" /></label>
-        </> : state.kind === "stockCount" ? <>
-          <label className="full"><span>Item</span><select required value={itemId} onChange={(e) => changeSelected(e.target.value)} disabled={Boolean(preselected)}>{items.map((item) => <option key={item.id} value={item.id}>{item.name} — sistema: {fmt(item.unopenedQty + item.openedQty)} {item.unit}</option>)}</select></label>
-          <label className="full"><span>Quantidade total encontrada</span><input autoFocus min="0" step="0.01" type="number" required value={actualQty} onChange={(e) => setActualQty(e.target.value)} /><small>O saldo do sistema será ajustado para esta quantidade.</small></label>
-          <label className="full"><span>Observação <em>opcional</em></span><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: contagem semanal, embalagem danificada..." /></label>
         </> : state.kind === "scanner" ? <>
           <div className="scanner-view full"><video ref={videoRef} muted playsInline /><p>{scannerMessage}</p></div>
           <label className="full"><span>Código encontrado ou digitado</span><input autoFocus value={scannerCode} onChange={(e) => setScannerCode(e.target.value)} placeholder="Código de barras ou QR" /></label>
@@ -768,7 +700,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         </>}
       </div>
       {formError && <p className="modal-error">{formError}</p>}
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || uploading || ((state.kind === "movement" || state.kind === "purchaseRequest" || state.kind === "stockCount") && !itemId) || (state.kind === "scanner" && !scannerCode)}>{saving || uploading ? "Salvando..." : state.kind === "profile" ? "Salvar perfil" : state.kind === "member" ? (editingMember ? "Salvar membro" : "Adicionar membro") : state.kind === "purchaseRequest" ? "Criar solicitação" : state.kind === "stockCount" ? "Registrar conferência" : state.kind === "scanner" ? "Usar este item" : "Confirmar"}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || uploading || (state.kind === "movement" && !itemId) || (state.kind === "scanner" && !scannerCode)}>{saving || uploading ? "Salvando..." : state.kind === "profile" ? "Salvar perfil" : state.kind === "member" ? (editingMember ? "Salvar membro" : "Adicionar membro") : state.kind === "scanner" ? "Usar este item" : "Confirmar"}</button></div>
     </form></div>
   );
 }
