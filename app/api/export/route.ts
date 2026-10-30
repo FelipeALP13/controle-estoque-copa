@@ -2,6 +2,7 @@ import { asc } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { items } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
+import { calculateReorderPoint, suggestedPurchaseQuantity } from "../../inventory-policy";
 
 function csvCell(value: unknown) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -22,15 +23,16 @@ export async function GET(request: Request) {
     if (type !== "restock") return Response.json({ error: "Somente a lista de reposição pode ser exportada." }, { status: 400 });
 
     const rows = (await db.select().from(items).orderBy(asc(items.name)))
-      .filter((item) => item.unopenedQty + item.openedQty <= item.minimumQty)
+      .filter((item) => item.unopenedQty + item.openedQty <= calculateReorderPoint(item))
       .map((item) => {
         const available = item.unopenedQty + item.openedQty;
-        const suggested = Math.max(1, Math.ceil(item.minimumQty + 1 - available));
-        return [item.name, item.category, available, item.unit, item.minimumQty, suggested];
+        const reorderPoint = calculateReorderPoint(item);
+        const suggested = suggestedPurchaseQuantity({ available, reorderPoint });
+        return [item.name, item.category, available, item.unit, item.minimumQty, item.safetyStock, suggested, item.supplier, item.leadTimeDays];
       });
 
     const content = csv([
-      ["Item", "Categoria", "Saldo atual", "Unidade", "Estoque mínimo", "Quantidade sugerida para comprar"],
+      ["Item", "Categoria", "Saldo atual", "Unidade", "Estoque mínimo", "Estoque de segurança", "Quantidade sugerida para comprar", "Fornecedor", "Prazo de entrega (dias)"],
       ...rows,
     ]);
 

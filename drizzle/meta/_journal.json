@@ -71,6 +71,13 @@
       "when": 1793295667170,
       "tag": "0009_parched_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793365476731,
+      "tag": "0010_tan_rage",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,10 @@ export const items = sqliteTable("items", {
   minimumQty: real("minimum_qty").notNull().default(1),
   icon: text("icon").notNull().default("📦"),
   imageKey: text("image_key"),
+  supplier: text("supplier").notNull().default(""),
+  leadTimeDays: integer("lead_time_days").notNull().default(0),
+  safetyStock: real("safety_stock").notNull().default(0),
+  scanCode: text("scan_code").unique(),
   lastOpenedAt: text("last_opened_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -47,6 +51,38 @@ export const inventoryLocks = sqliteTable("inventory_locks", {
     .references(() => items.id, { onDelete: "cascade" }),
   ownerToken: text("owner_token").notNull(),
   acquiredAt: text("acquired_at").notNull(),
+});
+
+export const stockLots = sqliteTable("stock_lots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "cascade" }),
+  quantity: real("quantity").notNull(),
+  expiresAt: text("expires_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const purchaseRequests = sqliteTable("purchase_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "cascade" }),
+  quantity: real("quantity").notNull(),
+  status: text("status", { enum: ["needed", "approved", "ordered", "received", "cancelled"] }).notNull().default("needed"),
+  supplier: text("supplier").notNull().default(""),
+  assignedTo: text("assigned_to").notNull().default(""),
+  note: text("note").notNull().default(""),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const stockCounts = sqliteTable("stock_counts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "cascade" }),
+  expectedQty: real("expected_qty").notNull(),
+  actualQty: real("actual_qty").notNull(),
+  difference: real("difference").notNull(),
+  note: text("note").notNull().default(""),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const members = sqliteTable("members", {
