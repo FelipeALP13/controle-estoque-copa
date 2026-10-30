@@ -15,6 +15,7 @@ import History from "lucide-react/icons/history";
 import ImagePlus from "lucide-react/icons/image-plus";
 import LogOut from "lucide-react/icons/log-out";
 import Menu from "lucide-react/icons/menu";
+import MessageCircle from "lucide-react/icons/message-circle";
 import PackageCheck from "lucide-react/icons/package-check";
 import PackageOpen from "lucide-react/icons/package-open";
 import Pencil from "lucide-react/icons/pencil";
@@ -249,6 +250,19 @@ export default function Home() {
   }, [load]);
 
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
+  const restockMessage = [
+    "🛒 *Lista de reposição — Estoque da Firma*",
+    "",
+    "Precisamos repor:",
+    ...lowItems.map((item) => {
+      const available = item.unopenedQty + item.openedQty;
+      const suggested = Math.max(1, Math.ceil(item.minimumQty - available));
+      return `• *${item.name}* — saldo: ${fmt(available)} ${item.unit} · mínimo: ${fmt(item.minimumQty)} · comprar: ${suggested} ${item.unit}`;
+    }),
+    "",
+    `Gerado em ${new Intl.DateTimeFormat("pt-BR").format(new Date())}.`,
+  ].join("\n");
+  const whatsappRestockUrl = `https://wa.me/?text=${encodeURIComponent(restockMessage)}`;
   const openItems = items.filter((item) => item.openedQty > 0);
   const totalUnits = items.reduce((sum, item) => sum + item.unopenedQty + item.openedQty, 0);
   const measuredItems = items.filter((item) => item.analytics.averageDurationDays !== null);
@@ -369,7 +383,7 @@ export default function Home() {
 
               <div className="overview-insights">
                 <article className="insight-card attention-card">
-                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions"><a href="/api/export?type=restock" download><Download size={14} /> Exportar itens</a><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></span></div>
+                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions">{lowItems.length > 0 && <a className="whatsapp-text-link" href={whatsappRestockUrl} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> WhatsApp</a>}<a href="/api/export?type=restock" download><Download size={14} /> Exportar itens</a><button onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}>Ver no estoque</button></span></div>
                   {lowItems.length ? <div className="restock-list">{lowItems.slice(0,4).map((item) => {
                     const total = item.unopenedQty + item.openedQty;
                     return <div key={item.id}><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{fmt(total)} {item.unit} disponíveis</small></div></div>;
@@ -384,7 +398,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions"><a className="secondary-button restock-export" href="/api/export?type=restock" download><Download size={17} /> Exportar itens para compra{lowItems.length > 0 && <b>{lowItems.length}</b>}</a><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions">{lowItems.length > 0 && <a className="secondary-button whatsapp-button" href={whatsappRestockUrl} target="_blank" rel="noopener noreferrer"><MessageCircle size={17} /> Enviar por WhatsApp</a>}<a className="secondary-button restock-export" href="/api/export?type=restock" download><Download size={17} /> Exportar itens para compra{lowItems.length > 0 && <b>{lowItems.length}</b>}</a><button className="secondary-button" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>

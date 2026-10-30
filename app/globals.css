@@ -119,6 +119,8 @@ main { min-height: 100vh; margin-left: 248px; }
 .secondary-button { border: 1px solid #d9dfda; color: #34433a; background: white; }
 .secondary-button:hover { border-color: #b8c4bb; background: #f9fbf9; }
 .restock-export b { display: grid; min-width: 20px; height: 20px; padding: 0 5px; place-items: center; border-radius: 999px; color: white; background: #c84c3d; font-size: 10px; }
+.whatsapp-button { border-color: #b9dec7; color: #187842; background: #f2fbf5; }
+.whatsapp-button:hover { border-color: #79bd91; background: #e7f7ec; }
 
 .content { position: relative; width: min(1240px,100%); margin: 0 auto; padding: 32px clamp(24px,4vw,56px) 70px; }
 .overview-hero { position: relative; display: grid; grid-template-columns: minmax(0,1.7fr) minmax(210px,.55fr); gap: 30px; overflow: hidden; margin-bottom: 16px; padding: 28px 30px; border: 1px solid #275b3c; border-radius: 18px; color: white; background: radial-gradient(circle at 85% 10%,rgba(174,221,187,.22),transparent 30%),linear-gradient(135deg,#174b31 0%,#236b43 100%); box-shadow: 0 16px 35px rgba(29,78,49,.14); }
@@ -171,6 +173,7 @@ main { min-height: 100vh; margin-left: 248px; }
 .insight-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 10px; }
 .insight-actions a { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-size: 9px; font-weight: 800; text-decoration: none; }
 .insight-actions a:hover { text-decoration: underline; }
+.insight-actions .whatsapp-text-link { color: #188447; }
 .scan-button { white-space: nowrap; }
 .item-extra { color: #a16d1b !important; }
 .compact-heading { margin-top: 24px; }
