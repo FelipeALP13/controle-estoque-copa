@@ -7,18 +7,17 @@ import { passwordPolicyError } from "./auth-policy";
 import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
 import Archive from "lucide-react/icons/archive";
-import ArrowDownToLine from "lucide-react/icons/arrow-down-to-line";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
 import CalendarClock from "lucide-react/icons/calendar-clock";
 import CircleUserRound from "lucide-react/icons/circle-user-round";
 import Coffee from "lucide-react/icons/coffee";
-import Download from "lucide-react/icons/download";
+import Ellipsis from "lucide-react/icons/ellipsis";
+import FileDown from "lucide-react/icons/file-down";
 import History from "lucide-react/icons/history";
 import ImagePlus from "lucide-react/icons/image-plus";
 import LogOut from "lucide-react/icons/log-out";
 import Menu from "lucide-react/icons/menu";
-import MessageCircle from "lucide-react/icons/message-circle";
 import PackageCheck from "lucide-react/icons/package-check";
 import PackageOpen from "lucide-react/icons/package-open";
 import Pencil from "lucide-react/icons/pencil";
@@ -34,6 +33,15 @@ import TriangleAlert from "lucide-react/icons/triangle-alert";
 import UserPlus from "lucide-react/icons/user-plus";
 import Users from "lucide-react/icons/users";
 import X from "lucide-react/icons/x";
+
+function WhatsAppIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.5 11.6a8.4 8.4 0 0 1-12.4 7.3L3.5 20l1.2-4.4A8.4 8.4 0 1 1 20.5 11.6Z" />
+      <path d="M8.2 7.6c.2-.4.4-.4.8-.4h.4c.2 0 .4.1.5.4l.8 2c.1.3.1.5-.1.7l-.7.8c-.2.2-.1.4 0 .6.8 1.4 2 2.4 3.5 3 .2.1.4.1.6-.1l.9-1.1c.2-.2.4-.3.7-.2l2 .9c.3.1.4.3.4.6 0 .5-.2 1.4-.8 1.9-.6.5-1.5.8-2.5.6-1.1-.2-3.7-1.1-5.8-3.1-1.7-1.6-2.8-3.6-3-4.7-.2-.9.1-1.5.4-1.9Z" />
+    </svg>
+  );
+}
 
 type MemberRole = "admin" | "member" | "viewer";
 type MemberPermissions = {
@@ -419,7 +427,7 @@ export default function Home() {
 
               <div className="overview-insights">
                 <article className="insight-card attention-card">
-                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions">{lowItems.length > 0 && <a className="whatsapp-text-link" href={whatsappRestockUrl} target="_blank" rel="noopener noreferrer" aria-label="Enviar lista por WhatsApp" title="Enviar por WhatsApp"><MessageCircle size={14} /><span className="action-label">WhatsApp</span></a>}<a href="/api/export?type=restock" download aria-label="Exportar itens para compra" title="Exportar itens"><Download size={14} /><span className="action-label">Exportar itens</span></a><button aria-label="Ver itens no estoque" title="Ver no estoque" onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}><Search size={14} /><span className="action-label">Ver no estoque</span></button></span></div>
+                  <div className="insight-head"><div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de reposição</h3><p>Prioridades calculadas pelo estoque mínimo.</p></div></div><span className="insight-actions">{lowItems.length > 0 && <a className="whatsapp-text-link" href={whatsappRestockUrl} target="_blank" rel="noopener noreferrer" aria-label="Enviar lista por WhatsApp" title="Enviar por WhatsApp"><WhatsAppIcon size={14} /><span className="action-label">WhatsApp</span></a>}<a href="/api/export?type=restock" download aria-label="Exportar itens para compra" title="Exportar itens"><FileDown size={14} /><span className="action-label">Exportar itens</span></a><button aria-label="Ver itens no estoque" title="Ver no estoque" onClick={() => { setFilter("low"); document.querySelector(".section-heading")?.scrollIntoView({ behavior: "smooth" }); }}><Search size={14} /><span className="action-label">Ver no estoque</span></button></span></div>
                   {lowItems.length ? <div className="restock-list">{lowItems.slice(0,4).map((item) => {
                     const total = item.unopenedQty + item.openedQty;
                     return <div key={item.id}><ItemVisual item={item} /><div><strong>{item.name}</strong><small>{fmt(total)} {item.unit} disponíveis</small></div></div>;
@@ -434,7 +442,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions">{lowItems.length > 0 && <a className="secondary-button whatsapp-button" href={whatsappRestockUrl} target="_blank" rel="noopener noreferrer" aria-label="Enviar lista por WhatsApp" title="Enviar por WhatsApp"><MessageCircle size={17} /> Enviar por WhatsApp</a>}<a className="secondary-button restock-export" href="/api/export?type=restock" download aria-label="Exportar itens para compra" title="Exportar itens para compra"><Download size={17} /> Exportar itens para compra{lowItems.length > 0 && <b>{lowItems.length}</b>}</a><button className="secondary-button" aria-label="Registrar compra" title="Registrar compra" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><ArrowDownToLine size={17} /> Registrar compra</button></div></div>
+              <div className="section-heading"><div><h2>Itens do estoque</h2><p>Acompanhe o que está fechado, aberto e próximo de acabar.</p></div><div className="section-actions">{lowItems.length > 0 && <a className="secondary-button whatsapp-button" href={whatsappRestockUrl} target="_blank" rel="noopener noreferrer" aria-label="Enviar lista por WhatsApp" title="Enviar por WhatsApp"><WhatsAppIcon size={17} /> Enviar por WhatsApp</a>}<a className="secondary-button restock-export" href="/api/export?type=restock" download aria-label="Exportar itens para compra" title="Exportar itens para compra"><FileDown size={17} /> Exportar itens para compra{lowItems.length > 0 && <b>{lowItems.length}</b>}</a><button className="secondary-button" aria-label="Registrar compra" title="Registrar compra" disabled={!permissions.registerPurchases} onClick={() => setModal({ kind: "movement", type: "purchase" })}><Plus size={17} /> Registrar compra</button></div></div>
 
               <div className="toolbar">
                 <label className="search"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item ou categoria..." /></label>
@@ -478,9 +486,17 @@ function StockRow({ item, permissions, onAction, onEdit, onDelete }: { item: Ite
       <div className="duration-cell">{item.analytics.averageDurationDays !== null ? <><strong>{fmt(item.analytics.averageDurationDays)} dias</strong><small>{item.analytics.monthlyRecommendation} {item.unit}/30 dias</small></> : item.analytics.activeDays !== null ? <><strong>Em medição</strong><small>Há {fmt(item.analytics.activeDays)} dias</small></> : <><strong>Sem histórico</strong><small>Registre abertura e consumo</small></>}</div>
       <div className="opened-cell"><strong>{relativeDate(item.lastOpenedAt)}</strong>{item.lastOpenedAt && <small>{new Intl.DateTimeFormat("pt-BR").format(new Date(item.lastOpenedAt))}</small>}</div>
       <div className="row-actions">
-        <button title="Registrar abertura" disabled={!permissions.openItems || item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
-        <button title="Registrar consumo" disabled={!permissions.consumeItems || item.openedQty <= 0} onClick={() => onAction("consume")}><TrendingDown size={17} /></button>
-        <button title="Registrar compra" disabled={!permissions.registerPurchases} onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
+        <details className="mobile-movement-menu">
+          <summary aria-label={`Movimentações de ${item.name}`} title="Movimentações"><Ellipsis size={19} /></summary>
+          <div className="mobile-movement-popover">
+            <button type="button" disabled={!permissions.openItems || item.unopenedQty <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onAction("open"); }}><PackageOpen size={17} /><span>Abrir produto</span></button>
+            <button type="button" disabled={!permissions.consumeItems || item.openedQty <= 0} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onAction("consume"); }}><TrendingDown size={17} /><span>Registrar consumo</span></button>
+            <button type="button" disabled={!permissions.registerPurchases} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onAction("purchase"); }}><Plus size={17} /><span>Registrar compra</span></button>
+          </div>
+        </details>
+        <button className="desktop-movement-action" title="Registrar abertura" disabled={!permissions.openItems || item.unopenedQty <= 0} onClick={() => onAction("open")}><PackageOpen size={17} /></button>
+        <button className="desktop-movement-action" title="Registrar consumo" disabled={!permissions.consumeItems || item.openedQty <= 0} onClick={() => onAction("consume")}><TrendingDown size={17} /></button>
+        <button className="desktop-movement-action" title="Registrar compra" disabled={!permissions.registerPurchases} onClick={() => onAction("purchase")}><ShoppingCart size={17} /></button>
         <button title="Ajustar saldo" disabled={!permissions.adjustStock} onClick={() => onAction("adjust")}><Settings2 size={17} /></button>
         <button title="Editar item" disabled={!permissions.manageItems} onClick={onEdit}><Pencil size={16} /></button>
         <button className="danger-action" title="Excluir item" aria-label={`Excluir ${item.name}`} disabled={!permissions.manageItems} onClick={onDelete}><Trash2 size={16} /></button>
@@ -614,6 +630,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   const [formError, setFormError] = useState("");
   const [scannerCode, setScannerCode] = useState("");
   const [scannerMessage, setScannerMessage] = useState("Aponte a câmera para um código de barras ou QR Code.");
+  const [scannerSupported, setScannerSupported] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -622,13 +639,18 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
     let timer = 0;
     let stopped = false;
     const start = async () => {
+      const Detector = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
+      if (!Detector) {
+        setScannerSupported(false);
+        setScannerMessage("Leitura automática não disponível neste navegador. Digite o código abaixo.");
+        return;
+      }
+      setScannerSupported(true);
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
         if (!videoRef.current || stopped) return;
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        const Detector = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
-        if (!Detector) { setScannerMessage("Leitura automática não disponível neste navegador. Digite o código abaixo."); return; }
         const detector = new Detector({ formats: ["qr_code", "ean_13", "ean_8", "code_128", "upc_a", "upc_e"] });
         const scan = async () => {
           if (stopped || !videoRef.current) return;
@@ -636,7 +658,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
           timer = window.setTimeout(scan, 350);
         };
         void scan();
-      } catch { setScannerMessage("Não foi possível abrir a câmera. Autorize o acesso ou digite o código."); }
+      } catch { setScannerSupported(false); setScannerMessage("Não foi possível abrir a câmera. Digite o código abaixo."); }
     };
     void start();
     return () => { stopped = true; window.clearTimeout(timer); stream?.getTracks().forEach((track) => track.stop()); };
@@ -740,7 +762,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
           <label><span>Estoque mínimo</span><input required min="0" step="0.01" type="number" value={minimumQty} onChange={(e) => setMinimumQty(e.target.value)} /><small>Aviso de reposição.</small></label>
           <label className="full"><span>Código de barras ou QR</span><input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Leia ou digite o código do produto" /><small>Usado no botão “Ler código” para localizar o item.</small></label>
         </> : state.kind === "scanner" ? <>
-          <div className="scanner-view full"><video ref={videoRef} muted playsInline /><p>{scannerMessage}</p></div>
+          <div className={`scanner-view full ${scannerSupported ? "" : "scanner-fallback"}`}>{scannerSupported ? <video ref={videoRef} muted playsInline /> : <QrCode aria-hidden="true" />}<p>{scannerMessage}</p></div>
           <label className="full"><span>Código encontrado ou digitado</span><input autoFocus value={scannerCode} onChange={(e) => setScannerCode(e.target.value)} placeholder="Código de barras ou QR" /></label>
           {scannerCode && items.find((item) => item.scanCode === scannerCode) && <div className="scanner-match full"><PackageCheck /><div><strong>{items.find((item) => item.scanCode === scannerCode)?.name}</strong><small>Item localizado. Confirme para registrar a movimentação.</small></div></div>}
         </> : <>
