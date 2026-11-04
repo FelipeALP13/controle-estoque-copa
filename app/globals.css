@@ -353,6 +353,8 @@ main { min-height: 100vh; margin-left: 248px; }
 .form-grid input, .form-grid select, .form-grid textarea { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid #dbe1dc; border-radius: 8px; outline: none; color: var(--ink); background: white; font-size: 13px; }
 .form-grid textarea { min-height: 76px; padding-top: 10px; resize: vertical; }
 .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { border-color: #72a283; box-shadow: 0 0 0 3px #e8f3eb; }
+.retroactive-opening { padding: 12px; border: 1px solid #dce8df; border-radius: 10px; background: #f6faf7; }
+.retroactive-opening input { background: white; }
 .form-grid label > small { color: #89928c; font-size: 10px; line-height: 1.4; }
 .form-grid label > small.field-error { color: #a23f35; font-weight: 700; }
 .visual-avatar { position: relative; overflow: hidden; }
@@ -441,26 +443,33 @@ main { min-height: 100vh; margin-left: 248px; }
   .menu-backdrop { z-index: 25; display: block; }
   main { margin-left: 0; }
   .topbar { min-height: 76px; padding: 12px 17px; }
-  .topbar > div { flex: 1; }
-  .topbar h1 { font-size: 19px; }
+  .topbar > div { flex: 1; min-width: 0; }
+  .topbar h1 { overflow: hidden; font-size: 19px; text-overflow: ellipsis; white-space: nowrap; }
   .topbar .primary-button { width: 41px; padding: 0; font-size: 0; }
   .menu-button { display: grid; width: 38px; height: 38px; margin-right: 10px; place-items: center; border: 0; border-radius: 9px; color: var(--ink); background: #edf2ee; }
   .menu-button svg { width: 19px; }
-  .content { padding: 20px 15px 55px; }
+  .content { width: 100%; padding: 20px 15px 55px; }
   .overview-hero { grid-template-columns: 1fr; gap: 18px; padding: 23px 20px; }
+  .hero-copy h2 { font-size: 28px; }
+  .hero-joke { width: 100%; }
   .hero-status { display: grid; grid-template-columns: 44px minmax(0,1fr); column-gap: 12px; padding: 13px; }
   .hero-status > span { grid-row: 1/4; margin: 0; }
   .hero-status small, .hero-status strong, .hero-status p { grid-column: 2; }
   .quick-actions { display: grid; grid-template-columns: 1fr 1fr; }
-  .quick-actions button { justify-content: flex-start; }
+  .quick-actions button { justify-content: center; min-width: 0; padding: 0 8px; text-align: center; }
   .permission-options { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: 1fr; gap: 9px; }
   .planning-summary, .planning-grid { grid-template-columns: 1fr; }
   .permission-cards { grid-template-columns: 1fr; }
   .team-intro { align-items: flex-start; padding: 19px; }
+  .team-intro > div { min-width: 0; }
   .team-table-head { display: none; }
   .team-row { grid-template-columns: 1fr; gap: 10px; padding: 14px; }
   .team-row select { width: 100%; }
+  .member-cell small { white-space: normal; overflow-wrap: anywhere; }
+  .member-actions { justify-content: flex-end; }
+  .team-heading-actions { justify-content: space-between; width: 100%; }
+  .team-heading-actions .secondary-button { width: auto; min-width: 0; padding: 0 13px; font-size: 11px; }
   .member-date { display: none; }
   .stat-card { min-height: 90px; padding: 15px; }
   .stat-card strong { font-size: 23px; }
@@ -473,18 +482,54 @@ main { min-height: 100vh; margin-left: 248px; }
   .insight-actions a, .insight-actions button { display: grid; width: 31px; height: 31px; padding: 0; place-items: center; border: 1px solid #dfe6e0; border-radius: 8px; background: white; }
   .insight-actions .action-label { position: absolute; overflow: hidden; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
   .insight-actions svg { width: 15px; height: 15px; }
+  .insight-head { align-items: flex-start; }
+  .insight-head h3, .insight-head p { overflow-wrap: anywhere; }
+  .restock-list > div, .mini-activity > div { grid-template-columns: 34px minmax(0,1fr) auto; }
   .toolbar { align-items: stretch; flex-direction: column; }
   .search { width: 100%; }
   .filters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); width: 100%; overflow: visible; }
   .filters button { justify-content: center; min-width: 0; padding: 0 6px; white-space: nowrap; }
   .stock-list { grid-template-columns: 1fr; }
+  .stock-row { width: 100%; }
+  .balance-cell div { flex-wrap: wrap; }
+  .row-actions { display: grid; grid-template-columns: repeat(6,30px); justify-content: start; }
   .history-list article { grid-template-columns: 38px minmax(0,1fr); }
+  .history-list article > div p { overflow-wrap: anywhere; }
   .history-meta { grid-column: 2; align-items: flex-start; }
+  .planning-card { padding: 15px; }
+  .planning-card-head { grid-template-columns: 40px minmax(0,1fr); }
+  .measure-badge { grid-column: 1/-1; justify-self: start; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid label, .form-grid label.full { grid-column: 1; }
+  .visual-mode { width: 100%; }
+  .visual-mode button { flex: 1; }
+  .icon-options { justify-content: center; }
+  .permission-editor-head { align-items: flex-start; flex-direction: column; }
   .password-change-fields { grid-template-columns: 1fr; }
   .modal-layer { align-items: end; padding: 0; }
   .modal { max-height: 92vh; overflow-y: auto; border-radius: 17px 17px 0 0; }
   .modal-head, .form-grid { padding-left: 19px; padding-right: 19px; }
   .modal-actions { position: sticky; bottom: 0; padding: 13px 19px; }
+  .modal-actions button { flex: 1; min-width: 0; }
+  .modal-error { margin-right: 19px; margin-left: 19px; }
+}
+
+@media (max-width: 420px) {
+  .content { padding-right: 11px; padding-left: 11px; }
+  .overview-hero { padding: 20px 16px; }
+  .hero-copy h2 { font-size: 25px; }
+  .hero-joke { align-items: flex-start; }
+  .quick-actions { grid-template-columns: 1fr; }
+  .stat-card { padding: 14px; }
+  .insight-card { padding: 14px; }
+  .insight-head { gap: 8px; }
+  .insight-icon { width: 32px; height: 32px; }
+  .insight-actions a, .insight-actions button { width: 29px; height: 29px; }
+  .filters button { gap: 4px; padding: 0 4px; font-size: 10px; }
+  .filters b { min-width: 16px; height: 16px; font-size: 9px; }
+  .planning-metrics { grid-template-columns: 1fr; gap: 12px; }
+  .team-intro { gap: 12px; }
+  .team-intro-icon { width: 44px; height: 44px; }
+  .modal-head { padding-top: 20px; }
+  .modal-head h2 { font-size: 20px; }
 }

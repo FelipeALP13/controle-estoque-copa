@@ -4,6 +4,7 @@ import { createSession, getSessionMember, hashPassword, normalizeUsername, passw
 import { getDb } from "../../../db";
 import { inventoryLocks, items, members, movements, openBatches, sessions } from "../../../db/schema";
 import { writeAudit } from "../../audit";
+import { parseOpeningDate } from "../../movement-policy";
 import { hasTrustedOrigin } from "../../request-security";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
@@ -412,6 +413,12 @@ export async function POST(request: Request) {
         adjust: "adjustStock",
       };
       if (!hasPermission(currentMember, permissionByType[type])) return Response.json({ error: "Você não tem permissão para registrar esta movimentação." }, { status: 403 });
+      let retroactiveOpenedAt: string | null = null;
+      if (type === "open" && body.openedAt) {
+        const openingDate = parseOpeningDate(body.openedAt);
+        if (openingDate.error) return Response.json({ error: openingDate.error }, { status: 400 });
+        retroactiveOpenedAt = openingDate.iso;
+      }
 
       const lockToken = crypto.randomUUID();
       await db.delete(inventoryLocks).where(and(eq(inventoryLocks.itemId, itemId), lt(inventoryLocks.acquiredAt, new Date(Date.now() - 30000).toISOString())));
@@ -426,6 +433,7 @@ export async function POST(request: Request) {
         if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });
 
         const timestamp = new Date().toISOString();
+        const movementTimestamp = type === "open" && retroactiveOpenedAt ? retroactiveOpenedAt : timestamp;
         let unopenedQty = current.unopenedQty;
         let openedQty = current.openedQty;
         let lastOpenedAt = current.lastOpenedAt;
@@ -464,8 +472,8 @@ export async function POST(request: Request) {
           if (quantity > unopenedQty) return Response.json({ error: `Só existem ${unopenedQty} ${current.unit} fechados.` }, { status: 400 });
           unopenedQty -= quantity;
           openedQty += quantity;
-          lastOpenedAt = timestamp;
-          await db.insert(openBatches).values({ itemId, quantity, remainingQty: quantity, openedAt: timestamp });
+          if (!lastOpenedAt || new Date(movementTimestamp).getTime() >= new Date(lastOpenedAt).getTime()) lastOpenedAt = movementTimestamp;
+          await db.insert(openBatches).values({ itemId, quantity, remainingQty: quantity, openedAt: movementTimestamp });
         }
         if (type === "consume") {
           if (quantity > openedQty) return Response.json({ error: `Só existem ${openedQty} ${current.unit} abertos. Registre a abertura antes do consumo.` }, { status: 400 });
@@ -512,9 +520,10 @@ export async function POST(request: Request) {
             note,
             createdByUserId: currentMember.userId,
             createdByName: currentMember.name,
+            createdAt: movementTimestamp,
           }),
         ]);
-        await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}` });
+        await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}${retroactiveOpenedAt ? ` · abertura em ${retroactiveOpenedAt}` : ""}` });
         return Response.json({ ok: true });
       } finally {
         await db.delete(inventoryLocks).where(and(eq(inventoryLocks.itemId, itemId), eq(inventoryLocks.ownerToken, lockToken)));
