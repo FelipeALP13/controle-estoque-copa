@@ -555,8 +555,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   const preselected = state.kind === "movement" ? state.item : undefined;
   const [itemId, setItemId] = useState(String(preselected?.id ?? items[0]?.id ?? ""));
   const [name, setName] = useState(editing?.name ?? "");
-  const [category, setCategory] = useState(editing?.category ?? "Mercearia");
-  const [unit, setUnit] = useState(editing?.unit ?? "unidade");
+  const [category, setCategory] = useState(editing?.category ?? "");
+  const [unit, setUnit] = useState(editing?.unit ?? "");
   const [minimumQty, setMinimumQty] = useState(String(editing?.minimumQty ?? 2));
   const [scanCode, setScanCode] = useState(editing?.scanCode ?? "");
   const [itemIcon, setItemIcon] = useState(editing?.icon ?? "📦");
@@ -713,8 +713,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         </> : state.kind === "item" ? <>
           <VisualEditor label="Aparência do item" mode={itemVisualMode} setMode={setItemVisualMode} icon={itemIcon} setIcon={setItemIcon} imageKey={itemImageKey} file={itemFile} setFile={setItemFile} />
           <label className="full"><span>Nome do item</span><input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Café em pó" /></label>
-          <label><span>Categoria</span><input required list="market-categories" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Escolha ou digite" /><datalist id="market-categories">{marketCategories.map((option) => <option key={option} value={option} />)}</datalist><small>Padrões de mercado ou uma categoria personalizada.</small></label>
-          <label><span>Unidade de controle</span><input required list="market-units" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Escolha ou digite" /><datalist id="market-units">{marketUnits.map((option) => <option key={option} value={option} />)}</datalist><small>Como o item é comprado e contado no estoque.</small></label>
+          <label><span>Categoria</span><input required list="market-categories" autoComplete="off" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Selecione ou digite" /><datalist id="market-categories">{marketCategories.map((option) => <option key={option} value={option} />)}</datalist><small>Padrões de mercado ou uma categoria personalizada.</small></label>
+          <label><span>Unidade de controle</span><input required list="market-units" autoComplete="off" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Selecione ou digite" /><datalist id="market-units">{marketUnits.map((option) => <option key={option} value={option} />)}</datalist><small>Como o item é comprado e contado no estoque.</small></label>
           <label><span>Estoque mínimo</span><input required min="0" step="0.01" type="number" value={minimumQty} onChange={(e) => setMinimumQty(e.target.value)} /><small>Aviso de reposição.</small></label>
           <label className="full"><span>Código de barras ou QR</span><input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Leia ou digite o código do produto" /><small>Usado no botão “Ler código” para localizar o item.</small></label>
         </> : state.kind === "scanner" ? <>
