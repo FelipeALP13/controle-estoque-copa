@@ -1,0 +1,33 @@
+export const marketCategories = [
+  "Bebidas",
+  "Café e chá",
+  "Açúcar e adoçantes",
+  "Biscoitos e snacks",
+  "Mercearia",
+  "Laticínios",
+  "Padaria",
+  "Frios",
+  "Frutas",
+  "Descartáveis",
+  "Limpeza",
+  "Higiene",
+  "Outros",
+] as const;
+
+export const marketUnits = [
+  "unidade",
+  "pacote",
+  "caixa",
+  "sachê",
+  "pote",
+  "frasco",
+  "garrafa",
+  "lata",
+  "fardo",
+  "rolo",
+  "dúzia",
+  "kg",
+  "g",
+  "L",
+  "mL",
+] as const;

@@ -358,11 +358,11 @@ export async function POST(request: Request) {
       if (existing.length) return Response.json({ error: "A lista já possui itens." }, { status: 409 });
       const now = Date.now();
       const created = await db.insert(items).values([
-        { name: "Café", category: "Bebidas", unit: "pacote", icon: "☕", unopenedQty: 4, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now).toISOString() },
-        { name: "Açúcar", category: "Mercearia", unit: "pacote", icon: "🍬", unopenedQty: 2, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now - 3 * 86400000).toISOString() },
-        { name: "Biscoito", category: "Lanches", unit: "pacote", icon: "🍪", unopenedQty: 6, openedQty: 0, minimumQty: 3 },
-        { name: "Leite", category: "Bebidas", unit: "caixa", icon: "🥛", unopenedQty: 1, openedQty: 1, minimumQty: 4, lastOpenedAt: new Date(now - 86400000).toISOString() },
-        { name: "Chá", category: "Bebidas", unit: "caixa", icon: "🍵", unopenedQty: 2, openedQty: 0, minimumQty: 1 },
+        { name: "Café", category: "Café e chá", unit: "pacote", icon: "☕", unopenedQty: 4, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now).toISOString() },
+        { name: "Açúcar", category: "Açúcar e adoçantes", unit: "pacote", icon: "🍬", unopenedQty: 2, openedQty: 1, minimumQty: 2, lastOpenedAt: new Date(now - 3 * 86400000).toISOString() },
+        { name: "Biscoito", category: "Biscoitos e snacks", unit: "pacote", icon: "🍪", unopenedQty: 6, openedQty: 0, minimumQty: 3 },
+        { name: "Leite", category: "Laticínios", unit: "caixa", icon: "🥛", unopenedQty: 1, openedQty: 1, minimumQty: 4, lastOpenedAt: new Date(now - 86400000).toISOString() },
+        { name: "Chá", category: "Café e chá", unit: "caixa", icon: "🍵", unopenedQty: 2, openedQty: 0, minimumQty: 1 },
       ]).returning();
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "initial_items_created", targetType: "item", details: `${created.length} itens adicionados` });
       return Response.json({ items: created }, { status: 201 });
