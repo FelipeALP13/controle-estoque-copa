@@ -4,7 +4,7 @@ import { createSession, getSessionMember, hashPassword, normalizeUsername, passw
 import { getDb } from "../../../db";
 import { inventoryLocks, items, members, movements, openBatches, sessions } from "../../../db/schema";
 import { writeAudit } from "../../audit";
-import { parseOpeningDate } from "../../movement-policy";
+import { movementOccursBeforeOpening, parseMovementDate } from "../../movement-policy";
 import { hasTrustedOrigin } from "../../request-security";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
@@ -413,11 +413,11 @@ export async function POST(request: Request) {
         adjust: "adjustStock",
       };
       if (!hasPermission(currentMember, permissionByType[type])) return Response.json({ error: "Você não tem permissão para registrar esta movimentação." }, { status: 403 });
-      let retroactiveOpenedAt: string | null = null;
-      if (type === "open" && body.openedAt) {
-        const openingDate = parseOpeningDate(body.openedAt);
-        if (openingDate.error) return Response.json({ error: openingDate.error }, { status: 400 });
-        retroactiveOpenedAt = openingDate.iso;
+      let retroactiveOccurredAt: string | null = null;
+      if (body.occurredAt) {
+        const movementDate = parseMovementDate(body.occurredAt);
+        if (movementDate.error) return Response.json({ error: movementDate.error }, { status: 400 });
+        retroactiveOccurredAt = movementDate.iso;
       }
 
       const lockToken = crypto.randomUUID();
@@ -433,7 +433,7 @@ export async function POST(request: Request) {
         if (!current) return Response.json({ error: "Item não encontrado." }, { status: 404 });
 
         const timestamp = new Date().toISOString();
-        const movementTimestamp = type === "open" && retroactiveOpenedAt ? retroactiveOpenedAt : timestamp;
+        const movementTimestamp = retroactiveOccurredAt || timestamp;
         let unopenedQty = current.unopenedQty;
         let openedQty = current.openedQty;
         let lastOpenedAt = current.lastOpenedAt;
@@ -446,20 +446,27 @@ export async function POST(request: Request) {
 
         if (openedQty > current.openedQty) {
           const difference = openedQty - current.openedQty;
-          await db.insert(openBatches).values({ itemId, quantity: difference, remainingQty: difference, openedAt: timestamp });
-          lastOpenedAt = timestamp;
+          await db.insert(openBatches).values({ itemId, quantity: difference, remainingQty: difference, openedAt: movementTimestamp });
+          if (!lastOpenedAt || new Date(movementTimestamp).getTime() >= new Date(lastOpenedAt).getTime()) lastOpenedAt = movementTimestamp;
         } else if (openedQty < current.openedQty) {
           let toRemove = current.openedQty - openedQty;
           const activeBatches = await db.select().from(openBatches)
             .where(and(eq(openBatches.itemId, itemId), isNull(openBatches.closedAt)))
             .orderBy(desc(openBatches.openedAt), desc(openBatches.id));
+          let toValidate = toRemove;
+          for (const batch of activeBatches) {
+            if (toValidate <= 0) break;
+            if (movementOccursBeforeOpening(movementTimestamp, batch.openedAt)) return Response.json({ error: "O ajuste não pode ocorrer antes da abertura do produto." }, { status: 400 });
+            toValidate -= Math.min(toValidate, batch.remainingQty);
+          }
+          if (toValidate > 0 && current.lastOpenedAt && movementOccursBeforeOpening(movementTimestamp, current.lastOpenedAt)) return Response.json({ error: "O ajuste não pode ocorrer antes da abertura do produto." }, { status: 400 });
           for (const batch of activeBatches) {
             if (toRemove <= 0) break;
             const removed = Math.min(toRemove, batch.remainingQty);
             const remainingQty = batch.remainingQty - removed;
             await db.update(openBatches).set({
               remainingQty,
-              closedAt: remainingQty <= 0 ? timestamp : null,
+              closedAt: remainingQty <= 0 ? movementTimestamp : null,
               closedReason: remainingQty <= 0 ? "adjusted" : null,
             }).where(eq(openBatches.id, batch.id));
             toRemove -= removed;
@@ -483,12 +490,22 @@ export async function POST(request: Request) {
             .orderBy(asc(openBatches.openedAt), asc(openBatches.id));
           const trackedQty = activeBatches.reduce((sum, batch) => sum + batch.remainingQty, 0);
           const untrackedQty = Math.max(0, current.openedQty - trackedQty);
+          const untrackedOpenedAt = current.lastOpenedAt || timestamp;
+          const consumptionCandidates = activeBatches.map((batch) => ({ openedAt: batch.openedAt, remainingQty: batch.remainingQty }));
+          if (untrackedQty > 0) consumptionCandidates.push({ openedAt: untrackedOpenedAt, remainingQty: untrackedQty });
+          consumptionCandidates.sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
+          let toValidate = quantity;
+          for (const batch of consumptionCandidates) {
+            if (toValidate <= 0) break;
+            if (movementOccursBeforeOpening(movementTimestamp, batch.openedAt)) return Response.json({ error: "O consumo não pode ocorrer antes da abertura do produto." }, { status: 400 });
+            toValidate -= Math.min(toValidate, batch.remainingQty);
+          }
           if (untrackedQty > 0) {
             await db.insert(openBatches).values({
               itemId,
               quantity: untrackedQty,
               remainingQty: untrackedQty,
-              openedAt: current.lastOpenedAt || timestamp,
+              openedAt: untrackedOpenedAt,
             });
             activeBatches = await db.select().from(openBatches)
               .where(and(eq(openBatches.itemId, itemId), isNull(openBatches.closedAt)))
@@ -502,7 +519,7 @@ export async function POST(request: Request) {
             const remainingQty = batch.remainingQty - consumed;
             await db.update(openBatches).set({
               remainingQty,
-              closedAt: remainingQty <= 0 ? timestamp : null,
+              closedAt: remainingQty <= 0 ? movementTimestamp : null,
               closedReason: remainingQty <= 0 ? "consumed" : null,
             }).where(eq(openBatches.id, batch.id));
             toConsume -= consumed;
@@ -523,7 +540,7 @@ export async function POST(request: Request) {
             createdAt: movementTimestamp,
           }),
         ]);
-        await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}${retroactiveOpenedAt ? ` · abertura em ${retroactiveOpenedAt}` : ""}` });
+        await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}${retroactiveOccurredAt ? ` · movimentação em ${retroactiveOccurredAt}` : ""}` });
         return Response.json({ ok: true });
       } finally {
         await db.delete(inventoryLocks).where(and(eq(inventoryLocks.itemId, itemId), eq(inventoryLocks.ownerToken, lockToken)));

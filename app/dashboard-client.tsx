@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { passwordPolicyError } from "./auth-policy";
-import { parseOpeningDate } from "./movement-policy";
+import { parseMovementDate } from "./movement-policy";
 import Archive from "lucide-react/icons/archive";
 import ArrowDownToLine from "lucide-react/icons/arrow-down-to-line";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
@@ -563,8 +563,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
   const [itemVisualMode, setItemVisualMode] = useState<"icon" | "image">(editing?.imageKey ? "image" : "icon");
   const [itemFile, setItemFile] = useState<File | null>(null);
   const [quantity, setQuantity] = useState("1");
-  const [openedAt, setOpenedAt] = useState("");
-  const maximumOpeningDate = useMemo(() => {
+  const [occurredAt, setOccurredAt] = useState("");
+  const maximumMovementDate = useMemo(() => {
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     return now.toISOString().slice(0, 16);
@@ -666,10 +666,10 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         return;
       }
       const payload: Record<string, unknown> = { action: "movement", type: state.type, itemId: Number(itemId), quantity: Number(quantity), note };
-      if (state.type === "open" && openedAt) {
-        const openingDate = parseOpeningDate(openedAt);
-        if (openingDate.error) throw new Error(openingDate.error);
-        payload.openedAt = openingDate.iso;
+      if (occurredAt) {
+        const movementDate = parseMovementDate(occurredAt);
+        if (movementDate.error) throw new Error(movementDate.error);
+        payload.occurredAt = movementDate.iso;
       }
       if (state.type === "adjust") { payload.unopenedQty = Number(unopenedQty); payload.openedQty = Number(openedQty); }
       await onSubmit(payload, `${movementCopy[state.type].label} registrada.`);
@@ -726,7 +726,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
             <label><span>Quantidade fechada</span><input min="0" step="0.01" type="number" required value={unopenedQty} onChange={(e) => setUnopenedQty(e.target.value)} /></label>
             <label><span>Quantidade aberta</span><input min="0" step="0.01" type="number" required value={openedQty} onChange={(e) => setOpenedQty(e.target.value)} /></label>
           </> : <label className="full"><span>Quantidade ({selected?.unit ?? "un."})</span><input autoFocus min="0.01" step="0.01" type="number" required value={quantity} onChange={(e) => setQuantity(e.target.value)} /><small>{selected && state.type === "open" ? `Disponível fechado: ${fmt(selected.unopenedQty)} ${selected.unit}` : selected && state.type === "consume" ? `Disponível aberto: ${fmt(selected.openedQty)} ${selected.unit}` : "Use números decimais quando necessário."}</small></label>}
-          {state.type === "open" && <label className="full retroactive-opening"><span>Data e hora da abertura <em>opcional</em></span><input type="datetime-local" max={maximumOpeningDate} value={openedAt} onChange={(event) => setOpenedAt(event.target.value)} /><small>Deixe vazio para registrar agora. Use este campo quando o produto foi aberto anteriormente.</small></label>}
+          <label className="full retroactive-opening"><span>{{ purchase: "Data e hora da compra", open: "Data e hora da abertura", consume: "Data e hora do consumo", adjust: "Data e hora do ajuste" }[state.type]} <em>opcional</em></span><input type="datetime-local" max={maximumMovementDate} value={occurredAt} onChange={(event) => setOccurredAt(event.target.value)} /><small>Deixe vazio para registrar agora. Preencha quando esta movimentação aconteceu anteriormente.</small></label>
           <label className="full"><span>Observação <em>opcional</em></span><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: compra mensal, contagem feita pela manhã..." /></label>
         </>}
       </div>
