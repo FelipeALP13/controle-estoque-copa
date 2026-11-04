@@ -118,6 +118,7 @@ main { min-height: 100vh; margin-left: 248px; }
 .primary-button:hover { border-color: var(--green-dark); background: var(--green-dark); transform: translateY(-1px); }
 .secondary-button { border: 1px solid #d9dfda; color: #34433a; background: white; }
 .secondary-button:hover { border-color: #b8c4bb; background: #f9fbf9; }
+.restock-export { position: relative; }
 .restock-export b { display: grid; min-width: 20px; height: 20px; padding: 0 5px; place-items: center; border-radius: 999px; color: white; background: #c84c3d; font-size: 10px; }
 .whatsapp-button { border-color: #b9dec7; color: #187842; background: #f2fbf5; }
 .whatsapp-button:hover { border-color: #79bd91; background: #e7f7ec; }
@@ -169,9 +170,10 @@ main { min-height: 100vh; margin-left: 248px; }
 .insight-icon svg { width: 17px; }
 .insight-head h3 { margin: 0; font-size: 13px; letter-spacing: -.015em; }
 .insight-head p { margin: 3px 0 0; color: #88928b; font-size: 9px; }
-.insight-head button { flex: 0 0 auto; border: 0; color: var(--green); background: transparent; font-size: 9px; font-weight: 800; }
+.insight-head button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; border: 0; color: var(--green); background: transparent; font-size: 9px; font-weight: 800; }
 .insight-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 10px; }
 .insight-actions a { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-size: 9px; font-weight: 800; text-decoration: none; }
+.insight-actions svg, .section-actions svg { display: block; flex: 0 0 auto; }
 .insight-actions a:hover { text-decoration: underline; }
 .insight-actions .whatsapp-text-link { color: #188447; }
 .scan-button { white-space: nowrap; }
@@ -367,11 +369,11 @@ main { min-height: 100vh; margin-left: 248px; }
 .icon-options button.active { border-color: var(--green); box-shadow: 0 0 0 2px #dcefe2; }
 .custom-icon { grid-template-columns: 1fr 90px; align-items: center; }
 .custom-icon input { text-align: center; font-size: 18px; }
-.image-upload { position: relative; grid-template-columns: 64px 1fr; align-items: center; gap: 12px !important; cursor: pointer; }
+.image-upload { position: relative; align-items: center; gap: 10px !important; text-align: center; cursor: pointer; }
 .image-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .image-preview { position: relative; display: grid; width: 64px; height: 64px; flex: 0 0 64px; overflow: hidden; place-items: center; border: 1px dashed #b8c8bc; border-radius: 12px; color: var(--green); background: white; }
 .image-preview img { width: 100%; height: 100%; object-fit: cover; }
-.image-upload > span:nth-child(2) { display: flex; flex-direction: column; }
+.image-upload > span:nth-child(2) { display: flex; width: 100%; align-items: center; flex-direction: column; text-align: center; }
 .image-upload strong { color: #3e4c43; font-size: 11px; }
 .image-upload small { margin-top: 4px; color: #89928c; font-size: 9px; }
 .profile-role { display: flex; align-items: center; justify-content: space-between; min-height: 45px; padding: 0 12px; border: 1px solid #dce3dd; border-radius: 9px; background: #f8faf8; }
@@ -462,12 +464,19 @@ main { min-height: 100vh; margin-left: 248px; }
   .member-date { display: none; }
   .stat-card { min-height: 90px; padding: 15px; }
   .stat-card strong { font-size: 23px; }
-  .section-heading { align-items: flex-start; margin-top: 27px; }
-  .section-heading .secondary-button { width: 41px; padding: 0; font-size: 0; }
+  .section-heading { align-items: flex-start; flex-direction: column; margin-top: 27px; }
+  .section-actions { flex-wrap: nowrap; justify-content: flex-start; width: 100%; }
+  .section-heading .secondary-button { width: 42px; min-width: 42px; height: 42px; padding: 0; font-size: 0; }
+  .section-heading .secondary-button svg { width: 18px; height: 18px; }
+  .section-heading .restock-export b { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 4px; font-size: 9px; }
+  .insight-actions { gap: 5px; }
+  .insight-actions a, .insight-actions button { display: grid; width: 31px; height: 31px; padding: 0; place-items: center; border: 1px solid #dfe6e0; border-radius: 8px; background: white; }
+  .insight-actions .action-label { position: absolute; overflow: hidden; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
+  .insight-actions svg { width: 15px; height: 15px; }
   .toolbar { align-items: stretch; flex-direction: column; }
   .search { width: 100%; }
-  .filters { overflow-x: auto; }
-  .filters button { flex: 1 0 auto; }
+  .filters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); width: 100%; overflow: visible; }
+  .filters button { justify-content: center; min-width: 0; padding: 0 6px; white-space: nowrap; }
   .stock-list { grid-template-columns: 1fr; }
   .history-list article { grid-template-columns: 38px minmax(0,1fr); }
   .history-meta { grid-column: 2; align-items: flex-start; }
