@@ -267,9 +267,9 @@ export default function Home() {
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
-      setError("");
+      if (!silent) setError("");
       const response = await fetch("/api/inventory", { cache: "no-store" });
       const data = await response.json();
       if (response.status === 401) { router.replace("/"); return; }
@@ -279,15 +279,29 @@ export default function Home() {
       setCurrentUser(data.currentUser);
       setMembers(data.members || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
+      if (!silent) setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [router]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(initialLoad);
+  }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    const interval = window.setInterval(refresh, 5000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [load]);
 
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
