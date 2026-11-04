@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { passwordPolicyError } from "./auth-policy";
 import Archive from "lucide-react/icons/archive";
 import ArrowDownToLine from "lucide-react/icons/arrow-down-to-line";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
@@ -287,7 +288,7 @@ export default function Home() {
     });
   }, [items, search, filter]);
 
-  async function submit(payload: Record<string, unknown>, success: string) {
+  async function submit(payload: Record<string, unknown>, success: string): Promise<string | null> {
     setSaving(true);
     setError("");
     try {
@@ -302,8 +303,11 @@ export default function Home() {
       setModal(null);
       setNotice(success);
       window.setTimeout(() => setNotice(""), 3200);
+      return null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar.");
+      const message = err instanceof Error ? err.message : "Erro ao salvar.";
+      setError(message);
+      return message;
     } finally {
       setSaving(false);
     }
@@ -543,7 +547,7 @@ function HistoryView({ movements, loading }: { movements: Movement[]; loading: b
   );
 }
 
-function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanItem }: { state: NonNullable<ModalState>; items: Item[]; currentUser: CurrentUser | null; saving: boolean; onClose: () => void; onSubmit: (payload: Record<string, unknown>, success: string) => Promise<void>; onScanItem: (item: Item) => void }) {
+function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanItem }: { state: NonNullable<ModalState>; items: Item[]; currentUser: CurrentUser | null; saving: boolean; onClose: () => void; onSubmit: (payload: Record<string, unknown>, success: string) => Promise<string | null>; onScanItem: (item: Item) => void }) {
   const editing = state.kind === "item" ? state.item : undefined;
   const editingMember = state.kind === "member" ? state.member : undefined;
   const preselected = state.kind === "movement" ? state.item : undefined;
@@ -634,12 +638,18 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         return;
       }
       if (state.kind === "profile" || state.kind === "member") {
+        if (state.kind === "member" && !editingMember && !memberPassword) throw new Error("Crie uma senha inicial para o novo membro.");
+        const passwordError = memberPassword ? passwordPolicyError(memberPassword) : null;
+        if (passwordError) throw new Error(passwordError);
+        if (state.kind === "profile" && memberPassword && !currentPassword) throw new Error("Informe sua senha atual para criar uma nova senha.");
         const uploadedAvatarKey = avatarMode === "image" && avatarFile ? await uploadImage(avatarFile, "profile") : avatarMode === "image" ? avatarKey : null;
+        let submissionError: string | null;
         if (state.kind === "profile") {
-          await onSubmit({ action: "updateProfile", name: memberName, email: memberEmail, username: memberUsername, currentPassword, password: memberPassword, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil e acesso atualizados.");
+          submissionError = await onSubmit({ action: "updateProfile", name: memberName, email: memberEmail, username: memberUsername, currentPassword, password: memberPassword, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil e acesso atualizados.");
         } else {
-          await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
+          submissionError = await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
         }
+        if (submissionError) throw new Error(submissionError);
         return;
       }
       if (state.kind === "item") {
@@ -668,13 +678,13 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
           <label className="full"><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
-          <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input minLength={8} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /></label></div></div>
+          <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : "Mínimo de 8 caracteres, com letras e números."}</small></label></div></div>
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>
           <VisualEditor label="Avatar do usuário" mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário de acesso</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
-          <label><span>{editingMember ? "Redefinir senha" : "Senha inicial"}</span><input required={!editingMember} minLength={8} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder={editingMember ? "Deixe em branco para manter" : "8+ caracteres, letras e números"} /><small>{editingMember ? "Preencha apenas para trocar a senha." : "A pessoa usará esta senha no primeiro acesso."}</small></label>
+          <label><span>{editingMember ? "Redefinir senha" : "Senha inicial"}</span><input required={!editingMember} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder={editingMember ? "Deixe em branco para manter" : "8+ caracteres, letras e números"} /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : editingMember ? "Deixe em branco para manter. Para trocar: 8+ caracteres, letras e números." : "Obrigatória: mínimo de 8 caracteres, com letras e números."}</small></label>
           <label><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
             <label><span>Perfil base</span><select value={memberRole} onChange={(e) => { const role = e.target.value as MemberRole; setMemberRole(role); setMemberPermissions(permissionPresets[role]); }}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
             <label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>

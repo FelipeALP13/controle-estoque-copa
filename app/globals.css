@@ -352,6 +352,7 @@ main { min-height: 100vh; margin-left: 248px; }
 .form-grid textarea { min-height: 76px; padding-top: 10px; resize: vertical; }
 .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { border-color: #72a283; box-shadow: 0 0 0 3px #e8f3eb; }
 .form-grid label > small { color: #89928c; font-size: 10px; line-height: 1.4; }
+.form-grid label > small.field-error { color: #a23f35; font-weight: 700; }
 .visual-avatar { position: relative; overflow: hidden; }
 .visual-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .visual-avatar > span { display: grid; width: 100%; height: 100%; place-items: center; font-size: 17px; }
