@@ -204,6 +204,28 @@ async function uploadImage(file: File, kind: "item" | "profile") {
   return String(data.imageKey);
 }
 
+function StandardChoice({ label, value, setValue, options, customLabel, helper }: { label: string; value: string; setValue: (value: string) => void; options: readonly string[]; customLabel: string; helper: string }) {
+  const [custom, setCustom] = useState(Boolean(value && !options.includes(value)));
+  return <label className="standard-choice">
+    <span>{label}</span>
+    <select required value={custom ? "__custom" : value} onChange={(event) => {
+      if (event.target.value === "__custom") {
+        setCustom(true);
+        setValue("");
+      } else {
+        setCustom(false);
+        setValue(event.target.value);
+      }
+    }}>
+      <option value="" disabled>Selecione uma opção</option>
+      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      <option value="__custom">{customLabel}</option>
+    </select>
+    {custom && <input className="custom-choice-value" required autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Digite o valor personalizado" />}
+    <small>{helper}</small>
+  </label>;
+}
+
 function VisualEditor({ label, mode, setMode, icon, setIcon, imageKey, file, setFile }: { label: string; mode: "icon" | "image"; setMode: (mode: "icon" | "image") => void; icon: string; setIcon: (icon: string) => void; imageKey: string | null; file: File | null; setFile: (file: File | null) => void }) {
   const localPreview = useMemo(() => file ? URL.createObjectURL(file) : "", [file]);
   const preview = localPreview || mediaUrl(imageKey);
@@ -713,8 +735,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         </> : state.kind === "item" ? <>
           <VisualEditor label="Aparência do item" mode={itemVisualMode} setMode={setItemVisualMode} icon={itemIcon} setIcon={setItemIcon} imageKey={itemImageKey} file={itemFile} setFile={setItemFile} />
           <label className="full"><span>Nome do item</span><input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Café em pó" /></label>
-          <label><span>Categoria</span><input required list="market-categories" autoComplete="off" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Selecione ou digite" /><datalist id="market-categories">{marketCategories.map((option) => <option key={option} value={option} />)}</datalist><small>Padrões de mercado ou uma categoria personalizada.</small></label>
-          <label><span>Unidade de controle</span><input required list="market-units" autoComplete="off" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Selecione ou digite" /><datalist id="market-units">{marketUnits.map((option) => <option key={option} value={option} />)}</datalist><small>Como o item é comprado e contado no estoque.</small></label>
+          <StandardChoice label="Categoria" value={category} setValue={setCategory} options={marketCategories} customLabel="Outra categoria..." helper="Escolha um padrão ou crie uma categoria personalizada." />
+          <StandardChoice label="Unidade de controle" value={unit} setValue={setUnit} options={marketUnits} customLabel="Outra unidade..." helper="Escolha como o item será comprado e contado." />
           <label><span>Estoque mínimo</span><input required min="0" step="0.01" type="number" value={minimumQty} onChange={(e) => setMinimumQty(e.target.value)} /><small>Aviso de reposição.</small></label>
           <label className="full"><span>Código de barras ou QR</span><input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Leia ou digite o código do produto" /><small>Usado no botão “Ler código” para localizar o item.</small></label>
         </> : state.kind === "scanner" ? <>

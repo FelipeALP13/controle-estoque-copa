@@ -353,6 +353,10 @@ main { min-height: 100vh; margin-left: 248px; }
 .form-grid input, .form-grid select, .form-grid textarea { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid #dbe1dc; border-radius: 8px; outline: none; color: var(--ink); background: white; font-size: 13px; }
 .form-grid textarea { min-height: 76px; padding-top: 10px; resize: vertical; }
 .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { border-color: #72a283; box-shadow: 0 0 0 3px #e8f3eb; }
+.standard-choice select { cursor: pointer; border-color: #cfded2; color: #31443a; background-color: #fbfdfb; font-weight: 650; }
+.standard-choice select:focus { border-color: var(--green); background-color: white; }
+.standard-choice .custom-choice-value { border-color: #9fc4aa; background: var(--green-soft); }
+.standard-choice .custom-choice-value:focus { background: white; }
 .retroactive-opening { padding: 12px; border: 1px solid #dce8df; border-radius: 10px; background: #f6faf7; }
 .retroactive-opening input { background: white; }
 .form-grid label > small { color: #89928c; font-size: 10px; line-height: 1.4; }
