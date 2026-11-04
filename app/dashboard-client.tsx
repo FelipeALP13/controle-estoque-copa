@@ -202,11 +202,19 @@ async function uploadImage(file: File, kind: "item" | "profile") {
 }
 
 function VisualEditor({ label, mode, setMode, icon, setIcon, imageKey, file, setFile }: { label: string; mode: "icon" | "image"; setMode: (mode: "icon" | "image") => void; icon: string; setIcon: (icon: string) => void; imageKey: string | null; file: File | null; setFile: (file: File | null) => void }) {
-  const preview = file ? URL.createObjectURL(file) : mediaUrl(imageKey);
+  const localPreview = useMemo(() => file ? URL.createObjectURL(file) : "", [file]);
+  const preview = localPreview || mediaUrl(imageKey);
+  const [failedPreview, setFailedPreview] = useState("");
+  const previewFailed = Boolean(preview && failedPreview === preview);
+
+  useEffect(() => () => {
+    if (localPreview) URL.revokeObjectURL(localPreview);
+  }, [localPreview]);
+
   return <div className="visual-editor full">
     <span className="field-label">{label}</span>
     <div className="visual-mode"><button type="button" className={mode === "icon" ? "active" : ""} onClick={() => setMode("icon")}>Usar ícone</button><button type="button" className={mode === "image" ? "active" : ""} onClick={() => setMode("image")}>Usar foto</button></div>
-    {mode === "icon" ? <><div className="icon-options">{visualIcons.map((option) => <button type="button" key={option} className={icon === option ? "active" : ""} onClick={() => setIcon(option)}>{option}</button>)}</div><label className="custom-icon"><span>Outro ícone ou emoji</span><input value={icon} onChange={(event) => setIcon(event.target.value.slice(0, 8))} maxLength={8} /></label></> : <label className="image-upload"><span className="image-preview">{preview ? <Image src={preview} alt="Prévia" fill sizes="64px" unoptimized /> : <ImagePlus />}</span><span><strong>{file ? file.name : imageKey ? "Trocar imagem" : "Selecionar imagem"}</strong><small>PNG, JPG ou WebP · até 3 MB</small></span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>}
+    {mode === "icon" ? <><div className="icon-options">{visualIcons.map((option) => <button type="button" key={option} className={icon === option ? "active" : ""} onClick={() => setIcon(option)}>{option}</button>)}</div><label className="custom-icon"><span>Outro ícone ou emoji</span><input value={icon} onChange={(event) => setIcon(event.target.value.slice(0, 8))} maxLength={8} /></label></> : <label className="image-upload"><span className="image-preview">{preview && !previewFailed ? <Image src={preview} alt="" fill sizes="64px" unoptimized onError={() => setFailedPreview(preview)} /> : <ImagePlus aria-hidden="true" />}</span><span><strong>{file ? file.name : imageKey && !previewFailed ? "Trocar imagem" : "Selecionar imagem"}</strong><small>PNG, JPG ou WebP · até 3 MB</small></span><input type="file" aria-label={`Selecionar ${label.toLowerCase()}`} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>}
   </div>;
 }
 
