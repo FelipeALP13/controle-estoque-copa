@@ -11,6 +11,7 @@ import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
 import CalendarClock from "lucide-react/icons/calendar-clock";
+import ChevronDown from "lucide-react/icons/chevron-down";
 import CircleUserRound from "lucide-react/icons/circle-user-round";
 import Coffee from "lucide-react/icons/coffee";
 import Ellipsis from "lucide-react/icons/ellipsis";
@@ -264,7 +265,8 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"stock" | "schedule" | "planning" | "history" | "team">("stock");
+  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "planning" | "history" | "team">("hub");
+  const [stockMenu, setStockMenu] = useState(true);
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -386,11 +388,16 @@ export default function Home() {
         <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>Portal da equipe</strong><small>Estoque e atendimento</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
-          <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
-          <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setMobileMenu(false); }}><CalendarClock /> Escala de atendimento</button>
-          {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>}
-          {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>}
-          {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setMobileMenu(false); }}><Users /> Equipe</button>}
+          <button className={tab === "hub" ? "active" : ""} onClick={() => { setTab("hub"); setMobileMenu(false); }}><Archive /> Visão geral</button>
+          <div className={`sidebar-module ${["stock", "planning", "history"].includes(tab) ? "selected" : ""}`}>
+            <button className="module-trigger" aria-expanded={stockMenu} onClick={() => { setStockMenu((open) => !open); if (!["stock", "planning", "history"].includes(tab)) setTab("stock"); }}><PackageCheck /> <span>Estoque</span><ChevronDown className={stockMenu ? "open" : ""} /></button>
+            {stockMenu && <div className="sidebar-subnav">
+              <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}>Itens e saldos</button>
+              {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}>Planejamento</button>}
+              {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}>Histórico</button>}
+            </div>}
+          </div>
+          <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setMobileMenu(false); }}><CalendarClock /> Escala</button>
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
@@ -403,7 +410,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">ÁREA INTERNA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
+          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "planning" ? "Planejamento do estoque" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
           {tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
@@ -411,7 +418,7 @@ export default function Home() {
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "stock" ? (
+          {tab === "hub" ? <HubView items={items} movements={movements} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -489,6 +496,48 @@ export default function Home() {
       {modal && <Modal state={modal} items={items} currentUser={currentUser} saving={saving} onClose={() => { setModal(null); setError(""); }} onSubmit={submit} onScanItem={(item) => setModal({ kind: "movement", type: item.openedQty > 0 ? "consume" : "open", item })} />}
     </div>
   );
+}
+
+function HubView({ items, movements, currentUser, isAdmin, onOpen }: { items: Item[]; movements: Movement[]; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "team") => void }) {
+  const today = isoDateInSaoPaulo();
+  const currentWeek = supportWeekForDate(today);
+  const nextWeek = nextSupportWeek(today);
+  const featuredWeek = currentWeek ?? nextWeek;
+  const featuredTeam = featuredWeek ? supportTeam(featuredWeek.teamId) : null;
+  const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
+  const openItems = items.filter((item) => item.openedQty > 0);
+  const firstName = currentUser?.name.split(/\s+/)[0] || "Equipe";
+
+  return <>
+    <section className="hub-welcome">
+      <div><p className="eyebrow">BOM TRABALHO, {firstName.toLocaleUpperCase("pt-BR")}</p><h2>O que você precisa acessar?</h2><p>Estoque e atendimento agora têm áreas próprias dentro do mesmo sistema interno.</p></div>
+      <span>{new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }).format(new Date())}</span>
+    </section>
+
+    <div className="hub-modules">
+      <article className="hub-module-card inventory-module">
+        <div className="hub-module-head"><span><Archive /></span><div><small>MÓDULO</small><h2>Estoque</h2></div></div>
+        <p>Itens, compras, consumo, planejamento e histórico em uma área exclusiva.</p>
+        <div className="hub-module-metrics"><div><strong>{items.length}</strong><span>itens</span></div><div><strong>{openItems.length}</strong><span>em uso</span></div><div className={lowItems.length ? "attention" : ""}><strong>{lowItems.length}</strong><span>para repor</span></div></div>
+        <button onClick={() => onOpen("stock")}>Abrir módulo de estoque <span>→</span></button>
+      </article>
+      <article className={`hub-module-card schedule-module ${featuredTeam?.id ?? "purple"}`}>
+        <div className="hub-module-head"><span><CalendarClock /></span><div><small>MÓDULO</small><h2>Escala</h2></div></div>
+        {featuredTeam && featuredWeek ? <><p>{currentWeek ? "Equipe responsável hoje" : "Próxima equipe programada"}</p><div className="hub-support-team"><strong>{featuredTeam.name}</strong><span>{featuredTeam.members.join(" · ")}</span><small>{weekLabel(featuredWeek)}</small></div></> : <p>Consulte as equipes e os próximos períodos de atendimento.</p>}
+        <button onClick={() => onOpen("schedule")}>Abrir escala de atendimento <span>→</span></button>
+      </article>
+    </div>
+
+    <div className="hub-bottom-grid">
+      <article className="hub-activity">
+        <div className="hub-panel-title"><div><span><History /></span><div><h3>Últimas movimentações</h3><p>Atividade recente do estoque</p></div></div><button onClick={() => onOpen("stock")}>Ver estoque</button></div>
+        {movements.length ? movements.slice(0, 3).map((movement) => <div className="hub-activity-row" key={movement.id}><span>{movementCopy[movement.type].label.slice(0,1)}</span><div><strong>{movementCopy[movement.type].label} · {movement.itemName}</strong><small>{movement.createdByName || "Equipe"} · {exactDate(movement.createdAt)}</small></div><b>{fmt(Math.abs(movement.quantity))} {movement.unit}</b></div>) : <div className="hub-empty-row"><History /><span><strong>Nenhuma movimentação ainda</strong><small>As atualizações do estoque aparecerão aqui.</small></span></div>}
+      </article>
+      <article className="hub-internal-card">
+        <span><Users /></span><div><small>SISTEMA INTERNO</small><h3>Equipe e acessos</h3><p>Cada pessoa usa sua própria conta e as ações ficam registradas.</p>{isAdmin && <button onClick={() => onOpen("team")}>Gerenciar usuários</button>}</div>
+      </article>
+    </div>
+  </>;
 }
 
 function isoDateInSaoPaulo(date = new Date()) {

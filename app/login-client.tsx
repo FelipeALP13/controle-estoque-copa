@@ -57,14 +57,14 @@ export default function LoginScreen() {
       <section className="login-layout">
         <div className="login-welcome">
           <div className="login-brand"><span>👥</span><div><strong>Portal da Equipe</strong><small>Estoque e escala de atendimento</small></div></div>
-          <div className="login-visual"><span>🍪</span><span>☕</span><span>🥛</span></div>
+          <div className="login-visual"><span>📦</span><span>🏢</span><span>📅</span></div>
           <p className="eyebrow">ACESSO DA EQUIPE</p>
-          <h1>{setupRequired ? "Vamos criar o primeiro acesso" : "Entre para cuidar do estoque"}</h1>
-          <p>{setupRequired ? "Cadastre o administrador. Depois você poderá criar os usuários da equipe e definir cada permissão." : "Cada abertura, compra e consumo fica registrado com o nome da pessoa responsável."}</p>
+          <h1>{setupRequired ? "Vamos criar o primeiro acesso" : "Tudo da equipe em um só lugar"}</h1>
+          <p>{setupRequired ? "Cadastre o administrador. Depois você poderá criar os usuários da equipe e definir cada permissão." : "Acesse o estoque, consulte a escala e acompanhe a rotina interna sem depender de planilhas separadas."}</p>
           <div className="login-benefits" aria-label="Recursos do acesso individual">
-            <span><b>01</b> Usuário individual para cada pessoa</span>
-            <span><b>02</b> Histórico com o responsável</span>
-            <span><b>03</b> Permissões controladas pelo administrador</span>
+            <span><b>01</b> Estoque com controle de consumo</span>
+            <span><b>02</b> Escala de atendimento do time</span>
+            <span><b>03</b> Acesso individual e seguro</span>
           </div>
         </div>
 
