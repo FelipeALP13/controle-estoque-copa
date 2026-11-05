@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Estoque da Firma",
-  description: "Controle interno do café, dos lanches, das compras e do consumo da firma.",
+  title: "Portal da Equipe",
+  description: "Área interna para controle de estoque e escala de atendimento do time.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

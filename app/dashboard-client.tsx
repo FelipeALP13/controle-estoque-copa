@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { passwordPolicyError } from "./auth-policy";
 import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
+import { nextSupportWeek, supportTeam, supportTeams, supportWeekForDate, supportWeeks, type SupportWeek } from "./support-schedule";
 import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
@@ -263,7 +264,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"stock" | "planning" | "history" | "team">("stock");
+  const [tab, setTab] = useState<"stock" | "schedule" | "planning" | "history" | "team">("stock");
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -382,17 +383,18 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
-        <div className="brand"><span className="brand-mark"><Coffee size={21} /></span><div><strong>Estoque</strong><small>Lanches da firma</small></div></div>
+        <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>Portal da equipe</strong><small>Estoque e atendimento</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
           <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}><Archive /> Visão geral</button>
+          <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setMobileMenu(false); }}><CalendarClock /> Escala de atendimento</button>
           {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}><BarChart3 /> Planejamento</button>}
           {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}><History /> Histórico</button>}
           {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setMobileMenu(false); }}><Users /> Equipe</button>}
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
-          <p>Registre a abertura antes de lançar o consumo. Assim você sempre saberá o que está em uso.</p>
+          <p>Consulte a escala aqui no portal e registre o consumo para manter toda a rotina em um só lugar.</p>
         </div>
         <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div><CircleUserRound size={18} /></button>
         <button className="signout-link" onClick={logout}><LogOut size={15} /> Sair do sistema</button>
@@ -401,8 +403,8 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">RANGO DA FIRMA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
-          {isAdmin || permissions.manageItems ? <button className="primary-button" onClick={() => setModal(tab === "team" ? { kind: "member" } : { kind: "item" })}>{tab === "team" ? <><UserPlus size={18} /> Adicionar membro</> : <><Plus size={18} /> Novo item</>}</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
+          <div><p className="eyebrow">ÁREA INTERNA</p><h1>{tab === "stock" ? "Visão geral do estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "planning" ? "Planejamento de compras" : tab === "team" ? "Usuários e permissões" : "Histórico de movimentações"}</h1></div>
+          {tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
         <section className="content">
@@ -479,13 +481,76 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView /> : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
       {mobileMenu && <button className="backdrop menu-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
       {modal && <Modal state={modal} items={items} currentUser={currentUser} saving={saving} onClose={() => { setModal(null); setError(""); }} onSubmit={submit} onScanItem={(item) => setModal({ kind: "movement", type: item.openedQty > 0 ? "consume" : "open", item })} />}
     </div>
+  );
+}
+
+function isoDateInSaoPaulo(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function scheduleDate(value: string, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("pt-BR", { ...options, timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function weekLabel(week: SupportWeek) {
+  const start = scheduleDate(week.start, { day: "2-digit", month: "short" }).replaceAll(".", "");
+  const end = scheduleDate(week.end, { day: "2-digit", month: "short" }).replaceAll(".", "");
+  return `${start} a ${end}`;
+}
+
+function ScheduleView() {
+  const today = isoDateInSaoPaulo();
+  const currentWeek = supportWeekForDate(today);
+  const nextWeek = nextSupportWeek(today);
+  const highlightedWeek = currentWeek ?? nextWeek ?? supportWeeks.at(-1)!;
+  const highlightedTeam = supportTeam(highlightedWeek.teamId);
+
+  return (
+    <>
+      <section className={`schedule-hero ${highlightedTeam.id}`}>
+        <div className="schedule-hero-copy">
+          <p className="eyebrow">{currentWeek ? "ATENDIMENTO DE HOJE" : "PRÓXIMO ATENDIMENTO"}</p>
+          <h2>{highlightedTeam.name}</h2>
+          <p>{currentWeek ? `Responsável pela semana de ${weekLabel(highlightedWeek)}.` : `A próxima escala começa em ${scheduleDate(highlightedWeek.start, { weekday: "long", day: "2-digit", month: "long" })}.`}</p>
+          <div className="schedule-member-list">{highlightedTeam.members.map((member) => <span key={member}>{member}</span>)}</div>
+        </div>
+        <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : "Próxima semana"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala 2026</span></div>
+      </section>
+
+      <div className="schedule-teams">
+        {supportTeams.map((team) => <article key={team.id} className={`schedule-team-card ${team.id}`}>
+          <div><span className="schedule-team-dot" /><div><small>Time de atendimento</small><strong>{team.name}</strong></div></div>
+          <ul>{team.members.map((member) => <li key={member}>{member}</li>)}</ul>
+        </article>)}
+      </div>
+
+      <div className="section-heading schedule-title"><div><h2>Próximas semanas</h2><p>Escala migrada para o portal interno. Dias sem marcação na planilha permanecem sem atendimento.</p></div><span className="schedule-year">OUT–DEZ 2026</span></div>
+      <div className="schedule-weeks">
+        {supportWeeks.map((week) => {
+          const team = supportTeam(week.teamId);
+          const state = week === currentWeek ? "current" : week.end < today ? "past" : "upcoming";
+          return <article key={week.start} className={`schedule-week ${team.id} ${state}`}>
+            <div className="schedule-week-date"><small>{scheduleDate(week.start, { month: "short" }).replace(".", "")}</small><strong>{scheduleDate(week.start, { day: "2-digit" })}</strong></div>
+            <div><span>{state === "current" ? "Esta semana" : state === "past" ? "Concluída" : "Programada"}</span><h3>{team.name}</h3><p>{weekLabel(week)}</p></div>
+            <div className="schedule-week-members">{team.members.map((member) => <span key={member}>{member.split(" ")[0]}</span>)}</div>
+          </article>;
+        })}
+      </div>
+    </>
   );
 }
 

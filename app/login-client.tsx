@@ -56,7 +56,7 @@ export default function LoginScreen() {
     <main className="login-page">
       <section className="login-layout">
         <div className="login-welcome">
-          <div className="login-brand"><span>☕</span><div><strong>Estoque da Firma</strong><small>Café e lanches da galera</small></div></div>
+          <div className="login-brand"><span>👥</span><div><strong>Portal da Equipe</strong><small>Estoque e escala de atendimento</small></div></div>
           <div className="login-visual"><span>🍪</span><span>☕</span><span>🥛</span></div>
           <p className="eyebrow">ACESSO DA EQUIPE</p>
           <h1>{setupRequired ? "Vamos criar o primeiro acesso" : "Entre para cuidar do estoque"}</h1>

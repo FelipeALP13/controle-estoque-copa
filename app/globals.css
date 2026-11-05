@@ -307,6 +307,44 @@ main { min-height: 100vh; margin-left: 248px; }
 .member-edit:disabled, .member-delete:disabled { cursor: not-allowed; opacity: .4; }
 .team-access-note { margin: 10px 2px 0; color: #7b867f; font-size: 10px; line-height: 1.5; }
 
+.schedule-hero { --team: #6f5aa6; --team-soft: #f2eefb; --team-border: #d9d0ef; display: grid; grid-template-columns: minmax(0,1fr) 220px; gap: 28px; padding: 26px; overflow: hidden; border: 1px solid var(--team-border); border-radius: 16px; background: linear-gradient(135deg,#fff 0%,var(--team-soft) 100%); }
+.schedule-hero.orange { --team: #a85e18; --team-soft: #fff3e7; --team-border: #f1d0ae; }
+.schedule-hero-copy h2 { margin: 5px 0 7px; color: var(--team); font-size: 29px; letter-spacing: -.04em; }
+.schedule-hero-copy > p:not(.eyebrow) { margin: 0; color: #68736c; font-size: 12px; line-height: 1.55; }
+.schedule-member-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 17px; }
+.schedule-member-list span { padding: 7px 10px; border: 1px solid color-mix(in srgb,var(--team) 20%,white); border-radius: 20px; color: var(--team); background: rgba(255,255,255,.74); font-size: 10px; font-weight: 800; }
+.schedule-hero-date { display: grid; align-content: center; justify-items: center; min-height: 145px; padding: 18px; border-radius: 14px; color: white; background: var(--team); text-align: center; box-shadow: 0 12px 28px color-mix(in srgb,var(--team) 22%,transparent); }
+.schedule-hero-date svg { width: 26px; height: 26px; margin-bottom: 9px; opacity: .9; }
+.schedule-hero-date small { font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; opacity: .74; }
+.schedule-hero-date strong { margin-top: 4px; font-size: 15px; }
+.schedule-hero-date span { margin-top: 6px; font-size: 9px; opacity: .72; }
+.schedule-teams { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 13px; margin-top: 14px; }
+.schedule-team-card { --team: #6f5aa6; --team-soft: #f4f0fb; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.schedule-team-card.orange { --team: #a85e18; --team-soft: #fff3e7; }
+.schedule-team-card > div { display: flex; align-items: center; gap: 10px; }
+.schedule-team-dot { width: 35px; height: 35px; flex: 0 0 auto; border: 9px solid var(--team-soft); border-radius: 50%; background: var(--team); }
+.schedule-team-card > div > div { display: flex; flex-direction: column; }
+.schedule-team-card small { color: #8a948d; font-size: 8px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.schedule-team-card strong { margin-top: 3px; color: var(--team); font-size: 14px; }
+.schedule-team-card ul { display: flex; flex-wrap: wrap; gap: 7px; margin: 14px 0 0; padding: 0; list-style: none; }
+.schedule-team-card li { padding: 6px 8px; border-radius: 7px; color: #5f6862; background: #f6f8f6; font-size: 9px; font-weight: 700; }
+.schedule-title { align-items: center; }
+.schedule-year { padding: 7px 10px; border-radius: 20px; color: var(--green-dark); background: var(--green-soft); font-size: 9px; font-weight: 850; letter-spacing: .06em; }
+.schedule-weeks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 17px; }
+.schedule-week { --team: #6f5aa6; --team-soft: #f2eefb; display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 87px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.schedule-week.orange { --team: #a85e18; --team-soft: #fff3e7; }
+.schedule-week.current { border-color: color-mix(in srgb,var(--team) 42%,white); box-shadow: 0 0 0 2px var(--team-soft); }
+.schedule-week.past { opacity: .58; }
+.schedule-week-date { display: grid; width: 45px; height: 54px; align-content: center; justify-items: center; border-radius: 10px; color: var(--team); background: var(--team-soft); }
+.schedule-week-date small { font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.schedule-week-date strong { font-size: 19px; line-height: 1.1; }
+.schedule-week > div:nth-child(2) { min-width: 0; }
+.schedule-week > div:nth-child(2) > span { color: var(--team); font-size: 8px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
+.schedule-week h3 { margin: 3px 0 2px; font-size: 12px; }
+.schedule-week p { margin: 0; color: #89928c; font-size: 9px; }
+.schedule-week-members { display: flex; align-items: flex-end; flex-direction: column; gap: 3px; }
+.schedule-week-members span { color: #7a847e; font-size: 8px; font-weight: 700; }
+
 .planning-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .planning-summary article { display: flex; align-items: center; gap: 15px; min-height: 105px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: white; }
 .planning-summary article > div { min-width: 0; }
@@ -474,6 +512,11 @@ main { min-height: 100vh; margin-left: 248px; }
   .permission-options { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: 1fr; gap: 9px; }
   .planning-summary, .planning-grid { grid-template-columns: 1fr; }
+  .schedule-hero { grid-template-columns: 1fr; gap: 18px; padding: 21px; }
+  .schedule-hero-date { min-height: 128px; }
+  .schedule-teams, .schedule-weeks { grid-template-columns: 1fr; }
+  .schedule-title { align-items: flex-start; }
+  .schedule-year { margin-top: 3px; }
   .permission-cards { grid-template-columns: 1fr; }
   .team-intro { align-items: flex-start; padding: 19px; }
   .team-intro > div { min-width: 0; }
@@ -562,6 +605,8 @@ main { min-height: 100vh; margin-left: 248px; }
   .filters button { gap: 4px; padding: 0 4px; font-size: 10px; }
   .filters b { min-width: 16px; height: 16px; font-size: 9px; }
   .planning-metrics { grid-template-columns: 1fr; gap: 12px; }
+  .schedule-week { grid-template-columns: 48px minmax(0,1fr); }
+  .schedule-week-members { grid-column: 2; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
   .team-intro { gap: 12px; }
   .team-intro-icon { width: 44px; height: 44px; }
   .modal-head { padding-top: 20px; }
