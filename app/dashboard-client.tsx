@@ -266,7 +266,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
   const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "planning" | "history" | "team">("hub");
-  const [stockMenu, setStockMenu] = useState(true);
+  const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -388,16 +388,16 @@ export default function Home() {
         <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>Portal da equipe</strong><small>Estoque e atendimento</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
-          <button className={tab === "hub" ? "active" : ""} onClick={() => { setTab("hub"); setMobileMenu(false); }}><Archive /> Visão geral</button>
+          <button className={tab === "hub" ? "active" : ""} onClick={() => { setTab("hub"); setStockMenu(false); setMobileMenu(false); }}><Archive /> Visão geral</button>
           <div className={`sidebar-module ${["stock", "planning", "history"].includes(tab) ? "selected" : ""}`}>
-            <button className="module-trigger" aria-expanded={stockMenu} onClick={() => { setStockMenu((open) => !open); if (!["stock", "planning", "history"].includes(tab)) setTab("stock"); }}><PackageCheck /> <span>Estoque</span><ChevronDown className={stockMenu ? "open" : ""} /></button>
+            <button className="module-trigger" aria-expanded={stockMenu} onClick={() => setStockMenu((open) => !open)}><PackageCheck /> <span>Estoque</span><ChevronDown className={stockMenu ? "open" : ""} /></button>
             {stockMenu && <div className="sidebar-subnav">
-              <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setMobileMenu(false); }}>Itens e saldos</button>
-              {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setMobileMenu(false); }}>Planejamento</button>}
-              {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setMobileMenu(false); }}>Histórico</button>}
+              <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setStockMenu(true); setMobileMenu(false); }}>Itens e saldos</button>
+              {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setStockMenu(true); setMobileMenu(false); }}>Planejamento</button>}
+              {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setStockMenu(true); setMobileMenu(false); }}>Histórico</button>}
             </div>}
           </div>
-          <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setMobileMenu(false); }}><CalendarClock /> Escala</button>
+          <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setStockMenu(false); setMobileMenu(false); }}><CalendarClock /> Escala</button>
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
