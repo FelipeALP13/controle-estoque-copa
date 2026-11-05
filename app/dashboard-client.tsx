@@ -595,7 +595,7 @@ function ScheduleView() {
           return <article key={week.start} className={`schedule-week ${team.id} ${state}`}>
             <div className="schedule-week-date"><small>{scheduleDate(week.start, { month: "short" }).replace(".", "")}</small><strong>{scheduleDate(week.start, { day: "2-digit" })}</strong></div>
             <div><span>{state === "current" ? "Esta semana" : state === "past" ? "Concluída" : "Programada"}</span><h3>{team.name}</h3><p>{weekLabel(week)}</p></div>
-            <div className="schedule-week-members">{team.members.map((member) => <span key={member}>{member.split(" ")[0]}</span>)}</div>
+            <div className="schedule-week-members">{team.members.map((member) => <span key={member}>{member}</span>)}</div>
           </article>;
         })}
       </div>
