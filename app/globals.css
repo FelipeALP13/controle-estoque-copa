@@ -416,6 +416,49 @@ main { min-height: 100vh; margin-left: 248px; }
 .schedule-week-members { display: flex; align-items: flex-end; flex-direction: column; gap: 3px; }
 .schedule-week-members span { color: #667085; font-size: 8px; font-weight: 700; white-space: nowrap; }
 
+/* Cores extras das equipes de atendimento */
+.hub-module-card.schedule-module.blue { --module: #2f62a8; --module-soft: #e9f1fc; border-color: #c9daf2; background: linear-gradient(145deg,#fff 45%,#eaf2fd 100%); }
+.hub-module-card.schedule-module.green { --module: #2f7a4b; --module-soft: #e8f5ec; border-color: #c6e3d0; background: linear-gradient(145deg,#fff 45%,#e9f6ed 100%); }
+.hub-module-card.schedule-module.red { --module: #b0433d; --module-soft: #fdeceb; border-color: #f0c9c6; background: linear-gradient(145deg,#fff 45%,#fdeeed 100%); }
+.schedule-hero.blue { --team: #2f62a8; --team-soft: #eaf2fd; --team-border: #c9daf2; }
+.schedule-hero.green { --team: #2f7a4b; --team-soft: #e9f6ed; --team-border: #c6e3d0; }
+.schedule-hero.red { --team: #b0433d; --team-soft: #fdeeed; --team-border: #f0c9c6; }
+.schedule-team-card.blue, .schedule-week.blue, .team-color-swatch.blue, .generate-team.blue, .generate-dot.blue { --team: #2f62a8; --team-soft: #eaf2fd; }
+.schedule-team-card.green, .schedule-week.green, .team-color-swatch.green, .generate-team.green, .generate-dot.green { --team: #2f7a4b; --team-soft: #e9f6ed; }
+.schedule-team-card.red, .schedule-week.red, .team-color-swatch.red, .generate-team.red, .generate-dot.red { --team: #b0433d; --team-soft: #fdeeed; }
+.team-color-swatch.purple, .generate-team.purple, .generate-dot.purple { --team: #6f5aa6; --team-soft: #f2eefb; }
+.team-color-swatch.orange, .generate-team.orange, .generate-dot.orange { --team: #a85e18; --team-soft: #fff3e7; }
+
+/* Edição da escala */
+.schedule-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; padding: 13px 16px; border: 1px dashed #cfd8d2; border-radius: 12px; background: #fafcfb; }
+.schedule-toolbar > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.schedule-toolbar strong { font-size: 12px; }
+.schedule-toolbar small { color: var(--muted); font-size: 10px; }
+.schedule-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.schedule-edit-button { display: grid; flex: 0 0 auto; width: 30px; height: 30px; margin-left: auto; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: #68736d; background: white; cursor: pointer; }
+.schedule-edit-button:hover { border-color: color-mix(in srgb,var(--team,#6f5aa6) 40%,white); color: var(--team,#6f5aa6); background: var(--team-soft,#f2eefb); }
+.schedule-week-side { display: flex; align-items: center; gap: 10px; }
+.schedule-hero-note { margin-top: 8px !important; color: var(--team) !important; font-weight: 700; }
+.schedule-title-actions { display: flex; align-items: center; gap: 8px; }
+.schedule-past-toggle { padding: 7px 10px; border: 1px solid var(--line); border-radius: 20px; color: #5f6862; background: white; font-size: 9px; font-weight: 800; cursor: pointer; }
+.schedule-past-toggle:hover { background: #f6f8f6; }
+.team-color-field, .generate-teams, .generate-preview { display: flex; flex-direction: column; gap: 8px; }
+.form-grid > .team-color-field, .form-grid > .generate-teams, .form-grid > .generate-preview, .form-grid > .schedule-conflict { grid-column: 1/-1; }
+.team-color-options, .generate-teams > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-color-swatch, .generate-team { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 7px !important; padding: 8px 11px; border: 1px solid var(--line); border-radius: 20px; color: #46524a; background: white; font-size: 11px; font-weight: 750; cursor: pointer; }
+.team-color-swatch i, .generate-team i, .generate-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: var(--team); }
+.team-color-swatch.active { border-color: var(--team); color: var(--team); background: var(--team-soft); box-shadow: 0 0 0 2px var(--team-soft); }
+.generate-team input { width: auto !important; min-height: 0 !important; margin: 0; accent-color: var(--team); }
+.generate-preview ol { display: grid; gap: 5px; max-height: 210px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.generate-preview li { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; background: #f6f8f6; font-size: 11px; }
+.generate-preview li small { color: var(--muted); }
+.generate-preview li em { margin-left: auto; color: #a23f35; font-size: 10px; font-style: normal; font-weight: 700; }
+.generate-preview li.conflict { background: #fff0ee; }
+.generate-preview > small { color: var(--muted); font-size: 10px; }
+.schedule-conflict { display: flex; align-items: center; gap: 7px; margin: 0; padding: 9px 11px; border-radius: 8px; color: #903a32; background: #fff0ee; font-size: 11px; font-weight: 700; }
+.modal-actions .modal-delete { margin-right: auto; color: #aa4b45; }
+.modal-actions .modal-delete:hover { border-color: #ecc8c5; background: #fff1f0; }
+
 .planning-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .planning-summary article { display: flex; align-items: center; gap: 15px; min-height: 105px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: white; }
 .planning-summary article > div { min-width: 0; }
@@ -593,6 +636,9 @@ main { min-height: 100vh; margin-left: 248px; }
   .schedule-hero-date { min-height: 128px; }
   .schedule-teams, .schedule-weeks { grid-template-columns: 1fr; }
   .schedule-title { align-items: flex-start; }
+  .schedule-toolbar { flex-direction: column; align-items: stretch; }
+  .schedule-toolbar-actions > button { flex: 1; justify-content: center; }
+  .schedule-title-actions { flex-wrap: wrap; justify-content: flex-end; }
   .schedule-year { margin-top: 3px; }
   .permission-cards { grid-template-columns: 1fr; }
   .team-intro { align-items: flex-start; padding: 19px; }
@@ -684,6 +730,7 @@ main { min-height: 100vh; margin-left: 248px; }
   .planning-metrics { grid-template-columns: 1fr; gap: 12px; }
   .schedule-week { grid-template-columns: 48px minmax(0,1fr); }
   .schedule-week-members { grid-column: 2; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .schedule-week-side { grid-column: 2; justify-content: space-between; }
   .team-intro { gap: 12px; }
   .team-intro-icon { width: 44px; height: 44px; }
   .modal-head { padding-top: 20px; }

@@ -95,6 +95,26 @@ export const authRateLimits = sqliteTable("auth_rate_limits", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const supportTeams = sqliteTable("support_teams", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("purple"),
+  // Lista de nomes em JSON, na ordem em que aparecem na tela.
+  members: text("members").notNull().default("[]"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const supportWeeks = sqliteTable("support_weeks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => supportTeams.id, { onDelete: "restrict" }),
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const auditLogs = sqliteTable("audit_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   actorUserId: text("actor_user_id"),

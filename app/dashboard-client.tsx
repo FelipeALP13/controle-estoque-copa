@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { passwordPolicyError } from "./auth-policy";
 import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
-import { nextSupportWeek, supportTeam, supportTeams, supportWeekForDate, supportWeeks, type SupportWeek } from "./support-schedule";
+import { addDays, findOverlappingWeek, generateRotation, nextSupportWeek, normalizeTeamMembers, supportTeamColorLabels, supportTeamColors, supportWeekForDate, weekRangeError, type SupportTeam, type SupportTeamColor, type SupportWeek } from "./support-schedule";
 import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
@@ -54,12 +54,13 @@ type MemberPermissions = {
   adjustStock: boolean;
   viewPlanning: boolean;
   viewHistory: boolean;
+  manageSchedule: boolean;
 };
 
 const permissionPresets: Record<MemberRole, MemberPermissions> = {
-  admin: { manageItems: true, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: true, viewPlanning: true, viewHistory: true },
-  member: { manageItems: false, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: false, viewPlanning: true, viewHistory: true },
-  viewer: { manageItems: false, registerPurchases: false, openItems: false, consumeItems: false, adjustStock: false, viewPlanning: true, viewHistory: true },
+  admin: { manageItems: true, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: true, viewPlanning: true, viewHistory: true, manageSchedule: true },
+  member: { manageItems: false, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: false, viewPlanning: true, viewHistory: true, manageSchedule: false },
+  viewer: { manageItems: false, registerPurchases: false, openItems: false, consumeItems: false, adjustStock: false, viewPlanning: true, viewHistory: true, manageSchedule: false },
 };
 
 const permissionOptions: { key: keyof MemberPermissions; label: string; description: string }[] = [
@@ -70,6 +71,7 @@ const permissionOptions: { key: keyof MemberPermissions; label: string; descript
   { key: "adjustStock", label: "Ajustar saldo", description: "Corrigir a contagem física" },
   { key: "viewPlanning", label: "Ver planejamento", description: "Consultar duração e previsão de compras" },
   { key: "viewHistory", label: "Ver histórico", description: "Consultar movimentações da equipe" },
+  { key: "manageSchedule", label: "Editar escala", description: "Alterar equipes e semanas de atendimento" },
 ];
 
 type Member = {
@@ -128,7 +130,12 @@ type ModalState =
   | { kind: "profile" }
   | { kind: "movement"; type: Movement["type"]; item?: Item }
   | { kind: "scanner" }
+  | { kind: "supportTeam"; team?: SupportTeam }
+  | { kind: "supportWeek"; week?: SupportWeek }
+  | { kind: "generateWeeks" }
   | null;
+
+type Schedule = { teams: SupportTeam[]; weeks: SupportWeek[] };
 
 const movementCopy = {
   purchase: { label: "Compra", icon: ShoppingCart, tone: "green" },
@@ -259,6 +266,7 @@ export default function Home() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [schedule, setSchedule] = useState<Schedule>({ teams: [], weeks: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -281,6 +289,7 @@ export default function Home() {
       setMovements(data.movements);
       setCurrentUser(data.currentUser);
       setMembers(data.members || []);
+      setSchedule(data.schedule || { teams: [], weeks: [] });
     } catch (err) {
       if (!silent) setError(err instanceof Error ? err.message : "Erro ao carregar dados.");
     } finally {
@@ -418,7 +427,7 @@ export default function Home() {
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "hub" ? <HubView items={items} movements={movements} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} /> : tab === "stock" ? (
+          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -488,22 +497,22 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView /> : tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
       {mobileMenu && <button className="backdrop menu-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
-      {modal && <Modal state={modal} items={items} currentUser={currentUser} saving={saving} onClose={() => { setModal(null); setError(""); }} onSubmit={submit} onScanItem={(item) => setModal({ kind: "movement", type: item.openedQty > 0 ? "consume" : "open", item })} />}
+      {modal && <Modal state={modal} items={items} schedule={schedule} currentUser={currentUser} saving={saving} onClose={() => { setModal(null); setError(""); }} onSubmit={submit} onScanItem={(item) => setModal({ kind: "movement", type: item.openedQty > 0 ? "consume" : "open", item })} />}
     </div>
   );
 }
 
-function HubView({ items, movements, currentUser, isAdmin, onOpen }: { items: Item[]; movements: Movement[]; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "team") => void }) {
+function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "team") => void }) {
   const today = isoDateInSaoPaulo();
-  const currentWeek = supportWeekForDate(today);
-  const nextWeek = nextSupportWeek(today);
+  const currentWeek = supportWeekForDate(schedule.weeks, today);
+  const nextWeek = nextSupportWeek(schedule.weeks, today);
   const featuredWeek = currentWeek ?? nextWeek;
-  const featuredTeam = featuredWeek ? supportTeam(featuredWeek.teamId) : null;
+  const featuredTeam = featuredWeek ? findTeam(schedule, featuredWeek.teamId) : null;
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
   const openItems = items.filter((item) => item.openedQty > 0);
   const firstName = currentUser?.name.split(/\s+/)[0] || "Equipe";
@@ -521,7 +530,7 @@ function HubView({ items, movements, currentUser, isAdmin, onOpen }: { items: It
         <div className="hub-module-metrics"><div><strong>{items.length}</strong><span>itens</span></div><div><strong>{openItems.length}</strong><span>em uso</span></div><div className={lowItems.length ? "attention" : ""}><strong>{lowItems.length}</strong><span>para repor</span></div></div>
         <button onClick={() => onOpen("stock")}>Abrir módulo de estoque <span>→</span></button>
       </article>
-      <article className={`hub-module-card schedule-module ${featuredTeam?.id ?? "purple"}`}>
+      <article className={`hub-module-card schedule-module ${featuredTeam?.color ?? "purple"}`}>
         <div className="hub-module-head"><span><CalendarClock /></span><div><small>MÓDULO</small><h2>Escala</h2></div></div>
         {featuredTeam && featuredWeek ? <><p>{currentWeek ? "Equipe responsável hoje" : "Próxima equipe programada"}</p><div className="hub-support-team"><strong>{featuredTeam.name}</strong><span>{featuredTeam.members.join(" · ")}</span><small>{weekLabel(featuredWeek)}</small></div></> : <p>Consulte as equipes e os próximos períodos de atendimento.</p>}
         <button onClick={() => onOpen("schedule")}>Abrir escala de atendimento <span>→</span></button>
@@ -555,50 +564,84 @@ function scheduleDate(value: string, options: Intl.DateTimeFormatOptions) {
   return new Intl.DateTimeFormat("pt-BR", { ...options, timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 }
 
-function weekLabel(week: SupportWeek) {
+function weekLabel(week: Pick<SupportWeek, "start" | "end">) {
   const start = scheduleDate(week.start, { day: "2-digit", month: "short" }).replaceAll(".", "");
   const end = scheduleDate(week.end, { day: "2-digit", month: "short" }).replaceAll(".", "");
   return `${start} a ${end}`;
 }
 
-function ScheduleView() {
+function findTeam(schedule: Schedule, teamId: number) {
+  return schedule.teams.find((team) => team.id === teamId) ?? null;
+}
+
+function scheduleRangeLabel(weeks: SupportWeek[]) {
+  if (!weeks.length) return "";
+  const first = weeks[0].start;
+  const last = weeks.at(-1)!.end;
+  const month = (value: string) => scheduleDate(value, { month: "short" }).replace(".", "").toLocaleUpperCase("pt-BR");
+  const firstYear = first.slice(0, 4);
+  const lastYear = last.slice(0, 4);
+  return firstYear === lastYear ? `${month(first)}–${month(last)} ${lastYear}` : `${month(first)} ${firstYear} – ${month(last)} ${lastYear}`;
+}
+
+function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNewWeek, onEditWeek, onGenerate }: { schedule: Schedule; loading: boolean; canEdit: boolean; onNewTeam: () => void; onEditTeam: (team: SupportTeam) => void; onNewWeek: () => void; onEditWeek: (week: SupportWeek) => void; onGenerate: () => void }) {
+  const [showPast, setShowPast] = useState(false);
+  if (loading) return <LoadingRows />;
   const today = isoDateInSaoPaulo();
-  const currentWeek = supportWeekForDate(today);
-  const nextWeek = nextSupportWeek(today);
-  const highlightedWeek = currentWeek ?? nextWeek ?? supportWeeks.at(-1)!;
-  const highlightedTeam = supportTeam(highlightedWeek.teamId);
+  const weeks = [...schedule.weeks].sort((a, b) => a.start.localeCompare(b.start));
+  const currentWeek = supportWeekForDate(weeks, today);
+  const nextWeek = nextSupportWeek(weeks, today);
+  const highlightedWeek = currentWeek ?? nextWeek ?? weeks.at(-1) ?? null;
+  const highlightedTeam = highlightedWeek ? findTeam(schedule, highlightedWeek.teamId) : null;
+  const pastWeeks = weeks.filter((week) => week.end < today);
+  const visibleWeeks = showPast ? weeks : weeks.filter((week) => week.end >= today);
 
   return (
     <>
-      <section className={`schedule-hero ${highlightedTeam.id}`}>
+      {canEdit && <div className="schedule-toolbar">
+        <div><strong>Edição da escala</strong><small>As mudanças aparecem para toda a equipe na hora.</small></div>
+        <div className="schedule-toolbar-actions">
+          <button className="secondary-button" onClick={onNewTeam}><UserPlus size={16} /> Nova equipe</button>
+          <button className="secondary-button" disabled={!schedule.teams.length} onClick={onGenerate}><Sparkles size={16} /> Gerar semanas</button>
+          <button className="primary-button" disabled={!schedule.teams.length} onClick={onNewWeek}><Plus size={16} /> Nova semana</button>
+        </div>
+      </div>}
+
+      {highlightedWeek && highlightedTeam ? <section className={`schedule-hero ${highlightedTeam.color}`}>
         <div className="schedule-hero-copy">
-          <p className="eyebrow">{currentWeek ? "ATENDIMENTO DE HOJE" : "PRÓXIMO ATENDIMENTO"}</p>
+          <p className="eyebrow">{currentWeek ? "ATENDIMENTO DE HOJE" : nextWeek ? "PRÓXIMO ATENDIMENTO" : "ÚLTIMO PERÍODO DA ESCALA"}</p>
           <h2>{highlightedTeam.name}</h2>
-          <p>{currentWeek ? `Responsável pela semana de ${weekLabel(highlightedWeek)}.` : `A próxima escala começa em ${scheduleDate(highlightedWeek.start, { weekday: "long", day: "2-digit", month: "long" })}.`}</p>
+          <p>{currentWeek ? `Responsável pela semana de ${weekLabel(highlightedWeek)}.` : nextWeek ? `A próxima escala começa em ${scheduleDate(highlightedWeek.start, { weekday: "long", day: "2-digit", month: "long" })}.` : `A escala cadastrada terminou em ${scheduleDate(highlightedWeek.end, { day: "2-digit", month: "long" })}. Cadastre as próximas semanas.`}</p>
+          {highlightedWeek.note && <p className="schedule-hero-note">{highlightedWeek.note}</p>}
           <div className="schedule-member-list">{highlightedTeam.members.map((member) => <span key={member}>{member}</span>)}</div>
         </div>
-        <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : "Próxima semana"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala 2026</span></div>
-      </section>
+        <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : nextWeek ? "Próxima semana" : "Último período"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala {highlightedWeek.start.slice(0, 4)}</span></div>
+      </section> : <div className="empty-state"><span><CalendarClock /></span><h3>Nenhuma semana cadastrada</h3><p>{canEdit ? (schedule.teams.length ? "Cadastre uma semana ou gere várias de uma vez com o rodízio das equipes." : "Comece criando as equipes de atendimento.") : "A escala ainda não foi preenchida. Fale com um administrador."}</p></div>}
 
-      <div className="schedule-teams">
-        {supportTeams.map((team) => <article key={team.id} className={`schedule-team-card ${team.id}`}>
-          <div><span className="schedule-team-dot" /><div><small>Time de atendimento</small><strong>{team.name}</strong></div></div>
+      {schedule.teams.length > 0 && <div className="schedule-teams">
+        {schedule.teams.map((team) => <article key={team.id} className={`schedule-team-card ${team.color}`}>
+          <div><span className="schedule-team-dot" /><div><small>Time de atendimento</small><strong>{team.name}</strong></div>{canEdit && <button className="schedule-edit-button" onClick={() => onEditTeam(team)} aria-label={`Editar ${team.name}`} title="Editar equipe"><Pencil size={14} /></button>}</div>
           <ul>{team.members.map((member) => <li key={member}>{member}</li>)}</ul>
         </article>)}
-      </div>
+      </div>}
 
-      <div className="section-heading schedule-title"><div><h2>Próximas semanas</h2><p>Escala migrada para o portal interno. Dias sem marcação na planilha permanecem sem atendimento.</p></div><span className="schedule-year">OUT–DEZ 2026</span></div>
-      <div className="schedule-weeks">
-        {supportWeeks.map((week) => {
-          const team = supportTeam(week.teamId);
-          const state = week === currentWeek ? "current" : week.end < today ? "past" : "upcoming";
-          return <article key={week.start} className={`schedule-week ${team.id} ${state}`}>
-            <div className="schedule-week-date"><small>{scheduleDate(week.start, { month: "short" }).replace(".", "")}</small><strong>{scheduleDate(week.start, { day: "2-digit" })}</strong></div>
-            <div><span>{state === "current" ? "Esta semana" : state === "past" ? "Concluída" : "Programada"}</span><h3>{team.name}</h3><p>{weekLabel(week)}</p></div>
-            <div className="schedule-week-members">{team.members.map((member) => <span key={member}>{member}</span>)}</div>
-          </article>;
-        })}
-      </div>
+      {weeks.length > 0 && <>
+        <div className="section-heading schedule-title"><div><h2>{showPast ? "Todas as semanas" : "Próximas semanas"}</h2><p>Dias fora dos períodos cadastrados ficam sem atendimento.</p></div><div className="schedule-title-actions">{pastWeeks.length > 0 && <button className="schedule-past-toggle" onClick={() => setShowPast((value) => !value)}>{showPast ? "Ocultar concluídas" : `Ver concluídas (${pastWeeks.length})`}</button>}<span className="schedule-year">{scheduleRangeLabel(weeks)}</span></div></div>
+        {visibleWeeks.length ? <div className="schedule-weeks">
+          {visibleWeeks.map((week) => {
+            const team = findTeam(schedule, week.teamId);
+            const state = week.id === currentWeek?.id ? "current" : week.end < today ? "past" : "upcoming";
+            return <article key={week.id} className={`schedule-week ${team?.color ?? "purple"} ${state}`}>
+              <div className="schedule-week-date"><small>{scheduleDate(week.start, { month: "short" }).replace(".", "")}</small><strong>{scheduleDate(week.start, { day: "2-digit" })}</strong></div>
+              <div><span>{state === "current" ? "Esta semana" : state === "past" ? "Concluída" : "Programada"}</span><h3>{team?.name ?? "Equipe removida"}</h3><p>{weekLabel(week)}{week.note ? ` · ${week.note}` : ""}</p></div>
+              <div className="schedule-week-side">
+                <div className="schedule-week-members">{team?.members.map((member) => <span key={member}>{member}</span>)}</div>
+                {canEdit && <button className="schedule-edit-button" onClick={() => onEditWeek(week)} aria-label={`Editar semana de ${weekLabel(week)}`} title="Editar semana"><Pencil size={14} /></button>}
+              </div>
+            </article>;
+          })}
+        </div> : <div className="empty-state compact"><CalendarClock /><h3>Nenhuma semana futura</h3><p>{canEdit ? "Use “Gerar semanas” para continuar o rodízio." : "As próximas semanas ainda não foram cadastradas."}</p></div>}
+      </>}
     </>
   );
 }
@@ -715,7 +758,54 @@ function HistoryView({ movements, loading }: { movements: Movement[]; loading: b
   );
 }
 
-function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanItem }: { state: NonNullable<ModalState>; items: Item[]; currentUser: CurrentUser | null; saving: boolean; onClose: () => void; onSubmit: (payload: Record<string, unknown>, success: string) => Promise<string | null>; onScanItem: (item: Item) => void }) {
+function nextMondayAfter(isoDate: string) {
+  const weekday = new Date(`${isoDate}T12:00:00Z`).getUTCDay();
+  return addDays(isoDate, ((8 - weekday) % 7) || 7);
+}
+
+/** Sugere o próximo período e a próxima equipe a partir do fim da escala atual. */
+function scheduleSuggestion(schedule: Schedule) {
+  const today = isoDateInSaoPaulo();
+  const last = [...schedule.weeks].sort((a, b) => a.start.localeCompare(b.start)).at(-1);
+  const base = last && last.end >= today ? last.end : addDays(today, -1);
+  const start = nextMondayAfter(base);
+  const lastTeamIndex = last ? schedule.teams.findIndex((team) => team.id === last.teamId) : -1;
+  const nextTeam = schedule.teams[(lastTeamIndex + 1) % Math.max(1, schedule.teams.length)];
+  return { start, end: addDays(start, 4), teamId: nextTeam?.id ?? 0 };
+}
+
+function SupportTeamFields({ name, setName, color, setColor, membersText, setMembersText }: { name: string; setName: (value: string) => void; color: SupportTeamColor; setColor: (value: SupportTeamColor) => void; membersText: string; setMembersText: (value: string) => void }) {
+  const preview = normalizeTeamMembers(membersText.split(/\n|,/));
+  return <>
+    <label className="full"><span>Nome da equipe</span><input autoFocus required maxLength={40} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Equipe Azul" /></label>
+    <div className="full team-color-field"><span className="field-label">Cor</span><div className="team-color-options">{supportTeamColors.map((option) => <button type="button" key={option} className={`team-color-swatch ${option} ${color === option ? "active" : ""}`} onClick={() => setColor(option)} aria-pressed={color === option}><i />{supportTeamColorLabels[option]}</button>)}</div></div>
+    <label className="full"><span>Integrantes</span><textarea required value={membersText} onChange={(event) => setMembersText(event.target.value)} placeholder={"Um nome por linha\nEx.: Ana Souza\nBruno Lima"} rows={5} /><small>{preview.length ? `${preview.length} ${preview.length === 1 ? "integrante" : "integrantes"}: ${preview.join(" · ")}` : "Escreva um nome por linha (ou separe por vírgula)."}</small></label>
+  </>;
+}
+
+function Modal({ state, items, schedule, currentUser, saving, onClose, onSubmit, onScanItem }: { state: NonNullable<ModalState>; items: Item[]; schedule: Schedule; currentUser: CurrentUser | null; saving: boolean; onClose: () => void; onSubmit: (payload: Record<string, unknown>, success: string) => Promise<string | null>; onScanItem: (item: Item) => void }) {
+  const editingTeam = state.kind === "supportTeam" ? state.team : undefined;
+  const editingWeek = state.kind === "supportWeek" ? state.week : undefined;
+  const suggestion = useMemo(() => scheduleSuggestion(schedule), [schedule]);
+  const [teamName, setTeamName] = useState(editingTeam?.name ?? "");
+  const [teamColor, setTeamColor] = useState<SupportTeamColor>(editingTeam?.color ?? supportTeamColors.find((color) => !schedule.teams.some((team) => team.color === color)) ?? "purple");
+  const [teamMembersText, setTeamMembersText] = useState(editingTeam?.members.join("\n") ?? "");
+  const [weekStart, setWeekStart] = useState(editingWeek?.start ?? suggestion.start);
+  const [weekEnd, setWeekEnd] = useState(editingWeek?.end ?? suggestion.end);
+  const [weekTeamId, setWeekTeamId] = useState(String(editingWeek?.teamId ?? suggestion.teamId));
+  const [weekNote, setWeekNote] = useState(editingWeek?.note ?? "");
+  const [generateStart, setGenerateStart] = useState(suggestion.start);
+  const [generateCount, setGenerateCount] = useState("8");
+  const [generateDays, setGenerateDays] = useState("5");
+  const [generateFirstTeam, setGenerateFirstTeam] = useState(String(suggestion.teamId));
+  const [generateTeamIds, setGenerateTeamIds] = useState<number[]>(schedule.teams.map((team) => team.id));
+  const rotationTeamIds = useMemo(() => {
+    const ordered = schedule.teams.map((team) => team.id).filter((id) => generateTeamIds.includes(id));
+    const firstIndex = Math.max(0, ordered.indexOf(Number(generateFirstTeam)));
+    return [...ordered.slice(firstIndex), ...ordered.slice(0, firstIndex)];
+  }, [schedule.teams, generateTeamIds, generateFirstTeam]);
+  const generatedPreview = useMemo(() => state.kind === "generateWeeks" ? generateRotation(generateStart, Number(generateCount), rotationTeamIds, Number(generateDays)).map((week) => ({ ...week, conflict: findOverlappingWeek(schedule.weeks, week) })) : [], [state.kind, generateStart, generateCount, generateDays, rotationTeamIds, schedule.weeks]);
+  const weekConflict = state.kind === "supportWeek" && !weekRangeError(weekStart, weekEnd) ? findOverlappingWeek(schedule.weeks, { start: weekStart, end: weekEnd }, editingWeek?.id) : null;
   const editing = state.kind === "item" ? state.item : undefined;
   const editingMember = state.kind === "member" ? state.member : undefined;
   const preselected = state.kind === "movement" ? state.item : undefined;
@@ -792,8 +882,8 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
     return () => { stopped = true; window.clearTimeout(timer); stream?.getTracks().forEach((track) => track.stop()); };
   }, [state.kind]);
 
-  const title = state.kind === "profile" ? "Meu perfil" : state.kind === "member" ? (editingMember ? "Editar membro" : "Adicionar membro") : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : state.kind === "scanner" ? "Ler código do item" : movementCopy[state.type].label;
-  const description = state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite os dados, a aparência e o código de leitura do item." : state.kind === "scanner" ? "Use a câmera ou digite o código para localizar rapidamente um produto." : {
+  const title = state.kind === "supportTeam" ? (editingTeam ? "Editar equipe" : "Nova equipe") : state.kind === "supportWeek" ? (editingWeek ? "Editar semana" : "Nova semana") : state.kind === "generateWeeks" ? "Gerar semanas" : state.kind === "profile" ? "Meu perfil" : state.kind === "member" ? (editingMember ? "Editar membro" : "Adicionar membro") : state.kind === "item" ? (editing ? "Editar item" : "Novo item") : state.kind === "scanner" ? "Ler código do item" : movementCopy[state.type].label;
+  const description = state.kind === "supportTeam" ? "Defina o nome, a cor e quem faz parte desta equipe de atendimento." : state.kind === "supportWeek" ? "Escolha o período e a equipe responsável pelo atendimento." : state.kind === "generateWeeks" ? "Crie várias semanas de uma vez, alternando as equipes na ordem escolhida." : state.kind === "profile" ? "Atualize seus dados de acesso e como você aparece nos registros." : state.kind === "member" ? (editingMember ? "Atualize os dados, redefina a senha e ajuste as permissões deste usuário." : "Crie o usuário, a senha inicial e escolha exatamente o que a pessoa poderá fazer.") : state.kind === "item" ? "Edite os dados, a aparência e o código de leitura do item." : state.kind === "scanner" ? "Use a câmera ou digite o código para localizar rapidamente um produto." : {
     purchase: "A quantidade comprada será adicionada ao estoque fechado.",
     open: "A quantidade sairá do estoque fechado e passará para aberto.",
     consume: "O consumo será descontado somente das embalagens abertas.",
@@ -811,6 +901,26 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
     try {
       setFormError("");
       setUploading(true);
+      if (state.kind === "supportTeam") {
+        const teamMembers = normalizeTeamMembers(teamMembersText.split(/\n|,/));
+        if (!teamMembers.length) throw new Error("Adicione pelo menos um integrante à equipe.");
+        const submissionError = await onSubmit({ action: "saveSupportTeam", teamId: editingTeam?.id, name: teamName, color: teamColor, members: teamMembers }, editingTeam ? "Equipe atualizada." : "Equipe criada.");
+        if (submissionError) throw new Error(submissionError);
+        return;
+      }
+      if (state.kind === "supportWeek") {
+        const rangeError = weekRangeError(weekStart, weekEnd);
+        if (rangeError) throw new Error(rangeError);
+        const submissionError = await onSubmit({ action: "saveSupportWeek", weekId: editingWeek?.id, start: weekStart, end: weekEnd, teamId: Number(weekTeamId), note: weekNote }, editingWeek ? "Semana atualizada." : "Semana adicionada à escala.");
+        if (submissionError) throw new Error(submissionError);
+        return;
+      }
+      if (state.kind === "generateWeeks") {
+        if (!rotationTeamIds.length) throw new Error("Escolha pelo menos uma equipe para o rodízio.");
+        const submissionError = await onSubmit({ action: "generateSupportWeeks", start: generateStart, count: Number(generateCount), daysPerWeek: Number(generateDays), teamIds: rotationTeamIds }, `${generatedPreview.length} semanas adicionadas à escala.`);
+        if (submissionError) throw new Error(submissionError);
+        return;
+      }
       if (state.kind === "scanner") {
         const found = items.find((item) => item.scanCode && item.scanCode.trim().toLocaleLowerCase("pt-BR") === scannerCode.trim().toLocaleLowerCase("pt-BR"));
         if (!found) throw new Error("Nenhum item cadastrado com este código.");
@@ -853,12 +963,39 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
     }
   }
 
+  async function handleScheduleDelete() {
+    const confirmation = editingTeam ? `Excluir a ${editingTeam.name}? Só é possível quando ela não tem semanas na escala.` : editingWeek ? `Excluir a semana de ${weekLabel(editingWeek)} da escala?` : "";
+    if (!confirmation || !window.confirm(confirmation)) return;
+    setFormError("");
+    const submissionError = editingTeam
+      ? await onSubmit({ action: "deleteSupportTeam", teamId: editingTeam.id }, "Equipe excluída.")
+      : await onSubmit({ action: "deleteSupportWeek", weekId: editingWeek!.id }, "Semana removida da escala.");
+    if (submissionError) setFormError(submissionError);
+  }
+
+  const isScheduleModal = state.kind === "supportTeam" || state.kind === "supportWeek" || state.kind === "generateWeeks";
+  const generateBlocked = state.kind === "generateWeeks" && (!generatedPreview.length || generatedPreview.some((week) => week.conflict));
+
   return (
     <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className={`modal ${state.kind === "member" ? "member-modal" : ""}`} onSubmit={handleSubmit}>
-      <div className="modal-head"><div><p className="eyebrow">{state.kind === "profile" ? "CONFIGURAÇÕES PESSOAIS" : state.kind === "member" ? "GESTÃO DE ACESSO" : state.kind === "item" ? "CADASTRO EDITÁVEL" : state.kind === "scanner" ? "LEITURA RÁPIDA" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
+      <div className="modal-head"><div><p className="eyebrow">{isScheduleModal ? "ESCALA DE ATENDIMENTO" : state.kind === "profile" ? "CONFIGURAÇÕES PESSOAIS" : state.kind === "member" ? "GESTÃO DE ACESSO" : state.kind === "item" ? "CADASTRO EDITÁVEL" : state.kind === "scanner" ? "LEITURA RÁPIDA" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
       {state.kind === "member" && <div className="member-tabs"><button type="button" className={memberTab === "general" ? "active" : ""} onClick={() => setMemberTab("general")}>Geral</button><button type="button" className={memberTab === "permissions" ? "active" : ""} onClick={() => setMemberTab("permissions")}>Permissões</button></div>}
       <div className="form-grid">
-        {state.kind === "profile" ? <>
+        {state.kind === "supportTeam" ? <SupportTeamFields name={teamName} setName={setTeamName} color={teamColor} setColor={setTeamColor} membersText={teamMembersText} setMembersText={setTeamMembersText} /> : state.kind === "supportWeek" ? <>
+          <label><span>Início</span><input type="date" required value={weekStart} onChange={(event) => { const value = event.target.value; setWeekStart(value); if (!editingWeek && value && (!weekEnd || weekEnd < value)) setWeekEnd(addDays(value, 4)); }} /></label>
+          <label><span>Fim</span><input type="date" required min={weekStart} value={weekEnd} onChange={(event) => setWeekEnd(event.target.value)} /></label>
+          <label className="full"><span>Equipe responsável</span><select required value={weekTeamId} onChange={(event) => setWeekTeamId(event.target.value)}>{schedule.teams.map((team) => <option key={team.id} value={team.id}>{team.name} — {team.members.join(", ")}</option>)}</select></label>
+          <label className="full"><span>Observação <em>opcional</em></span><input maxLength={140} value={weekNote} onChange={(event) => setWeekNote(event.target.value)} placeholder="Ex.: sem expediente na sexta (feriado)" /><small>Aparece junto do período para toda a equipe.</small></label>
+          {weekConflict && <p className="schedule-conflict full"><TriangleAlert size={15} /> Conflita com a semana de {weekLabel(weekConflict)}. Ajuste as datas antes de salvar.</p>}
+        </> : state.kind === "generateWeeks" ? <>
+          <label><span>Primeira semana começa em</span><input type="date" required value={generateStart} onChange={(event) => setGenerateStart(event.target.value)} /></label>
+          <label><span>Quantidade de semanas</span><input type="number" required min="1" max="52" value={generateCount} onChange={(event) => setGenerateCount(event.target.value)} /></label>
+          <label><span>Dias de atendimento por semana</span><select value={generateDays} onChange={(event) => setGenerateDays(event.target.value)}>{[1, 2, 3, 4, 5, 6, 7].map((days) => <option key={days} value={days}>{days} {days === 1 ? "dia" : "dias"}{days === 5 ? " (seg. a sex.)" : ""}</option>)}</select></label>
+          <label><span>Começar pela equipe</span><select value={generateFirstTeam} onChange={(event) => setGenerateFirstTeam(event.target.value)}>{schedule.teams.filter((team) => generateTeamIds.includes(team.id)).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+          <div className="full generate-teams"><span className="field-label">Equipes no rodízio</span><div>{schedule.teams.map((team) => <label key={team.id} className={`generate-team ${team.color}`}><input type="checkbox" checked={generateTeamIds.includes(team.id)} onChange={(event) => { const checked = event.target.checked; setGenerateTeamIds((current) => checked ? [...current, team.id] : current.filter((id) => id !== team.id)); if (!checked && Number(generateFirstTeam) === team.id) setGenerateFirstTeam(String(schedule.teams.find((other) => other.id !== team.id && generateTeamIds.includes(other.id))?.id ?? "")); }} /><i />{team.name}</label>)}</div></div>
+          <div className="full generate-preview"><span className="field-label">Prévia</span>{generatedPreview.length ? <ol>{generatedPreview.map((week) => { const team = findTeam(schedule, week.teamId); return <li key={week.start} className={week.conflict ? "conflict" : ""}><span className={`generate-dot ${team?.color ?? "purple"}`} /><strong>{weekLabel(week)}</strong><small>{team?.name}</small>{week.conflict && <em>conflita com {weekLabel(week.conflict)}</em>}</li>; })}</ol> : <small>Preencha os campos para ver as semanas.</small>}</div>
+          {generateBlocked && generatedPreview.length > 0 && <p className="schedule-conflict full"><TriangleAlert size={15} /> Algumas semanas conflitam com a escala atual. Mude a data inicial ou a quantidade.</p>}
+        </> : state.kind === "profile" ? <>
           <VisualEditor label={state.kind === "profile" ? "Sua imagem" : "Imagem do membro"} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
@@ -904,7 +1041,7 @@ function Modal({ state, items, currentUser, saving, onClose, onSubmit, onScanIte
         </>}
       </div>
       {formError && <p className="modal-error">{formError}</p>}
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || uploading || (state.kind === "movement" && !itemId) || (state.kind === "scanner" && !scannerCode)}>{saving || uploading ? "Salvando..." : state.kind === "profile" ? "Salvar perfil" : state.kind === "member" ? (editingMember ? "Salvar membro" : "Adicionar membro") : state.kind === "scanner" ? "Usar este item" : "Confirmar"}</button></div>
+      <div className="modal-actions">{(editingTeam || editingWeek) && <button type="button" className="secondary-button modal-delete" disabled={saving} onClick={handleScheduleDelete}><Trash2 size={15} /> Excluir</button>}<button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || uploading || (state.kind === "movement" && !itemId) || (state.kind === "scanner" && !scannerCode) || Boolean(weekConflict) || generateBlocked}>{saving || uploading ? "Salvando..." : state.kind === "supportTeam" ? (editingTeam ? "Salvar equipe" : "Criar equipe") : state.kind === "supportWeek" ? (editingWeek ? "Salvar semana" : "Adicionar semana") : state.kind === "generateWeeks" ? `Gerar ${generatedPreview.length || ""} semanas` : state.kind === "profile" ? "Salvar perfil" : state.kind === "member" ? (editingMember ? "Salvar membro" : "Adicionar membro") : state.kind === "scanner" ? "Usar este item" : "Confirmar"}</button></div>
     </form></div>
   );
 }

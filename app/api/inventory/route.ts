@@ -2,10 +2,11 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 import { createSession, getSessionMember, hashPassword, normalizeUsername, passwordPolicyError, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
-import { inventoryLocks, items, members, movements, openBatches, sessions } from "../../../db/schema";
+import { inventoryLocks, items, members, movements, openBatches, sessions, supportTeams, supportWeeks } from "../../../db/schema";
 import { writeAudit } from "../../audit";
 import { movementOccursBeforeOpening, parseMovementDate } from "../../movement-policy";
 import { hasTrustedOrigin } from "../../request-security";
+import { findOverlappingWeek, generateRotation, isIsoDate, isSupportTeamColor, normalizeTeamMembers, parseTeamMembers, weekRangeError } from "../../support-schedule";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 type MemberRole = "admin" | "member" | "viewer";
@@ -17,6 +18,7 @@ type MemberPermissions = {
   adjustStock: boolean;
   viewPlanning: boolean;
   viewHistory: boolean;
+  manageSchedule: boolean;
 };
 
 const allPermissions: MemberPermissions = {
@@ -27,6 +29,7 @@ const allPermissions: MemberPermissions = {
   adjustStock: true,
   viewPlanning: true,
   viewHistory: true,
+  manageSchedule: true,
 };
 
 const memberPermissions: MemberPermissions = {
@@ -37,6 +40,7 @@ const memberPermissions: MemberPermissions = {
   adjustStock: false,
   viewPlanning: true,
   viewHistory: true,
+  manageSchedule: false,
 };
 
 const viewerPermissions: MemberPermissions = {
@@ -47,7 +51,37 @@ const viewerPermissions: MemberPermissions = {
   adjustStock: false,
   viewPlanning: true,
   viewHistory: true,
+  manageSchedule: false,
 };
+
+type Db = ReturnType<typeof getDb>;
+
+async function loadSchedule(db: Db) {
+  try {
+    const [teamRows, weekRows] = await Promise.all([
+      db.select().from(supportTeams).orderBy(asc(supportTeams.id)),
+      db.select().from(supportWeeks).orderBy(asc(supportWeeks.startDate), asc(supportWeeks.id)),
+    ]);
+    return {
+      teams: teamRows.map((team) => ({ id: team.id, name: team.name, color: isSupportTeamColor(team.color) ? team.color : "purple", members: parseTeamMembers(team.members) })),
+      weeks: weekRows.map((week) => ({ id: week.id, start: week.startDate, end: week.endDate, teamId: week.teamId, note: week.note })),
+    };
+  } catch (error) {
+    // Sem a migração aplicada o restante do sistema continua funcionando.
+    console.error("schedule load failed", error);
+    return { teams: [], weeks: [] };
+  }
+}
+
+async function scheduleWeekRows(db: Db) {
+  const rows = await db.select({ id: supportWeeks.id, start: supportWeeks.startDate, end: supportWeeks.endDate }).from(supportWeeks);
+  return rows;
+}
+
+function dateLabel(isoDate: string) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
 
 function resolvePermissions(role: MemberRole, value: unknown): MemberPermissions {
   if (role === "admin") return allPermissions;
@@ -129,7 +163,7 @@ export async function GET() {
     const db = getDb();
     const currentMember = await requireMember(db);
     if (!currentMember.active) return Response.json({ error: "Seu acesso ao sistema está desativado. Fale com um administrador." }, { status: 403 });
-    const [itemRows, movementRows, batchRows, memberRows] = await Promise.all([
+    const [itemRows, movementRows, batchRows, memberRows, schedule] = await Promise.all([
       db.select().from(items).orderBy(items.name),
       db
         .select({
@@ -151,6 +185,7 @@ export async function GET() {
       canManage(currentMember.role)
         ? db.select({ id: members.id, userId: members.userId, name: members.name, email: members.email, username: members.username, role: members.role, permissions: members.permissions, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, createdAt: members.createdAt }).from(members).orderBy(members.name)
         : Promise.resolve([]),
+      loadSchedule(db),
     ]);
 
     const now = Date.now();
@@ -195,6 +230,7 @@ export async function GET() {
       movements: currentPermissions.viewHistory ? movementRows : [],
       currentUser: { userId: currentMember.userId, name: currentMember.name, email: currentMember.email, username: currentMember.username, role: currentMember.role, permissions: currentPermissions, active: currentMember.active, avatarIcon: currentMember.avatarIcon, avatarKey: currentMember.avatarKey },
       members: visibleMembers,
+      schedule,
     });
   } catch (error) {
     console.error("inventory load failed", error);
@@ -335,6 +371,91 @@ export async function POST(request: Request) {
       await removeMedia(target.avatarKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_deleted", targetType: "member", targetId: target.id, details: `${target.name} (${target.username || target.email})` });
       return Response.json({ ok: true });
+    }
+
+    if (["saveSupportTeam", "deleteSupportTeam", "saveSupportWeek", "deleteSupportWeek", "generateSupportWeeks"].includes(action) && !hasPermission(currentMember, "manageSchedule")) {
+      return Response.json({ error: "Você não tem permissão para editar a escala." }, { status: 403 });
+    }
+
+    if (action === "saveSupportTeam") {
+      const teamId = number(body.teamId);
+      const name = String(body.name ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
+      const color = String(body.color ?? "purple");
+      const teamMembers = normalizeTeamMembers(Array.isArray(body.members) ? body.members : []);
+      if (!name) return Response.json({ error: "Informe o nome da equipe." }, { status: 400 });
+      if (!isSupportTeamColor(color)) return Response.json({ error: "Escolha uma cor válida para a equipe." }, { status: 400 });
+      if (teamMembers.length === 0) return Response.json({ error: "Adicione pelo menos um integrante à equipe." }, { status: 400 });
+      if (teamMembers.length > 20) return Response.json({ error: "Uma equipe pode ter no máximo 20 integrantes." }, { status: 400 });
+      const values = { name, color, members: JSON.stringify(teamMembers) };
+      const [team] = teamId
+        ? await db.update(supportTeams).set(values).where(eq(supportTeams.id, teamId)).returning()
+        : await db.insert(supportTeams).values(values).returning();
+      if (!team) return Response.json({ error: "Equipe não encontrada." }, { status: 404 });
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: teamId ? "support_team_updated" : "support_team_created", targetType: "support_team", targetId: team.id, details: `${name}: ${teamMembers.join(", ")}` });
+      return Response.json({ team }, { status: teamId ? 200 : 201 });
+    }
+
+    if (action === "deleteSupportTeam") {
+      const teamId = number(body.teamId);
+      if (!teamId) return Response.json({ error: "Equipe inválida." }, { status: 400 });
+      const [inUse] = await db.select({ id: supportWeeks.id }).from(supportWeeks).where(eq(supportWeeks.teamId, teamId)).limit(1);
+      if (inUse) return Response.json({ error: "Esta equipe ainda tem semanas na escala. Exclua ou troque a equipe dessas semanas antes." }, { status: 409 });
+      const [deleted] = await db.delete(supportTeams).where(eq(supportTeams.id, teamId)).returning();
+      if (!deleted) return Response.json({ error: "Equipe não encontrada." }, { status: 404 });
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "support_team_deleted", targetType: "support_team", targetId: deleted.id, details: deleted.name });
+      return Response.json({ ok: true });
+    }
+
+    if (action === "saveSupportWeek") {
+      const weekId = number(body.weekId);
+      const start = String(body.start ?? "");
+      const end = String(body.end ?? "");
+      const teamId = number(body.teamId);
+      const note = String(body.note ?? "").trim().slice(0, 140);
+      const rangeError = weekRangeError(start, end);
+      if (rangeError) return Response.json({ error: rangeError }, { status: 400 });
+      const [team] = await db.select({ id: supportTeams.id, name: supportTeams.name }).from(supportTeams).where(eq(supportTeams.id, teamId)).limit(1);
+      if (!team) return Response.json({ error: "Escolha uma equipe válida." }, { status: 400 });
+      const conflict = findOverlappingWeek(await scheduleWeekRows(db), { start, end }, weekId || undefined);
+      if (conflict) return Response.json({ error: `Este período conflita com a semana de ${dateLabel(conflict.start)} a ${dateLabel(conflict.end)}.` }, { status: 409 });
+      const values = { startDate: start, endDate: end, teamId, note };
+      const [week] = weekId
+        ? await db.update(supportWeeks).set(values).where(eq(supportWeeks.id, weekId)).returning()
+        : await db.insert(supportWeeks).values(values).returning();
+      if (!week) return Response.json({ error: "Semana não encontrada." }, { status: 404 });
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: weekId ? "support_week_updated" : "support_week_created", targetType: "support_week", targetId: week.id, details: `${dateLabel(start)} a ${dateLabel(end)} · ${team.name}` });
+      return Response.json({ week }, { status: weekId ? 200 : 201 });
+    }
+
+    if (action === "deleteSupportWeek") {
+      const weekId = number(body.weekId);
+      if (!weekId) return Response.json({ error: "Semana inválida." }, { status: 400 });
+      const [deleted] = await db.delete(supportWeeks).where(eq(supportWeeks.id, weekId)).returning();
+      if (!deleted) return Response.json({ error: "Semana não encontrada." }, { status: 404 });
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "support_week_deleted", targetType: "support_week", targetId: deleted.id, details: `${dateLabel(deleted.startDate)} a ${dateLabel(deleted.endDate)}` });
+      return Response.json({ ok: true });
+    }
+
+    if (action === "generateSupportWeeks") {
+      const start = String(body.start ?? "");
+      const count = Math.round(number(body.count));
+      const daysPerWeek = Math.round(number(body.daysPerWeek, 5));
+      const teamIds = Array.isArray(body.teamIds) ? body.teamIds.map((value) => number(value)).filter((value) => value > 0) : [];
+      if (!isIsoDate(start)) return Response.json({ error: "Informe a data da primeira semana." }, { status: 400 });
+      if (count < 1 || count > 52) return Response.json({ error: "Gere entre 1 e 52 semanas por vez." }, { status: 400 });
+      if (daysPerWeek < 1 || daysPerWeek > 7) return Response.json({ error: "Cada semana deve ter de 1 a 7 dias." }, { status: 400 });
+      if (teamIds.length === 0) return Response.json({ error: "Escolha pelo menos uma equipe para o rodízio." }, { status: 400 });
+      const existingTeams = await db.select({ id: supportTeams.id }).from(supportTeams);
+      if (teamIds.some((teamId) => !existingTeams.some((team) => team.id === teamId))) return Response.json({ error: "Uma das equipes escolhidas não existe mais." }, { status: 400 });
+      const planned = generateRotation(start, count, teamIds, daysPerWeek);
+      const existingWeeks = await scheduleWeekRows(db);
+      for (const week of planned) {
+        const conflict = findOverlappingWeek(existingWeeks, week);
+        if (conflict) return Response.json({ error: `A semana de ${dateLabel(week.start)} conflita com a já cadastrada de ${dateLabel(conflict.start)} a ${dateLabel(conflict.end)}. Escolha outra data inicial ou exclua a semana existente.` }, { status: 409 });
+      }
+      await db.insert(supportWeeks).values(planned.map((week) => ({ startDate: week.start, endDate: week.end, teamId: week.teamId })));
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "support_weeks_generated", targetType: "support_week", details: `${planned.length} semanas a partir de ${dateLabel(start)}` });
+      return Response.json({ created: planned.length }, { status: 201 });
     }
 
     if (action === "addItem") {
