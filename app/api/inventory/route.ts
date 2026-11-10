@@ -6,53 +6,10 @@ import { inventoryLocks, items, members, movements, openBatches, sessions, suppo
 import { writeAudit } from "../../audit";
 import { movementOccursBeforeOpening, parseMovementDate } from "../../movement-policy";
 import { hasTrustedOrigin } from "../../request-security";
+import { hasPermission, resolvePermissions, type MemberPermissions, type MemberRole } from "../../member-permissions";
 import { findOverlappingWeek, generateRotation, isIsoDate, isSupportTeamColor, normalizeTeamMembers, parseTeamMembers, weekRangeError } from "../../support-schedule";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
-type MemberRole = "admin" | "member" | "viewer";
-type MemberPermissions = {
-  manageItems: boolean;
-  registerPurchases: boolean;
-  openItems: boolean;
-  consumeItems: boolean;
-  adjustStock: boolean;
-  viewPlanning: boolean;
-  viewHistory: boolean;
-  manageSchedule: boolean;
-};
-
-const allPermissions: MemberPermissions = {
-  manageItems: true,
-  registerPurchases: true,
-  openItems: true,
-  consumeItems: true,
-  adjustStock: true,
-  viewPlanning: true,
-  viewHistory: true,
-  manageSchedule: true,
-};
-
-const memberPermissions: MemberPermissions = {
-  manageItems: false,
-  registerPurchases: true,
-  openItems: true,
-  consumeItems: true,
-  adjustStock: false,
-  viewPlanning: true,
-  viewHistory: true,
-  manageSchedule: false,
-};
-
-const viewerPermissions: MemberPermissions = {
-  manageItems: false,
-  registerPurchases: false,
-  openItems: false,
-  consumeItems: false,
-  adjustStock: false,
-  viewPlanning: true,
-  viewHistory: true,
-  manageSchedule: false,
-};
 
 type Db = ReturnType<typeof getDb>;
 
@@ -83,24 +40,8 @@ function dateLabel(isoDate: string) {
   return `${day}/${month}/${year}`;
 }
 
-function resolvePermissions(role: MemberRole, value: unknown): MemberPermissions {
-  if (role === "admin") return allPermissions;
-  const fallback = role === "viewer" ? viewerPermissions : memberPermissions;
-  let parsed: Record<string, unknown> = {};
-  try {
-    parsed = typeof value === "string" ? JSON.parse(value) : value && typeof value === "object" ? value as Record<string, unknown> : {};
-  } catch {
-    parsed = {};
-  }
-  return Object.fromEntries(Object.entries(fallback).map(([key, defaultValue]) => [key, typeof parsed[key] === "boolean" ? parsed[key] : defaultValue])) as MemberPermissions;
-}
-
 function permissionJson(role: MemberRole, value: unknown) {
   return JSON.stringify(resolvePermissions(role, value));
-}
-
-function hasPermission(member: { role: MemberRole; permissions?: string }, permission: keyof MemberPermissions) {
-  return resolvePermissions(member.role, member.permissions)[permission];
 }
 
 async function requireMember(db: ReturnType<typeof getDb>) {
