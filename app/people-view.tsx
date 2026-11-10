@@ -112,7 +112,7 @@ export default function PeopleView() {
             <div className="team-roster">{roster.length ? roster.map((row) => <span key={row.memberId} className="team-roster-person" title={`${row.person!.name}${row.isLead ? " (líder)" : ""}`}><Avatar member={row.person} size={26} />{row.isLead && <i className="lead-dot" />}</span>) : <span className="person-noteam">{data.me.isAdmin ? "Edite o time para adicionar pessoas." : "Ninguém neste time ainda."}</span>}</div>
           </article>;
         })}
-      </div> : <div className="empty-state"><span><Users /></span><h3>Nenhum time cadastrado</h3><p>{data.me.isAdmin ? "Crie os times da empresa para organizar pessoas, tarefas e chamados." : "Os administradores ainda não cadastraram os times."}</p></div>
+      </div> : <div className="empty-state"><span><Users /></span><h3>Nenhum time cadastrado</h3><p>{data.me.isAdmin ? "Crie os times da empresa para organizar pessoas, demandas e chamados." : "Os administradores ainda não cadastraram os times."}</p></div>
     )}
 
     {editingPerson && <PersonModal person={editingPerson} teams={data.teams} isAdmin={data.me.isAdmin} currentTeamIds={teamsOf(editingPerson.id).map(({ team }) => team.id)} onClose={() => setEditingPerson(null)} onSaved={async () => { setEditingPerson(null); await load(); }} />}
@@ -179,7 +179,7 @@ function TeamModal({ team, people, onClose, onSaved }: { team: Team | null; peop
   }
 
   async function remove() {
-    if (!team || !window.confirm(`Excluir o time ${team.name}? As pessoas continuam no sistema, e as tarefas deste time ficam sem time.`)) return;
+    if (!team || !window.confirm(`Excluir o time ${team.name}? As pessoas continuam no sistema, e as demandas deste time ficam sem time.`)) return;
     try { await post({ action: "deleteTeam", teamId: team.id }); onSaved(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível excluir."); }
   }
 

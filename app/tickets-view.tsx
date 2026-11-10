@@ -273,7 +273,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
   const createTask = () => run(async () => {
     const result = await post({ action: "createTask", ticketId: ticket.id });
     await onReload();
-    if (result.task && window.confirm(`Tarefa ${taskCode(result.task.id)} criada. Abrir agora?`)) onOpenTask(result.task.id);
+    if (result.task && window.confirm(`Demanda ${taskCode(result.task.id)} criada. Abrir agora?`)) onOpenTask(result.task.id);
   });
 
   const removeComment = (eventId: number) => run(async () => {
@@ -309,7 +309,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
           <div className="ticket-actions">
             {handler && isActiveTicket(ticket.status) && ticket.assigneeId !== me.id && <button className="primary-button" disabled={busy} onClick={() => run(() => onUpdate({ assigneeId: me.id, ...(ticket.status === "open" ? { status: "in_progress" } : {}) }))}><Hand size={15} /> Assumir</button>}
             {handler && isActiveTicket(ticket.status) && <button className="secondary-button" disabled={busy} onClick={() => run(() => onUpdate({ status: "resolved" }))}><CircleCheck size={15} /> Resolver</button>}
-            {handler && !ticket.taskId && <button className="secondary-button" disabled={busy} onClick={createTask}><ListTodo size={15} /> Criar tarefa</button>}
+            {handler && !ticket.taskId && <button className="secondary-button" disabled={busy} onClick={createTask}><ListTodo size={15} /> Criar demanda</button>}
             {ticket.taskId && <button className="secondary-button" onClick={() => onOpenTask(ticket.taskId!)}><ListTodo size={15} /> Ver {taskCode(ticket.taskId)}</button>}
             {!handler && isRequester && isActiveTicket(ticket.status) && <button className="secondary-button modal-delete" disabled={busy} onClick={() => run(() => onUpdate({ status: "canceled" }))}><X size={15} /> Cancelar chamado</button>}
             {isRequester && ticket.status === "resolved" && <button className="secondary-button" disabled={busy} onClick={() => run(() => onUpdate({ status: "open" }))}><RotateCcw size={15} /> Reabrir</button>}

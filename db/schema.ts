@@ -135,16 +135,61 @@ export const supportWeeks = sqliteTable("support_weeks", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const clients = sqliteTable("clients", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const projects = sqliteTable("projects", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("todo"),
+  farol: text("farol", { enum: ["red", "yellow", "blue", "green"] }).notNull().default("blue"),
+  phase: text("phase", { enum: ["planning", "execution", "validation", "paused", "closing"] }).notNull().default("planning"),
+  deadlineLabel: text("deadline_label").notNull().default(""),
+  startDate: text("start_date"),
+  endForecast: text("end_forecast").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  legacyKey: text("legacy_key").unique(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const projectPeople = sqliteTable("project_people", {
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.projectId, table.memberId] })]);
+
 export const tasks = sqliteTable("tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
-  status: text("status", { enum: ["backlog", "todo", "in_progress", "in_review", "done", "canceled"] }).notNull().default("todo"),
-  // 0 sem prioridade, 1 urgente, 2 alta, 3 média, 4 baixa (mesma escala do Linear).
+  status: text("status", { enum: ["backlog", "todo", "in_progress", "in_review", "waiting", "blocked", "paused", "done", "canceled"] }).notNull().default("todo"),
+  // 0 sem prioridade, 1 crítica, 2 alta, 3 média, 4 baixa.
   priority: integer("priority").notNull().default(0),
+  // Primeiro responsável; a lista completa fica em task_people.
   assigneeId: integer("assignee_id").references(() => members.id, { onDelete: "set null" }),
   teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  category: text("category").notNull().default(""),
+  openedOn: text("opened_on"),
+  startDate: text("start_date"),
   dueDate: text("due_date"),
+  completedOn: text("completed_on"),
+  estimatedHours: real("estimated_hours"),
+  workedHours: real("worked_hours"),
+  hoursFlag: integer("hours_flag", { mode: "boolean" }).notNull().default(false),
+  origin: text("origin").notNull().default(""),
+  notes: text("notes").notNull().default(""),
   sortOrder: real("sort_order").notNull().default(0),
   createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
   createdByName: text("created_by_name").notNull().default("Equipe"),
@@ -153,12 +198,31 @@ export const tasks = sqliteTable("tasks", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+/** Responsáveis da demanda: "owner" (time que executa) e "support" (Resp. Suporte). */
+export const taskPeople = sqliteTable("task_people", {
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["owner", "support"] }).notNull().default("owner"),
+}, (table) => [primaryKey({ columns: [table.taskId, table.memberId, table.role] })]);
+
+/** Códigos das planilhas antigas (AS-0019, JG-0001...), para busca e para não importar duas vezes. */
+export const taskLegacyCodes = sqliteTable("task_legacy_codes", {
+  code: text("code").primaryKey(),
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+});
+
 export const taskEvents = sqliteTable("task_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   taskId: integer("task_id")
     .notNull()
     .references(() => tasks.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["comment", "created", "status", "priority", "assignee", "due_date", "title", "team"] }).notNull(),
+  kind: text("kind", { enum: ["comment", "created", "status", "priority", "assignee", "due_date", "title", "team", "people", "client", "category", "imported"] }).notNull(),
   body: text("body").notNull().default(""),
   actorId: integer("actor_id").references(() => members.id, { onDelete: "set null" }),
   actorName: text("actor_name").notNull().default("Equipe"),

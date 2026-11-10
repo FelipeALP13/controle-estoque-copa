@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, min } from "drizzle-orm";
+import { and, asc, desc, eq, min, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { members, notifications, taskEvents, tasks, teamMembers, teams, ticketEvents, tickets } from "../../../db/schema";
+import { clients, members, notifications, taskEvents, taskPeople, tasks, teamMembers, teams, ticketEvents, tickets } from "../../../db/schema";
 import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { asTicketKind, commentRecipients, findMentions, snippet, type NotificationKind } from "../../notifications";
@@ -230,8 +230,8 @@ export async function POST(request: Request) {
 
     if (action === "createTask") {
       if (!current) return json({ error: "Chamado não encontrado." }, 404);
-      if (!canHandleTicket(viewer, current.teamId)) return json({ error: "Somente o time responsável pode criar a tarefa." }, 403);
-      if (current.taskId) return json({ error: `Este chamado já virou a tarefa ${taskCode(current.taskId)}.` }, 409);
+      if (!canHandleTicket(viewer, current.teamId)) return json({ error: "Somente o time responsável pode criar a demanda." }, 403);
+      if (current.taskId) return json({ error: `Este chamado já virou a demanda ${taskCode(current.taskId)}.` }, 409);
       const [top] = await db.select({ value: min(tasks.sortOrder) }).from(tasks).where(eq(tasks.status, "todo"));
       const description = [current.description, `Origem: chamado ${ticketCode(current.id)}, aberto por ${current.requesterName}${current.client ? ` (cliente: ${current.client})` : ""}.`].filter(Boolean).join("\n\n");
       const [task] = await db.insert(tasks).values({
@@ -247,6 +247,11 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       }).returning();
+      if (task.assigneeId) await db.insert(taskPeople).values({ taskId: task.id, memberId: task.assigneeId, role: "owner" });
+      // Cliente e categoria da demanda a partir do chamado, quando houver correspondência.
+      const [client] = current.client ? await db.select({ id: clients.id }).from(clients).where(sql`lower(${clients.name}) = lower(${current.client})`).limit(1) : [];
+      const category = { bug: "Bug", question: "Atendimento", improvement: "Melhoria", access: "Solicitação", other: "" }[current.type];
+      await db.update(tasks).set({ clientId: client?.id ?? null, category, openedOn: now.slice(0, 10), origin: ticketCode(current.id) }).where(eq(tasks.id, task.id));
       await db.insert(taskEvents).values({ taskId: task.id, kind: "created", ...actor, createdAt: now });
       await db.update(tickets).set({ taskId: task.id, updatedAt: now, ...(current.firstResponseAt ? {} : { firstResponseAt: now }) }).where(eq(tickets.id, ticketId));
       await db.insert(ticketEvents).values({ ticketId, kind: "task", body: taskCode(task.id), ...actor, createdAt: now });

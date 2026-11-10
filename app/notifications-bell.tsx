@@ -102,7 +102,7 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket }: { onOpen
         </section>}
         <section>
           {data.due.length > 0 && <h4>Atividade</h4>}
-          {data.items.length === 0 ? <p className="bell-empty">Nenhum aviso por enquanto. Você será avisado sobre tarefas e chamados: atribuições, comentários, menções e chamados novos para o seu time.</p> : data.items.map((item) => {
+          {data.items.length === 0 ? <p className="bell-empty">Nenhum aviso por enquanto. Você será avisado sobre demandas e chamados: atribuições, comentários, menções e chamados novos para o seu time.</p> : data.items.map((item) => {
             const Icon = kindIcon[item.kind];
             return <button key={item.id} className={`bell-item ${item.readAt ? "" : "unread"}`} onClick={() => openItem(item)}>
               <span className={`bell-icon ${item.kind}`}><Icon size={14} /></span>

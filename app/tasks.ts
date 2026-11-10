@@ -1,33 +1,40 @@
-export const taskStatuses = ["backlog", "todo", "in_progress", "in_review", "done", "canceled"] as const;
+// Mesmos status das planilhas de demandas, na ordem do fluxo, mais "Cancelado".
+export const taskStatuses = ["backlog", "todo", "in_progress", "in_review", "waiting", "blocked", "paused", "done", "canceled"] as const;
 export type TaskStatus = (typeof taskStatuses)[number];
 
 export const taskStatusLabels: Record<TaskStatus, string> = {
   backlog: "Backlog",
-  todo: "A fazer",
-  in_progress: "Em andamento",
-  in_review: "Em revisão",
-  done: "Concluída",
-  canceled: "Cancelada",
+  todo: "A Fazer",
+  in_progress: "Fazendo",
+  in_review: "Em Validação",
+  waiting: "Aguardando Resposta",
+  blocked: "Bloqueado",
+  paused: "Pausado",
+  done: "Concluído",
+  canceled: "Cancelado",
 };
 
-/** Ordem de exibição: 1 urgente … 4 baixa, e 0 (sem prioridade) por último. */
+/** Ordem de exibição: 1 crítica … 4 baixa, e 0 (sem prioridade) por último. */
 export const taskPriorities = [1, 2, 3, 4, 0] as const;
 export type TaskPriority = (typeof taskPriorities)[number];
 
 export const taskPriorityLabels: Record<TaskPriority, string> = {
   0: "Sem prioridade",
-  1: "Urgente",
+  1: "Crítica",
   2: "Alta",
   3: "Média",
   4: "Baixa",
 };
 
-export const TASK_CODE_PREFIX = "TAR";
+/** Categorias das planilhas de Suporte e Desenvolvimento (lista unificada). */
+export const taskCategories = ["Atendimento", "Incidente", "Solicitação", "Bug", "Desenvolvimento", "Melhoria", "Análise", "Homologação", "Deploy", "Reunião", "Rotina interna", "Suporte", "Treinamento"] as const;
+
+export const TASK_CODE_PREFIX = "DEM";
 export const MAX_TITLE_LENGTH = 160;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 export const MAX_COMMENT_LENGTH = 4000;
 
-export type TaskEventKind = "comment" | "created" | "status" | "priority" | "assignee" | "due_date" | "title" | "team";
+export type TaskEventKind = "comment" | "created" | "status" | "priority" | "assignee" | "due_date" | "title" | "team" | "people" | "client" | "category" | "imported";
 
 export function taskCode(id: number) {
   return `${TASK_CODE_PREFIX}-${id}`;
@@ -89,7 +96,11 @@ function shortDate(isoDate: string) {
 
 /** Texto do histórico para uma mudança registrada em task_events. */
 export function describeTaskEvent(kind: TaskEventKind, body: string) {
-  if (kind === "created") return "criou a tarefa";
+  if (kind === "created") return "criou a demanda";
+  if (kind === "imported") return `importou da planilha (${body})`;
+  if (kind === "people") return body ? `definiu os responsáveis: ${body}` : "removeu os responsáveis";
+  if (kind === "client") return body ? `mudou o cliente/projeto para ${body}` : "removeu o cliente/projeto";
+  if (kind === "category") return body ? `mudou a categoria para ${body}` : "removeu a categoria";
   if (kind === "status") return `mudou o status para ${isTaskStatus(body) ? taskStatusLabels[body] : body}`;
   if (kind === "priority") {
     const priority = Number(body);

@@ -3,7 +3,7 @@ import test from "node:test";
 import { cleanMultiline, cleanTitle, describeTaskEvent, dueState, isTaskPriority, isTaskStatus, parseDueDate, sortOrderBetween, taskCode } from "../app/tasks.ts";
 
 test("gera o código da tarefa", () => {
-  assert.equal(taskCode(12), "TAR-12");
+  assert.equal(taskCode(12), "DEM-12");
 });
 
 test("valida status e prioridade", () => {
@@ -42,8 +42,8 @@ test("classifica o prazo em relação a hoje", () => {
 });
 
 test("descreve as mudanças no histórico", () => {
-  assert.equal(describeTaskEvent("status", "in_progress"), "mudou o status para Em andamento");
-  assert.equal(describeTaskEvent("priority", "1"), "definiu a prioridade como Urgente");
+  assert.equal(describeTaskEvent("status", "in_progress"), "mudou o status para Fazendo");
+  assert.equal(describeTaskEvent("priority", "1"), "definiu a prioridade como Crítica");
   assert.equal(describeTaskEvent("priority", "0"), "removeu a prioridade");
   assert.equal(describeTaskEvent("assignee", "Caio Viana"), "atribuiu a Caio Viana");
   assert.equal(describeTaskEvent("assignee", ""), "removeu o responsável");

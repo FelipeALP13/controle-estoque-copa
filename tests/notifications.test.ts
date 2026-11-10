@@ -36,7 +36,7 @@ test("avisa responsável e autor sobre mudança de status, menos quem mudou", ()
 });
 
 test("monta os textos dos avisos", () => {
-  assert.equal(notificationText("task_assigned", "Ana", ""), "Ana atribuiu uma tarefa a você");
+  assert.equal(notificationText("task_assigned", "Ana", ""), "Ana atribuiu uma demanda a você");
   assert.equal(notificationText("task_status", "Ana", "Concluída"), "Ana mudou o status para Concluída");
   assert.equal(snippet("a".repeat(10), 5), "aaaa…");
   assert.equal(notificationText("ticket_new", "Ana", ""), "Ana abriu um chamado para o seu time");

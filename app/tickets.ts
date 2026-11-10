@@ -78,7 +78,7 @@ export function describeTicketEvent(kind: TicketEventKind, body: string) {
   if (kind === "assignee") return body ? `atribuiu a ${body}` : "removeu o responsável";
   if (kind === "urgency") return `mudou a urgência para ${isTicketUrgency(body) ? ticketUrgencyLabels[body] : body}`;
   if (kind === "team") return body ? `encaminhou para o time ${body}` : "removeu o time";
-  if (kind === "task") return `criou a tarefa ${body} a partir deste chamado`;
+  if (kind === "task") return `criou a demanda ${body} a partir deste chamado`;
   return body;
 }
 

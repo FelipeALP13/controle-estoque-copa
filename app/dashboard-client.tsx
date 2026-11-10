@@ -14,12 +14,12 @@ import LayoutDashboard from "lucide-react/icons/layout-dashboard";
 import UserCog from "lucide-react/icons/user-cog";
 
 const sidebarTips = [
-  "Na tela de Tarefas, aperte a tecla C para criar uma tarefa rápida.",
+  "Na tela de Demandas, aperte a tecla C para criar uma demanda rápida.",
   "Precisa de outro time? Abra um chamado: ele cai direto na fila de quem resolve.",
   "Escreva @ e o nome da pessoa num comentário para avisá-la no sininho.",
   "Mantenha seu cargo e telefone em dia em Meu perfil: eles aparecem em Pessoas.",
   "A escala da semana pode ser enviada no WhatsApp com um clique, direto da visão geral.",
-  "Use “Do meu time” nas tarefas e “Fila do meu time” nos chamados para focar no que é seu.",
+  "Use “Do meu time” nas demandas e “Fila do meu time” nos chamados para focar no que é seu.",
 ];
 import PeopleView from "./people-view";
 import TicketsView, { MyTicketsPanel } from "./tickets-view";
@@ -449,7 +449,7 @@ export default function Home() {
             </div>}
           </div>
           <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setStockMenu(false); setMobileMenu(false); }}><CalendarClock /> Escala</button>
-          <button className={tab === "tasks" ? "active" : ""} onClick={() => { setTab("tasks"); setStockMenu(false); setMobileMenu(false); }}><ListTodo /> Tarefas</button>
+          <button className={tab === "tasks" ? "active" : ""} onClick={() => { setTab("tasks"); setStockMenu(false); setMobileMenu(false); }}><ListTodo /> Demandas</button>
           <button className={tab === "tickets" ? "active" : ""} onClick={() => openTicket()}><LifeBuoy /> Chamados</button>
           <button className={tab === "people" ? "active" : ""} onClick={() => { setTab("people"); setStockMenu(false); setMobileMenu(false); }}><Contact /> Pessoas</button>
           {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setStockMenu(false); setMobileMenu(false); }}><UserCog /> Usuários</button>}
@@ -465,7 +465,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Tarefas" : tab === "tickets" ? "Chamados internos" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "tickets" ? "Chamados internos" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
           <div className="topbar-actions"><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 
@@ -577,7 +577,7 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
 
   return <>
     <section className="hub-welcome">
-      <div><p className="eyebrow">{greeting()}, {firstName.toLocaleUpperCase("pt-BR")}</p><h2>O que você precisa hoje?</h2><p>Suas tarefas, os chamados do seu time, a escala e o estoque da copa, num só lugar.</p></div>
+      <div><p className="eyebrow">{greeting()}, {firstName.toLocaleUpperCase("pt-BR")}</p><h2>O que você precisa hoje?</h2><p>Suas demandas, os chamados do seu time, a escala e o estoque da copa, num só lugar.</p></div>
       <span>{todayLong()}</span>
     </section>
 
@@ -787,9 +787,9 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onD
         <div><p className="eyebrow">ACESSO INDIVIDUAL</p><h2>Usuários e permissões</h2><p>Cada pessoa entra com sua própria conta, e tudo o que ela faz fica registrado no nome dela. Cargo, telefone e times ficam na área Pessoas.</p></div>
       </div>
       <div className="permission-cards">
-        <article><strong>Administrador</strong><p>Acesso total: cria usuários, monta os times, edita a escala, atende qualquer chamado e pode excluir tarefas e chamados.</p></article>
-        <article><strong>Membro</strong><p>Cria e edita tarefas, abre chamados e atende os do seu time. No estoque e na escala, faz o que o administrador liberar.</p></article>
-        <article><strong>Somente leitura</strong><p>Consulta tarefas, chamados, escala, estoque e pessoas, sem alterar nada.</p></article>
+        <article><strong>Administrador</strong><p>Acesso total: cria usuários, monta os times, edita a escala, atende qualquer chamado e pode excluir demandas e chamados.</p></article>
+        <article><strong>Membro</strong><p>Cria e edita demandas, abre chamados e atende os do seu time. No estoque e na escala, faz o que o administrador liberar.</p></article>
+        <article><strong>Somente leitura</strong><p>Consulta demandas, chamados, escala, estoque e pessoas, sem alterar nada.</p></article>
       </div>
       <div className="team-panel">
         <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário e a senha inicial e escolha o perfil. As permissões extras do estoque e da escala ficam na aba Permissões de cada pessoa.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>

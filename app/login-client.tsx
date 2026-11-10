@@ -61,9 +61,9 @@ export default function LoginScreen() {
           <div className="login-visual"><span>✅</span><span>🏢</span><span>🎧</span></div>
           <p className="eyebrow">ACESSO DA EQUIPE</p>
           <h1>{setupRequired ? "Vamos criar o primeiro acesso" : "Tudo da equipe em um só lugar"}</h1>
-          <p>{setupRequired ? "Cadastre o administrador. Depois você poderá criar os usuários da equipe e definir cada permissão." : "Tarefas, chamados entre os times, escala e estoque da copa, sem depender de planilhas e grupos separados."}</p>
+          <p>{setupRequired ? "Cadastre o administrador. Depois você poderá criar os usuários da equipe e definir cada permissão." : "Demandas, chamados entre os times, escala e estoque da copa, sem depender de planilhas e grupos separados."}</p>
           <div className="login-benefits" aria-label="O que tem no portal">
-            <span><b>01</b> Tarefas e chamados entre os times</span>
+            <span><b>01</b> Demandas e chamados entre os times</span>
             <span><b>02</b> Escala de atendimento e avisos</span>
             <span><b>03</b> Estoque da copa e pessoas da empresa</span>
           </div>

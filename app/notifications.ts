@@ -67,7 +67,7 @@ export function statusRecipients(actorId: number, assigneeId: number | null, cre
 }
 
 export function notificationText(kind: NotificationKind, actorName: string, body: string) {
-  if (kind === "task_assigned") return `${actorName} atribuiu uma tarefa a você`;
+  if (kind === "task_assigned") return `${actorName} atribuiu uma demanda a você`;
   if (kind === "ticket_assigned") return `${actorName} atribuiu um chamado a você`;
   if (kind === "ticket_new") return `${actorName} abriu um chamado para o seu time`;
   if (kind === "task_mention" || kind === "ticket_mention") return `${actorName} mencionou você`;

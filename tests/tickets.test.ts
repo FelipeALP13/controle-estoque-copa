@@ -6,7 +6,7 @@ test("descreve o histórico do chamado", () => {
   assert.equal(describeTicketEvent("status", "waiting"), "mudou o status para Aguardando");
   assert.equal(describeTicketEvent("urgency", "critical"), "mudou a urgência para Crítica");
   assert.equal(describeTicketEvent("team", "Desenvolvimento"), "encaminhou para o time Desenvolvimento");
-  assert.equal(describeTicketEvent("task", "TAR-3"), "criou a tarefa TAR-3 a partir deste chamado");
+  assert.equal(describeTicketEvent("task", "TAR-3"), "criou a demanda TAR-3 a partir deste chamado");
 });
 
 test("gera o código do chamado", () => {
