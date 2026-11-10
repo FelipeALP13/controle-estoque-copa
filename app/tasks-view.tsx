@@ -23,6 +23,7 @@ export type Task = {
   status: TaskStatus;
   priority: TaskPriority;
   assigneeId: number | null;
+  teamId: number | null;
   dueDate: string | null;
   sortOrder: number;
   createdByName: string;
@@ -33,9 +34,10 @@ export type Task = {
 };
 
 type TaskMember = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
-type Me = { id: number; canEdit: boolean; isAdmin: boolean };
+type TaskTeam = { id: number; name: string; color: string };
+type Me = { id: number; canEdit: boolean; isAdmin: boolean; teamIds: number[] };
 type TaskEvent = { id: number; kind: TaskEventKind; body: string; actorId: number | null; actorName: string; createdAt: string; canDelete: boolean };
-type TasksData = { tasks: Task[]; members: TaskMember[]; me: Me };
+type TasksData = { tasks: Task[]; members: TaskMember[]; teams: TaskTeam[]; me: Me };
 
 const boardStatuses: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review", "done"];
 
@@ -89,7 +91,11 @@ export function PriorityIcon({ priority, size = 14 }: { priority: TaskPriority; 
   return <svg {...common}>{[0, 1, 2].map((bar) => <rect key={bar} x={2 + bar * 4.5} y={10 - bar * 3.5} width="3" height={4 + bar * 3.5} rx="1" fill="currentColor" opacity={bar < filled ? 1 : 0.25} />)}</svg>;
 }
 
-function Avatar({ member, size = 22 }: { member: TaskMember | null | undefined; size?: number }) {
+export function TeamChip({ team, lead }: { team: { name: string; color: string }; lead?: boolean }) {
+  return <span className={`team-chip ${team.color}`}><i />{team.name}{lead && <b>Líder</b>}</span>;
+}
+
+export function Avatar({ member, size = 22 }: { member: TaskMember | null | undefined; size?: number }) {
   if (!member) return <span className="task-avatar empty" style={{ width: size, height: size }} title="Sem responsável" />;
   return <span className="task-avatar" style={{ width: size, height: size, fontSize: size * 0.55 }} title={member.name}>
     {member.avatarKey ? <Image src={`/api/media?key=${encodeURIComponent(member.avatarKey)}`} alt="" fill sizes={`${size}px`} unoptimized /> : member.avatarIcon || member.name.slice(0, 1)}
@@ -102,7 +108,7 @@ function DueChip({ dueDate, closed, today }: { dueDate: string; closed: boolean;
   return <span className={`task-due ${state}`} title={state === "overdue" ? "Prazo vencido" : "Prazo"}><CalendarDays size={11} />{label}</span>;
 }
 
-type Filters = { scope: "all" | "mine"; assignee: string; priority: string; search: string };
+type Filters = { scope: "all" | "mine" | "team"; assignee: string; priority: string; team: string; search: string };
 
 function readView(): "list" | "board" {
   try { return window.localStorage.getItem("tasks-view") === "board" ? "board" : "list"; } catch { return "list"; }
@@ -112,7 +118,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
   const [data, setData] = useState<TasksData | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"list" | "board">("list");
-  const [filters, setFilters] = useState<Filters>({ scope: "all", assignee: "", priority: "", search: "" });
+  const [filters, setFilters] = useState<Filters>({ scope: "all", assignee: "", priority: "", team: "", search: "" });
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true, canceled: true });
   const [creating, setCreating] = useState<TaskStatus | null>(null);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
@@ -174,12 +180,16 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
 
   const today = todayInSaoPaulo();
   const membersById = useMemo(() => new Map((data?.members ?? []).map((member) => [member.id, member])), [data]);
+  const teamsById = useMemo(() => new Map((data?.teams ?? []).map((team) => [team.id, team])), [data]);
 
   const visible = useMemo(() => {
     if (!data) return [];
     const query = filters.search.trim().toLocaleLowerCase("pt-BR");
     return data.tasks.filter((task) => {
       if (filters.scope === "mine" && task.assigneeId !== data.me.id) return false;
+      if (filters.scope === "team" && (task.teamId === null || !data.me.teamIds.includes(task.teamId))) return false;
+      if (filters.team === "none" && task.teamId !== null) return false;
+      if (filters.team && filters.team !== "none" && task.teamId !== Number(filters.team)) return false;
       if (filters.assignee === "none" && task.assigneeId !== null) return false;
       if (filters.assignee && filters.assignee !== "none" && task.assigneeId !== Number(filters.assignee)) return false;
       if (filters.priority && task.priority !== Number(filters.priority)) return false;
@@ -222,6 +232,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
       <div className="tasks-scope" role="group" aria-label="Quais tarefas">
         <button className={filters.scope === "all" ? "active" : ""} aria-pressed={filters.scope === "all"} onClick={() => setFilters({ ...filters, scope: "all" })}>Todas</button>
         <button className={filters.scope === "mine" ? "active" : ""} aria-pressed={filters.scope === "mine"} onClick={() => setFilters({ ...filters, scope: "mine" })}>Minhas{myOpen > 0 && <b>{myOpen}</b>}</button>
+        {(data?.me.teamIds.length ?? 0) > 0 && <button className={filters.scope === "team" ? "active" : ""} aria-pressed={filters.scope === "team"} onClick={() => setFilters({ ...filters, scope: "team" })}>Do meu time</button>}
       </div>
       <label className="tasks-search"><Search size={14} /><input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Buscar por título ou código" /></label>
       <select aria-label="Filtrar por responsável" value={filters.assignee} onChange={(event) => setFilters({ ...filters, assignee: event.target.value })}>
@@ -229,6 +240,11 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
         <option value="none">Sem responsável</option>
         {data?.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
       </select>
+      {(data?.teams.length ?? 0) > 0 && <select aria-label="Filtrar por time" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}>
+        <option value="">Todos os times</option>
+        {data?.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+        <option value="none">Sem time</option>
+      </select>}
       <select aria-label="Filtrar por prioridade" value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })}>
         <option value="">Todas as prioridades</option>
         {taskPriorities.map((priority) => <option key={priority} value={priority}>{taskPriorityLabels[priority]}</option>)}
@@ -262,6 +278,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
               <StatusIcon status={task.status} />
               <span className={`task-title ${task.status === "canceled" ? "canceled" : ""}`}>{task.title}</span>
               <span className="task-row-meta">
+                {task.teamId && teamsById.get(task.teamId) && <span className="task-team"><TeamChip team={teamsById.get(task.teamId)!} /></span>}
                 {task.commentCount > 0 && <span className="task-comments" title={`${task.commentCount} comentários`}><MessageSquare size={12} />{task.commentCount}</span>}
                 {task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}
                 <Avatar member={task.assigneeId ? membersById.get(task.assigneeId) : null} />
@@ -271,15 +288,15 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
         })}
       </div>
     ) : (
-      <Board byStatus={byStatus} membersById={membersById} canEdit={data.me.canEdit} today={today} onOpen={setOpenTaskId} onMove={moveTask} onCreate={setCreating} />
+      <Board byStatus={byStatus} membersById={membersById} teamsById={teamsById}canEdit={data.me.canEdit} today={today} onOpen={setOpenTaskId} onMove={moveTask} onCreate={setCreating} />
     )}
 
-    {creating && data && <NewTaskModal initialStatus={creating} members={data.members} meId={data.me.id} onClose={() => setCreating(null)} onCreated={async (task) => { setCreating(null); await load(); setOpenTaskId(task.id); }} />}
-    {openTask && data && <TaskDrawer key={openTask.id} task={openTask} members={data.members} me={data.me} today={today} onClose={() => setOpenTaskId(null)} onUpdate={(changes) => update(openTask.id, changes)} onDeleted={async () => { setOpenTaskId(null); await load(); }} onCommented={load} />}
+    {creating && data && <NewTaskModal initialStatus={creating} members={data.members} teams={data.teams} meId={data.me.id} defaultTeamId={filters.team && filters.team !== "none" ? Number(filters.team) : data.me.teamIds.length === 1 ? data.me.teamIds[0] : null}onClose={() => setCreating(null)} onCreated={async (task) => { setCreating(null); await load(); setOpenTaskId(task.id); }} />}
+    {openTask && data && <TaskDrawer key={openTask.id} task={openTask} members={data.members} teams={data.teams}me={data.me} today={today} onClose={() => setOpenTaskId(null)} onUpdate={(changes) => update(openTask.id, changes)} onDeleted={async () => { setOpenTaskId(null); await load(); }} onCommented={load} />}
   </div>;
 }
 
-function Board({ byStatus, membersById, canEdit, today, onOpen, onMove, onCreate }: { byStatus: Record<TaskStatus, Task[]>; membersById: Map<number, TaskMember>; canEdit: boolean; today: string; onOpen: (id: number) => void; onMove: (taskId: number, status: TaskStatus, beforeId: number | null) => void; onCreate: (status: TaskStatus) => void }) {
+function Board({ byStatus, membersById, teamsById, canEdit, today, onOpen, onMove, onCreate }: { byStatus: Record<TaskStatus, Task[]>; membersById: Map<number, TaskMember>; teamsById: Map<number, TaskTeam>;canEdit: boolean; today: string; onOpen: (id: number) => void; onMove: (taskId: number, status: TaskStatus, beforeId: number | null) => void; onCreate: (status: TaskStatus) => void }) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [target, setTarget] = useState<{ status: TaskStatus; beforeId: number | null } | null>(null);
 
@@ -306,7 +323,7 @@ function Board({ byStatus, membersById, canEdit, today, onOpen, onMove, onCreate
               onDragOver={(event) => { if (dragId === null) return; event.preventDefault(); event.stopPropagation(); const box = event.currentTarget.getBoundingClientRect(); const after = event.clientY > box.top + box.height / 2; const index = column.findIndex((entry) => entry.id === task.id); setTarget({ status, beforeId: after ? column[index + 1]?.id ?? null : task.id }); }}>
               <span className="board-card-top"><span className="task-code">{taskCode(task.id)}</span><Avatar member={task.assigneeId ? membersById.get(task.assigneeId) : null} size={20} /></span>
               <span className="board-card-title"><StatusIcon status={task.status} /><span>{task.title}</span></span>
-              <span className="board-card-meta"><PriorityIcon priority={task.priority} />{task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}{task.commentCount > 0 && <span className="task-comments"><MessageSquare size={12} />{task.commentCount}</span>}</span>
+              <span className="board-card-meta"><PriorityIcon priority={task.priority} />{task.teamId && teamsById.get(task.teamId) && <TeamChip team={teamsById.get(task.teamId)!} />}{task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}{task.commentCount > 0 && <span className="task-comments"><MessageSquare size={12} />{task.commentCount}</span>}</span>
             </button>
           </div>)}
           {target?.status === status && target.beforeId === null && <div className="drop-line" />}
@@ -317,21 +334,24 @@ function Board({ byStatus, membersById, canEdit, today, onOpen, onMove, onCreate
   </div>;
 }
 
-function PropertyFields({ status, setStatus, priority, setPriority, assigneeId, setAssigneeId, dueDate, setDueDate, members, disabled }: { status: TaskStatus; setStatus: (value: TaskStatus) => void; priority: TaskPriority; setPriority: (value: TaskPriority) => void; assigneeId: number | null; setAssigneeId: (value: number | null) => void; dueDate: string; setDueDate: (value: string) => void; members: TaskMember[]; disabled?: boolean }) {
+function PropertyFields({ status, setStatus, priority, setPriority, assigneeId, setAssigneeId, teamId, setTeamId, teams, dueDate, setDueDate, members, disabled }: { status: TaskStatus; setStatus: (value: TaskStatus) => void; priority: TaskPriority; setPriority: (value: TaskPriority) => void; assigneeId: number | null; setAssigneeId: (value: number | null) => void; teamId: number | null; setTeamId: (value: number | null) => void; teams: TaskTeam[]; dueDate: string; setDueDate: (value: string) => void; members: TaskMember[]; disabled?: boolean }) {
+  const team = teams.find((entry) => entry.id === teamId);
   return <>
     <label className="task-prop"><span>Status</span><span className="task-prop-control"><StatusIcon status={status} /><select disabled={disabled} value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>{taskStatuses.map((value) => <option key={value} value={value}>{taskStatusLabels[value]}</option>)}</select></span></label>
     <label className="task-prop"><span>Prioridade</span><span className="task-prop-control"><PriorityIcon priority={priority} /><select disabled={disabled} value={priority} onChange={(event) => setPriority(Number(event.target.value) as TaskPriority)}>{taskPriorities.map((value) => <option key={value} value={value}>{taskPriorityLabels[value]}</option>)}</select></span></label>
     <label className="task-prop"><span>Responsável</span><span className="task-prop-control"><Avatar member={members.find((member) => member.id === assigneeId)} size={18} /><select disabled={disabled} value={assigneeId ?? ""} onChange={(event) => setAssigneeId(event.target.value ? Number(event.target.value) : null)}><option value="">Sem responsável</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></span></label>
+    {teams.length > 0 && <label className="task-prop"><span>Time</span><span className="task-prop-control"><span className={`team-chip-dot ${team?.color ?? "none"}`} /><select disabled={disabled} value={teamId ?? ""} onChange={(event) => setTeamId(event.target.value ? Number(event.target.value) : null)}><option value="">Sem time</option>{teams.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></span></label>}
     <label className="task-prop"><span>Prazo</span><span className="task-prop-control"><CalendarDays size={14} /><input disabled={disabled} type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />{dueDate && !disabled && <button type="button" className="task-prop-clear" onClick={() => setDueDate("")} aria-label="Remover prazo"><X size={12} /></button>}</span></label>
   </>;
 }
 
-function NewTaskModal({ initialStatus, members, meId, onClose, onCreated }: { initialStatus: TaskStatus; members: TaskMember[]; meId: number; onClose: () => void; onCreated: (task: Task) => void }) {
+function NewTaskModal({ initialStatus, members, teams, meId, defaultTeamId, onClose, onCreated }: { initialStatus: TaskStatus; members: TaskMember[]; teams: TaskTeam[]; meId: number; defaultTeamId: number | null;onClose: () => void; onCreated: (task: Task) => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>(initialStatus);
   const [priority, setPriority] = useState<TaskPriority>(0);
   const [assigneeId, setAssigneeId] = useState<number | null>(members.some((member) => member.id === meId) ? meId : null);
+  const [teamId, setTeamId] = useState<number | null>(defaultTeamId);
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -341,7 +361,7 @@ function NewTaskModal({ initialStatus, members, meId, onClose, onCreated }: { in
     setSaving(true);
     setError("");
     try {
-      const result = await postTask({ action: "createTask", title, description, status, priority, assigneeId, dueDate });
+      const result = await postTask({ action: "createTask", title, description, status, priority, assigneeId, teamId, dueDate });
       if (result.task) onCreated(result.task);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível criar a tarefa.");
@@ -356,7 +376,7 @@ function NewTaskModal({ initialStatus, members, meId, onClose, onCreated }: { in
       <div className="task-modal-body">
         <input className="task-title-input" autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Título da tarefa" />
         <textarea className="task-description-input" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição (opcional)" rows={5} />
-        <div className="task-props-row"><PropertyFields status={status} setStatus={setStatus} priority={priority} setPriority={setPriority} assigneeId={assigneeId} setAssigneeId={setAssigneeId} dueDate={dueDate} setDueDate={setDueDate} members={members} /></div>
+        <div className="task-props-row"><PropertyFields status={status} setStatus={setStatus} priority={priority} setPriority={setPriority} assigneeId={assigneeId} setAssigneeId={setAssigneeId} teamId={teamId} setTeamId={setTeamId} teams={teams} dueDate={dueDate} setDueDate={setDueDate} members={members} /></div>
       </div>
       {error && <p className="modal-error">{error}</p>}
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !title.trim()}>{saving ? "Criando..." : "Criar tarefa"}</button></div>
@@ -364,7 +384,7 @@ function NewTaskModal({ initialStatus, members, meId, onClose, onCreated }: { in
   </div>;
 }
 
-function TaskDrawer({ task, members, me, today, onClose, onUpdate, onDeleted, onCommented }: { task: Task; members: TaskMember[]; me: Me; today: string; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onDeleted: () => void; onCommented: () => Promise<void> }) {
+function TaskDrawer({ task, members, teams, me,today, onClose, onUpdate, onDeleted, onCommented }: { task: Task; members: TaskMember[]; teams: TaskTeam[]; me: Me;today: string; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onDeleted: () => void; onCommented: () => Promise<void> }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [events, setEvents] = useState<TaskEvent[] | null>(null);
@@ -449,7 +469,7 @@ function TaskDrawer({ task, members, me, today, onClose, onUpdate, onDeleted, on
           <textarea className="task-description-input" readOnly={readOnly} value={description} rows={6} placeholder={readOnly ? "Sem descrição." : "Adicione uma descrição..."}
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== task.description) void save({ description }); }} />
-          <div className="task-props-row mobile-only"><PropertyFields status={task.status} setStatus={(value) => save({ status: value })} priority={task.priority} setPriority={(value) => save({ priority: value })} assigneeId={task.assigneeId} setAssigneeId={(value) => save({ assigneeId: value })} dueDate={task.dueDate ?? ""} setDueDate={(value) => save({ dueDate: value })} members={members} disabled={readOnly} /></div>
+          <div className="task-props-row mobile-only"><PropertyFields status={task.status} setStatus={(value) => save({ status: value })} priority={task.priority} setPriority={(value) => save({ priority: value })} assigneeId={task.assigneeId} setAssigneeId={(value) => save({ assigneeId: value })} teamId={task.teamId} setTeamId={(value) => save({ teamId: value })} teams={teams} dueDate={task.dueDate ?? ""} setDueDate={(value) => save({ dueDate: value })} members={members} disabled={readOnly} /></div>
 
           {error && <p className="modal-error task-drawer-error">{error}</p>}
 
@@ -470,7 +490,7 @@ function TaskDrawer({ task, members, me, today, onClose, onUpdate, onDeleted, on
           </form>}
         </div>
         <div className="task-drawer-side">
-          <PropertyFields status={task.status} setStatus={(value) => save({ status: value })} priority={task.priority} setPriority={(value) => save({ priority: value })} assigneeId={task.assigneeId} setAssigneeId={(value) => save({ assigneeId: value })} dueDate={task.dueDate ?? ""} setDueDate={(value) => save({ dueDate: value })} members={members} disabled={readOnly} />
+          <PropertyFields status={task.status} setStatus={(value) => save({ status: value })} priority={task.priority} setPriority={(value) => save({ priority: value })} assigneeId={task.assigneeId} setAssigneeId={(value) => save({ assigneeId: value })} teamId={task.teamId} setTeamId={(value) => save({ teamId: value })} teams={teams} dueDate={task.dueDate ?? ""} setDueDate={(value) => save({ dueDate: value })} members={members} disabled={readOnly} />
           {task.dueDate && <p className="task-side-note"><DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} /></p>}
           {task.completedAt && <p className="task-side-note">Concluída {relativeTime(task.completedAt)}</p>}
         </div>
@@ -482,7 +502,7 @@ function TaskDrawer({ task, members, me, today, onClose, onUpdate, onDeleted, on
 const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR");
 
 /** Campo de comentário que sugere pessoas ao digitar "@". */
-function MentionTextarea({ value, onChange, members, onSubmit }: { value: string; onChange: (value: string) => void; members: TaskMember[]; onSubmit: () => void }) {
+export function MentionTextarea({ value, onChange, members, onSubmit }: { value: string; onChange: (value: string) => void; members: TaskMember[]; onSubmit: () => void }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [active, setActive] = useState(0);

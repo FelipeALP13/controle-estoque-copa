@@ -9,13 +9,21 @@ import MessageSquare from "lucide-react/icons/message-square";
 import UserPlus from "lucide-react/icons/user-plus";
 import { notificationText, type NotificationKind } from "./notifications";
 import { dueState, taskCode } from "./tasks";
+import { ticketCode } from "./tickets";
+import LifeBuoy from "lucide-react/icons/life-buoy";
 import { relativeTime } from "./tasks-view";
 
-type Item = { id: number; kind: NotificationKind; taskId: number | null; taskTitle: string | null; actorName: string; body: string; readAt: string | null; createdAt: string };
+type Item = { id: number; kind: NotificationKind; taskId: number | null; taskTitle: string | null; ticketId: number | null; ticketTitle: string | null; actorName: string; body: string; readAt: string | null; createdAt: string };
 type DueTask = { id: number; title: string; dueDate: string };
 type Data = { items: Item[]; unread: number; due: DueTask[] };
 
-const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot } as const;
+const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot } as const;
+
+function subject(item: Item) {
+  if (item.ticketId) return `${ticketCode(item.ticketId)} · ${item.ticketTitle ?? "Chamado"}`;
+  if (item.taskId) return `${taskCode(item.taskId)} · ${item.taskTitle ?? "Tarefa"}`;
+  return "Item excluído";
+}
 
 function today() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -27,7 +35,7 @@ async function post(payload: Record<string, unknown>) {
   await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 }
 
-export default function NotificationsBell({ onOpenTask }: { onOpenTask: (taskId: number) => void }) {
+export default function NotificationsBell({ onOpenTask, onOpenTicket }: { onOpenTask: (taskId: number) => void; onOpenTicket: (ticketId: number) => void }) {
   const [data, setData] = useState<Data>({ items: [], unread: 0, due: [] });
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -62,7 +70,8 @@ export default function NotificationsBell({ onOpenTask }: { onOpenTask: (taskId:
       setData((current) => ({ ...current, unread: Math.max(0, current.unread - 1), items: current.items.map((entry) => entry.id === item.id ? { ...entry, readAt: new Date().toISOString() } : entry) }));
       void post({ action: "markRead", ids: [item.id] });
     }
-    if (item.taskId) onOpenTask(item.taskId);
+    if (item.ticketId) onOpenTicket(item.ticketId);
+    else if (item.taskId) onOpenTask(item.taskId);
   }
 
   async function markAll() {
@@ -93,14 +102,14 @@ export default function NotificationsBell({ onOpenTask }: { onOpenTask: (taskId:
         </section>}
         <section>
           {data.due.length > 0 && <h4>Atividade</h4>}
-          {data.items.length === 0 ? <p className="bell-empty">Nenhum aviso por enquanto. Você será avisado quando alguém te atribuir uma tarefa, comentar ou te mencionar.</p> : data.items.map((item) => {
+          {data.items.length === 0 ? <p className="bell-empty">Nenhum aviso por enquanto. Você será avisado sobre tarefas e chamados: atribuições, comentários, menções e chamados novos para o seu time.</p> : data.items.map((item) => {
             const Icon = kindIcon[item.kind];
             return <button key={item.id} className={`bell-item ${item.readAt ? "" : "unread"}`} onClick={() => openItem(item)}>
               <span className={`bell-icon ${item.kind}`}><Icon size={14} /></span>
               <span className="bell-text">
                 <strong>{notificationText(item.kind, item.actorName, item.body)}</strong>
-                <small>{item.taskId ? `${taskCode(item.taskId)} · ${item.taskTitle ?? "Tarefa"}` : "Tarefa excluída"}</small>
-                {(item.kind === "task_comment" || item.kind === "task_mention") && item.body && <em>“{item.body}”</em>}
+                <small>{subject(item)}</small>
+                {["task_comment", "task_mention", "ticket_comment", "ticket_mention"].includes(item.kind) && item.body && <em>“{item.body}”</em>}
               </span>
               <span className="bell-time">{relativeTime(item.createdAt)}</span>
             </button>;

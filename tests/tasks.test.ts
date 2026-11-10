@@ -48,4 +48,6 @@ test("descreve as mudanças no histórico", () => {
   assert.equal(describeTaskEvent("assignee", "Caio Viana"), "atribuiu a Caio Viana");
   assert.equal(describeTaskEvent("assignee", ""), "removeu o responsável");
   assert.equal(describeTaskEvent("due_date", "2026-11-20"), "definiu o prazo para 20/11");
+  assert.equal(describeTaskEvent("team", "Suporte"), "moveu para o time Suporte");
+  assert.equal(describeTaskEvent("team", ""), "removeu o time");
 });

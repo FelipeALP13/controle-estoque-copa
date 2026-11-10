@@ -27,7 +27,7 @@ export const MAX_TITLE_LENGTH = 160;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 export const MAX_COMMENT_LENGTH = 4000;
 
-export type TaskEventKind = "comment" | "created" | "status" | "priority" | "assignee" | "due_date" | "title";
+export type TaskEventKind = "comment" | "created" | "status" | "priority" | "assignee" | "due_date" | "title" | "team";
 
 export function taskCode(id: number) {
   return `${TASK_CODE_PREFIX}-${id}`;
@@ -98,5 +98,6 @@ export function describeTaskEvent(kind: TaskEventKind, body: string) {
   if (kind === "assignee") return body ? `atribuiu a ${body}` : "removeu o responsável";
   if (kind === "due_date") return body ? `definiu o prazo para ${shortDate(body)}` : "removeu o prazo";
   if (kind === "title") return `renomeou para “${body}”`;
+  if (kind === "team") return body ? `moveu para o time ${body}` : "removeu o time";
   return body;
 }

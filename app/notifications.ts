@@ -1,4 +1,4 @@
-export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status";
+export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status";
 
 type Person = { id: number; name: string };
 
@@ -68,9 +68,16 @@ export function statusRecipients(actorId: number, assigneeId: number | null, cre
 
 export function notificationText(kind: NotificationKind, actorName: string, body: string) {
   if (kind === "task_assigned") return `${actorName} atribuiu uma tarefa a você`;
-  if (kind === "task_mention") return `${actorName} mencionou você`;
-  if (kind === "task_status") return `${actorName} mudou o status para ${body}`;
+  if (kind === "ticket_assigned") return `${actorName} atribuiu um chamado a você`;
+  if (kind === "ticket_new") return `${actorName} abriu um chamado para o seu time`;
+  if (kind === "task_mention" || kind === "ticket_mention") return `${actorName} mencionou você`;
+  if (kind === "task_status" || kind === "ticket_status") return `${actorName} mudou o status para ${body}`;
   return `${actorName} comentou`;
+}
+
+/** Converte o tipo de aviso de comentário de tarefa para o equivalente de chamado. */
+export function asTicketKind(kind: NotificationKind): NotificationKind {
+  return kind === "task_mention" ? "ticket_mention" : kind === "task_comment" ? "ticket_comment" : kind;
 }
 
 export function snippet(text: string, max = 140) {

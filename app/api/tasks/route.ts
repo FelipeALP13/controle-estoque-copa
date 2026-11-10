@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, min, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { members, notifications, taskEvents, tasks } from "../../../db/schema";
+import { members, notifications, taskEvents, tasks, teamMembers, teams } from "../../../db/schema";
 import { commentRecipients, findMentions, snippet, statusRecipients, type NotificationKind } from "../../notifications";
 import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
@@ -19,7 +19,7 @@ function json(body: unknown, status = 200) {
 function failure(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   console.error("tasks request failed", error);
-  if (message.includes("no such table")) return json({ error: "O banco ainda não tem as tabelas de tarefas. Publique novamente para aplicar a migração." }, 500);
+  if (message.includes("no such table") || message.includes("no such column")) return json({ error: "O banco ainda não tem as tabelas de tarefas. Publique novamente para aplicar a migração." }, 500);
   return json({ error: "Não foi possível concluir esta operação agora." }, 500);
 }
 
@@ -40,6 +40,28 @@ async function notify(db: Db, actorName: string, createdAt: string, rows: NewNot
     await db.insert(notifications).values(rows.map((row) => ({ ...row, actorName, createdAt })));
   } catch (error) {
     console.error("notification insert failed", error);
+  }
+}
+
+async function existingTeam(db: Db, value: unknown) {
+  if (value === null || value === undefined || value === "") return { id: null, name: "" };
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+  const [team] = await db.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.id, id)).limit(1);
+  return team ?? undefined;
+}
+
+/** Times e vínculos; vazio se a migração de times ainda não foi aplicada. */
+async function loadTeams(db: Db, memberId: number) {
+  try {
+    const [teamRows, mine] = await Promise.all([
+      db.select({ id: teams.id, name: teams.name, color: teams.color }).from(teams).orderBy(asc(teams.name)),
+      db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.memberId, memberId)),
+    ]);
+    return { teams: teamRows, myTeamIds: mine.map((row) => row.teamId) };
+  } catch (error) {
+    console.error("teams load failed", error);
+    return { teams: [], myTeamIds: [] };
   }
 }
 
@@ -71,6 +93,7 @@ export async function GET(request: Request) {
         status: tasks.status,
         priority: tasks.priority,
         assigneeId: tasks.assigneeId,
+        teamId: tasks.teamId,
         dueDate: tasks.dueDate,
         sortOrder: tasks.sortOrder,
         createdByName: tasks.createdByName,
@@ -83,7 +106,8 @@ export async function GET(request: Request) {
       db.select({ id: members.id, name: members.name, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey }).from(members).where(eq(members.active, true)).orderBy(asc(members.name)),
     ]);
 
-    return json({ tasks: taskRows, members: memberRows, me: { id: member.id, canEdit: canEdit(member), isAdmin: isAdmin(member) } });
+    const teamData = await loadTeams(db, member.id);
+    return json({ tasks: taskRows, members: memberRows, teams: teamData.teams, me: { id: member.id, canEdit: canEdit(member), isAdmin: isAdmin(member), teamIds: teamData.myTeamIds } });
   } catch (error) {
     return failure(error);
   }
@@ -108,15 +132,18 @@ export async function POST(request: Request) {
       const priority = isTaskPriority(body.priority) ? body.priority : 0;
       const dueDate = parseDueDate(body.dueDate);
       const assignee = await activeAssignee(db, body.assigneeId);
+      const team = await existingTeam(db, body.teamId);
       if (!title) return json({ error: "Dê um título para a tarefa." }, 400);
       if (dueDate === undefined) return json({ error: "Informe um prazo válido." }, 400);
       if (assignee === undefined) return json({ error: "Escolha um responsável ativo." }, 400);
+      if (team === undefined) return json({ error: "Escolha um time válido." }, 400);
       const [task] = await db.insert(tasks).values({
         title,
         description: cleanMultiline(body.description, MAX_DESCRIPTION_LENGTH),
         status,
         priority,
         assigneeId: assignee.id,
+        teamId: team.id,
         dueDate,
         sortOrder: await topSortOrder(db, status),
         createdById: member.id,
@@ -169,6 +196,11 @@ export async function POST(request: Request) {
         const assignee = await activeAssignee(db, body.assigneeId);
         if (assignee === undefined) return json({ error: "Escolha um responsável ativo." }, 400);
         if (assignee.id !== current.assigneeId) { changes.assigneeId = assignee.id; events.push({ kind: "assignee", body: assignee.name }); }
+      }
+      if ("teamId" in body) {
+        const team = await existingTeam(db, body.teamId);
+        if (team === undefined) return json({ error: "Escolha um time válido." }, 400);
+        if (team.id !== current.teamId) { changes.teamId = team.id; events.push({ kind: "team", body: team.name }); }
       }
       if ("dueDate" in body) {
         const dueDate = parseDueDate(body.dueDate);

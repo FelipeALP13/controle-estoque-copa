@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -63,8 +63,28 @@ export const members = sqliteTable("members", {
   username: text("username").unique(),
   passwordHash: text("password_hash"),
   passwordSalt: text("password_salt"),
+  jobTitle: text("job_title").notNull().default(""),
+  phone: text("phone").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const teams = sqliteTable("teams", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("blue"),
+  description: text("description").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const teamMembers = sqliteTable("team_members", {
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  isLead: integer("is_lead", { mode: "boolean" }).notNull().default(false),
+}, (table) => [primaryKey({ columns: [table.teamId, table.memberId] })]);
 
 export const sessions = sqliteTable("sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -123,6 +143,7 @@ export const tasks = sqliteTable("tasks", {
   // 0 sem prioridade, 1 urgente, 2 alta, 3 média, 4 baixa (mesma escala do Linear).
   priority: integer("priority").notNull().default(0),
   assigneeId: integer("assignee_id").references(() => members.id, { onDelete: "set null" }),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
   dueDate: text("due_date"),
   sortOrder: real("sort_order").notNull().default(0),
   createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
@@ -137,7 +158,38 @@ export const taskEvents = sqliteTable("task_events", {
   taskId: integer("task_id")
     .notNull()
     .references(() => tasks.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["comment", "created", "status", "priority", "assignee", "due_date", "title"] }).notNull(),
+  kind: text("kind", { enum: ["comment", "created", "status", "priority", "assignee", "due_date", "title", "team"] }).notNull(),
+  body: text("body").notNull().default(""),
+  actorId: integer("actor_id").references(() => members.id, { onDelete: "set null" }),
+  actorName: text("actor_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const tickets = sqliteTable("tickets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  type: text("type", { enum: ["bug", "question", "improvement", "access", "other"] }).notNull().default("question"),
+  urgency: text("urgency", { enum: ["low", "normal", "high", "critical"] }).notNull().default("normal"),
+  status: text("status", { enum: ["open", "in_progress", "waiting", "resolved", "canceled"] }).notNull().default("open"),
+  client: text("client").notNull().default(""),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  requesterId: integer("requester_id").references(() => members.id, { onDelete: "set null" }),
+  requesterName: text("requester_name").notNull().default("Equipe"),
+  assigneeId: integer("assignee_id").references(() => members.id, { onDelete: "set null" }),
+  taskId: integer("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  firstResponseAt: text("first_response_at"),
+  resolvedAt: text("resolved_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const ticketEvents = sqliteTable("ticket_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ticketId: integer("ticket_id")
+    .notNull()
+    .references(() => tickets.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["comment", "created", "status", "assignee", "urgency", "team", "task"] }).notNull(),
   body: text("body").notNull().default(""),
   actorId: integer("actor_id").references(() => members.id, { onDelete: "set null" }),
   actorName: text("actor_name").notNull().default("Equipe"),
@@ -149,8 +201,9 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   actorName: text("actor_name").notNull().default("Equipe"),
   body: text("body").notNull().default(""),
   readAt: text("read_at"),
