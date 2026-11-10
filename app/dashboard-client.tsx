@@ -7,10 +7,22 @@ import { passwordPolicyError } from "./auth-policy";
 import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
 import ReportsView from "./reports-view";
-import TasksView, { MyTasksPanel } from "./tasks-view";
+import TasksView, { MyTasksPanel, TeamChip } from "./tasks-view";
 import NotificationsBell from "./notifications-bell";
+import { APP_NAME, APP_TAGLINE } from "./brand";
+import LayoutDashboard from "lucide-react/icons/layout-dashboard";
+import UserCog from "lucide-react/icons/user-cog";
+
+const sidebarTips = [
+  "Na tela de Tarefas, aperte a tecla C para criar uma tarefa rápida.",
+  "Precisa de outro time? Abra um chamado: ele cai direto na fila de quem resolve.",
+  "Escreva @ e o nome da pessoa num comentário para avisá-la no sininho.",
+  "Mantenha seu cargo e telefone em dia em Meu perfil: eles aparecem em Pessoas.",
+  "A escala da semana pode ser enviada no WhatsApp com um clique, direto da visão geral.",
+  "Use “Do meu time” nas tarefas e “Fila do meu time” nos chamados para focar no que é seu.",
+];
 import PeopleView from "./people-view";
-import TicketsView from "./tickets-view";
+import TicketsView, { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import Contact from "lucide-react/icons/contact";
 import ListTodo from "lucide-react/icons/list-todo";
@@ -217,7 +229,8 @@ function MemberVisual({ member, className = "avatar member-avatar" }: { member: 
   return <span className={`${className} visual-avatar`}>{member.avatarKey ? <Image src={mediaUrl(member.avatarKey)} alt="" fill sizes="64px" unoptimized /> : <span>{member.avatarIcon || member.name.slice(0, 2).toUpperCase()}</span>}</span>;
 }
 
-const visualIcons = ["📦", "☕", "🍪", "🍬", "🥛", "🍵", "🧃", "🧻", "🧼", "🥄", "👤", "🧑‍💼"];
+const visualIcons = ["📦", "☕", "🍪", "🍬", "🥛", "🍵", "🧃", "🧻", "🧼", "🥄", "🧴", "🍫"];
+const personIcons = ["👤", "🧑‍💼", "👩‍💼", "👨‍💼", "🧑‍💻", "👩‍💻", "👨‍💻", "🎧", "🧑‍🔧", "🚀", "⭐", "🐱", "🐶", "🦊"];
 
 async function uploadImage(file: File, kind: "item" | "profile") {
   const form = new FormData();
@@ -251,7 +264,7 @@ function StandardChoice({ label, value, setValue, options, customLabel, helper }
   </label>;
 }
 
-function VisualEditor({ label, mode, setMode, icon, setIcon, imageKey, file, setFile }: { label: string; mode: "icon" | "image"; setMode: (mode: "icon" | "image") => void; icon: string; setIcon: (icon: string) => void; imageKey: string | null; file: File | null; setFile: (file: File | null) => void }) {
+function VisualEditor({ label, mode, setMode, icon, setIcon, imageKey, file, setFile, icons = visualIcons }: { label: string; mode: "icon" | "image"; setMode: (mode: "icon" | "image") => void; icon: string; setIcon: (icon: string) => void; imageKey: string | null; file: File | null; setFile: (file: File | null) => void; icons?: readonly string[] }) {
   const localPreview = useMemo(() => file ? URL.createObjectURL(file) : "", [file]);
   const preview = localPreview || mediaUrl(imageKey);
   const [failedPreview, setFailedPreview] = useState("");
@@ -264,7 +277,7 @@ function VisualEditor({ label, mode, setMode, icon, setIcon, imageKey, file, set
   return <div className="visual-editor full">
     <span className="field-label">{label}</span>
     <div className="visual-mode"><button type="button" className={mode === "icon" ? "active" : ""} onClick={() => setMode("icon")}>Usar ícone</button><button type="button" className={mode === "image" ? "active" : ""} onClick={() => setMode("image")}>Usar foto</button></div>
-    {mode === "icon" ? <><div className="icon-options">{visualIcons.map((option) => <button type="button" key={option} className={icon === option ? "active" : ""} onClick={() => setIcon(option)}>{option}</button>)}</div><label className="custom-icon"><span>Outro ícone ou emoji</span><input value={icon} onChange={(event) => setIcon(event.target.value.slice(0, 8))} maxLength={8} /></label></> : <label className="image-upload"><span className="image-preview">{preview && !previewFailed ? <Image src={preview} alt="" fill sizes="64px" unoptimized onError={() => setFailedPreview(preview)} /> : <ImagePlus aria-hidden="true" />}</span><span><strong>{file ? file.name : imageKey && !previewFailed ? "Trocar imagem" : "Selecionar imagem"}</strong><small>PNG, JPG ou WebP · até 3 MB</small></span><input type="file" aria-label={`Selecionar ${label.toLowerCase()}`} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>}
+    {mode === "icon" ? <><div className="icon-options">{icons.map((option) => <button type="button" key={option} className={icon === option ? "active" : ""} onClick={() => setIcon(option)}>{option}</button>)}</div><label className="custom-icon"><span>Outro ícone ou emoji</span><input value={icon} onChange={(event) => setIcon(event.target.value.slice(0, 8))} maxLength={8} /></label></> : <label className="image-upload"><span className="image-preview">{preview && !previewFailed ? <Image src={preview} alt="" fill sizes="64px" unoptimized onError={() => setFailedPreview(preview)} /> : <ImagePlus aria-hidden="true" />}</span><span><strong>{file ? file.name : imageKey && !previewFailed ? "Trocar imagem" : "Selecionar imagem"}</strong><small>PNG, JPG ou WebP · até 3 MB</small></span><input type="file" aria-label={`Selecionar ${label.toLowerCase()}`} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>}
   </div>;
 }
 
@@ -285,6 +298,8 @@ export default function Home() {
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
+  // Uma dica por dia, a mesma para todos.
+  const dailyTip = sidebarTips[Math.floor(Date.now() / 86400000) % sidebarTips.length];
   const clearTaskToOpen = useCallback(() => setTaskToOpen(null), []);
   const [ticketToOpen, setTicketToOpen] = useState<number | null>(null);
   const clearTicketToOpen = useCallback(() => setTicketToOpen(null), []);
@@ -344,7 +359,7 @@ export default function Home() {
 
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
   const restockMessage = [
-    "🛒 *Lista de reposição — Estoque da Firma*",
+    `🛒 *Lista de reposição — ${APP_NAME}*`,
     "",
     "Precisamos repor:",
     ...lowItems.map((item) => {
@@ -420,10 +435,10 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
-        <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>Portal da equipe</strong><small>Estoque e atendimento</small></div></div>
+        <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>{APP_NAME}</strong><small>{APP_TAGLINE}</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <nav>
-          <button className={tab === "hub" ? "active" : ""} onClick={() => { setTab("hub"); setStockMenu(false); setMobileMenu(false); }}><Archive /> Visão geral</button>
+          <button className={tab === "hub" ? "active" : ""} onClick={() => { setTab("hub"); setStockMenu(false); setMobileMenu(false); }}><LayoutDashboard /> Visão geral</button>
           <div className={`sidebar-module ${["stock", "planning", "reports", "history"].includes(tab) ? "selected" : ""}`}>
             <button className="module-trigger" aria-expanded={stockMenu} onClick={() => setStockMenu((open) => !open)}><PackageCheck /> <span>Estoque</span><ChevronDown className={stockMenu ? "open" : ""} /></button>
             {stockMenu && <div className="sidebar-subnav">
@@ -437,10 +452,11 @@ export default function Home() {
           <button className={tab === "tasks" ? "active" : ""} onClick={() => { setTab("tasks"); setStockMenu(false); setMobileMenu(false); }}><ListTodo /> Tarefas</button>
           <button className={tab === "tickets" ? "active" : ""} onClick={() => openTicket()}><LifeBuoy /> Chamados</button>
           <button className={tab === "people" ? "active" : ""} onClick={() => { setTab("people"); setStockMenu(false); setMobileMenu(false); }}><Contact /> Pessoas</button>
+          {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setStockMenu(false); setMobileMenu(false); }}><UserCog /> Usuários</button>}
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
-          <p>Consulte a escala aqui no portal e registre o consumo para manter toda a rotina em um só lugar.</p>
+          <p>{dailyTip}</p>
         </div>
         <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div><CircleUserRound size={18} /></button>
         <button className="signout-link" onClick={logout}><LogOut size={15} /> Sair do sistema</button>
@@ -457,7 +473,7 @@ export default function Home() {
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} onOpenTask={openTask} /> : tab === "stock" ? (
+          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} onOpenTask={openTask} onOpenTicket={openTicket} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -537,7 +553,18 @@ export default function Home() {
   );
 }
 
-function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onOpenTask }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "team") => void; onOpenTask: (taskId?: number) => void }) {
+function greeting() {
+  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "America/Sao_Paulo" }).format(new Date()));
+  return hour < 12 ? "BOM DIA" : hour < 18 ? "BOA TARDE" : "BOA NOITE";
+}
+
+/** "Terça-feira, 10 de novembro": só a primeira letra maiúscula. */
+function todayLong() {
+  const text = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }).format(new Date());
+  return text.charAt(0).toLocaleUpperCase("pt-BR") + text.slice(1);
+}
+
+function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onOpenTask, onOpenTicket }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "people" | "team") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
@@ -550,8 +577,8 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
 
   return <>
     <section className="hub-welcome">
-      <div><p className="eyebrow">BOM TRABALHO, {firstName.toLocaleUpperCase("pt-BR")}</p><h2>O que você precisa acessar?</h2><p>Estoque e atendimento agora têm áreas próprias dentro do mesmo sistema interno.</p></div>
-      <span>{new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }).format(new Date())}</span>
+      <div><p className="eyebrow">{greeting()}, {firstName.toLocaleUpperCase("pt-BR")}</p><h2>O que você precisa hoje?</h2><p>Suas tarefas, os chamados do seu time, a escala e o estoque da copa, num só lugar.</p></div>
+      <span>{todayLong()}</span>
     </section>
 
     <div className="hub-modules">
@@ -569,7 +596,10 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
       </article>
     </div>
 
-    <MyTasksPanel onOpen={onOpenTask} />
+    <div className="hub-work-grid">
+      <MyTasksPanel onOpen={onOpenTask} />
+      <MyTicketsPanel onOpen={onOpenTicket} />
+    </div>
 
     <div className="hub-bottom-grid">
       <article className="hub-activity">
@@ -577,7 +607,7 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
         {movements.length ? movements.slice(0, 3).map((movement) => <div className="hub-activity-row" key={movement.id}><span>{movementCopy[movement.type].label.slice(0,1)}</span><div><strong>{movementCopy[movement.type].label} · {movement.itemName}</strong><small>{movement.createdByName || "Equipe"} · {exactDate(movement.createdAt)}</small></div><b>{fmt(Math.abs(movement.quantity))} {movement.unit}</b></div>) : <div className="hub-empty-row"><History /><span><strong>Nenhuma movimentação ainda</strong><small>As atualizações do estoque aparecerão aqui.</small></span></div>}
       </article>
       <article className="hub-internal-card">
-        <span><Users /></span><div><small>SISTEMA INTERNO</small><h3>Equipe e acessos</h3><p>Cada pessoa usa sua própria conta e as ações ficam registradas.</p>{isAdmin && <button onClick={() => onOpen("team")}>Gerenciar usuários</button>}</div>
+        <span><Users /></span><div><small>{APP_TAGLINE.toLocaleUpperCase("pt-BR")}</small><h3>Pessoas e times</h3><p>Veja quem é quem, de qual time e como falar com cada pessoa. Cada um usa sua própria conta, e as ações ficam registradas.</p><div className="hub-internal-actions"><button onClick={() => onOpen("people")}>Ver pessoas</button>{isAdmin && <button onClick={() => onOpen("team")}>Gerenciar usuários</button>}</div></div>
       </article>
     </div>
   </>;
@@ -754,15 +784,15 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onD
     <>
       <div className="team-intro">
         <span className="team-intro-icon"><Users /></span>
-        <div><p className="eyebrow">ACESSO INDIVIDUAL</p><h2>Equipe e permissões</h2><p>Cada pessoa entra com sua própria conta. Os lançamentos ficam associados ao usuário e as permissões são verificadas pelo servidor.</p></div>
+        <div><p className="eyebrow">ACESSO INDIVIDUAL</p><h2>Usuários e permissões</h2><p>Cada pessoa entra com sua própria conta, e tudo o que ela faz fica registrado no nome dela. Cargo, telefone e times ficam na área Pessoas.</p></div>
       </div>
       <div className="permission-cards">
-        <article><strong>Administrador</strong><p>Gerencia itens, confere saldos, altera permissões e registra movimentações.</p></article>
-        <article><strong>Membro personalizado</strong><p>O administrador escolhe individualmente quais operações cada pessoa pode realizar.</p></article>
-        <article><strong>Somente leitura</strong><p>Serve como ponto de partida para quem pode apenas consultar as áreas liberadas.</p></article>
+        <article><strong>Administrador</strong><p>Acesso total: cria usuários, monta os times, edita a escala, atende qualquer chamado e pode excluir tarefas e chamados.</p></article>
+        <article><strong>Membro</strong><p>Cria e edita tarefas, abre chamados e atende os do seu time. No estoque e na escala, faz o que o administrador liberar.</p></article>
+        <article><strong>Somente leitura</strong><p>Consulta tarefas, chamados, escala, estoque e pessoas, sem alterar nada.</p></article>
       </div>
       <div className="team-panel">
-        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário, a senha inicial e defina o que cada pessoa poderá fazer.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
+        <div className="section-heading team-heading"><div><h2>Usuários cadastrados</h2><p>Crie o usuário e a senha inicial e escolha o perfil. As permissões extras do estoque e da escala ficam na aba Permissões de cada pessoa.</p></div><div className="team-heading-actions"><span>{members.length} {members.length === 1 ? "usuário" : "usuários"}</span><button className="secondary-button" onClick={onAddMember}><UserPlus size={16} /> Adicionar membro</button></div></div>
         <div className="team-table">
           <div className="team-table-head"><span>Usuário</span><span>Permissão</span><span>Status</span><span>Entrada</span><span>Ações</span></div>
           {members.map((member) => <div className="team-row" key={member.userId}>
@@ -885,6 +915,28 @@ function Modal({ state, items, schedule, currentUser, saving, onClose, onSubmit,
   const [avatarMode, setAvatarMode] = useState<"icon" | "image">((editingMember?.avatarKey ?? profile?.avatarKey) ? "image" : "icon");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [profileExtra, setProfileExtra] = useState<{ memberId: number; jobTitle: string; phone: string; teams: { name: string; color: string; isLead: boolean }[] } | null>(null);
+
+  // Cargo, telefone e times vêm da área Pessoas.
+  useEffect(() => {
+    if (state.kind !== "profile") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/people", { cache: "no-store" });
+        if (!response.ok) return;
+        const people = await response.json() as { people: { id: number; jobTitle: string; phone: string }[]; teams: { name: string; color: string; members: { memberId: number; isLead: boolean }[] }[]; me: { id: number } };
+        const mine = people.people.find((person) => person.id === people.me.id);
+        if (!cancelled && mine) setProfileExtra({
+          memberId: mine.id,
+          jobTitle: mine.jobTitle,
+          phone: mine.phone,
+          teams: people.teams.flatMap((team) => team.members.filter((row) => row.memberId === mine.id).map((row) => ({ name: team.name, color: team.color, isLead: row.isLead }))),
+        });
+      } catch { /* sem a área Pessoas, o perfil continua funcionando */ }
+    })();
+    return () => { cancelled = true; };
+  }, [state.kind]);
   const [formError, setFormError] = useState("");
   const [scannerCode, setScannerCode] = useState("");
   const [scannerMessage, setScannerMessage] = useState("Aponte a câmera para um código de barras ou QR Code.");
@@ -975,6 +1027,11 @@ function Modal({ state, items, schedule, currentUser, saving, onClose, onSubmit,
         const uploadedAvatarKey = avatarMode === "image" && avatarFile ? await uploadImage(avatarFile, "profile") : avatarMode === "image" ? avatarKey : null;
         let submissionError: string | null;
         if (state.kind === "profile") {
+          // Cargo e telefone moram em Pessoas; salva antes, porque o onSubmit fecha a janela.
+          if (profileExtra) {
+            const response = await fetch("/api/people", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "updatePerson", memberId: profileExtra.memberId, jobTitle: profileExtra.jobTitle, phone: profileExtra.phone }) });
+            if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error || "Não foi possível salvar cargo e telefone.");
+          }
           submissionError = await onSubmit({ action: "updateProfile", name: memberName, email: memberEmail, username: memberUsername, currentPassword, password: memberPassword, avatarIcon, avatarKey: uploadedAvatarKey }, "Perfil e acesso atualizados.");
         } else {
           submissionError = await onSubmit({ action: editingMember ? "updateMember" : "addMember", userId: editingMember?.userId, name: memberName, email: memberEmail, username: memberUsername, password: memberPassword, role: memberRole, permissions: memberPermissions, active: memberActive, avatarIcon, avatarKey: uploadedAvatarKey }, editingMember ? "Membro atualizado." : "Membro adicionado.");
@@ -1036,14 +1093,19 @@ function Modal({ state, items, schedule, currentUser, saving, onClose, onSubmit,
           <div className="full generate-preview"><span className="field-label">Prévia</span>{generatedPreview.length ? <ol>{generatedPreview.map((week) => { const team = findTeam(schedule, week.teamId); return <li key={week.start} className={week.conflict ? "conflict" : ""}><span className={`generate-dot ${team?.color ?? "purple"}`} /><strong>{weekLabel(week)}</strong><small>{team?.name}</small>{week.conflict && <em>conflita com {weekLabel(week.conflict)}</em>}</li>; })}</ol> : <small>Preencha os campos para ver as semanas.</small>}</div>
           {generateBlocked && generatedPreview.length > 0 && <p className="schedule-conflict full"><TriangleAlert size={15} /> Algumas semanas conflitam com a escala atual. Mude a data inicial ou a quantidade.</p>}
         </> : state.kind === "profile" ? <>
-          <VisualEditor label={state.kind === "profile" ? "Sua imagem" : "Imagem do membro"} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
+          <VisualEditor label="Sua imagem" icons={personIcons} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label className="full"><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
-          <label className="full"><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
+          <label><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
+          {profileExtra && <>
+            <label><span>Cargo</span><input maxLength={60} value={profileExtra.jobTitle} onChange={(e) => setProfileExtra({ ...profileExtra, jobTitle: e.target.value })} placeholder="Ex.: Analista de Suporte" /></label>
+            <label><span>Telefone ou ramal</span><input maxLength={30} inputMode="tel" value={profileExtra.phone} onChange={(e) => setProfileExtra({ ...profileExtra, phone: e.target.value })} placeholder="Ex.: (11) 98765-4321" /></label>
+            <div className="profile-teams full"><span>Seus times</span><div>{profileExtra.teams.length ? profileExtra.teams.map((team) => <TeamChip key={team.name} team={team} lead={team.isLead} />) : <small>Você ainda não está em nenhum time. Peça a um administrador para incluir você.</small>}</div></div>
+          </>}
           <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : "Mínimo de 8 caracteres, com letras e números."}</small></label></div></div>
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>
-          <VisualEditor label="Avatar do usuário" mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
+          <VisualEditor label="Avatar do usuário" icons={personIcons} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />
           <label><span>Nome</span><input autoFocus required value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Ex.: Ana Souza" /></label>
           <label><span>Usuário de acesso</span><input required minLength={3} autoCapitalize="none" value={memberUsername} onChange={(e) => setMemberUsername(e.target.value)} placeholder="Ex.: ana" /></label>
           <label><span>{editingMember ? "Redefinir senha" : "Senha inicial"}</span><input required={!editingMember} type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder={editingMember ? "Deixe em branco para manter" : "8+ caracteres, letras e números"} /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : editingMember ? "Deixe em branco para manter. Para trocar: 8+ caracteres, letras e números." : "Obrigatória: mínimo de 8 caracteres, com letras e números."}</small></label>

@@ -349,3 +349,37 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
     </aside>
   </div>;
 }
+
+/** Resumo para a visão geral: o que pede atenção na fila do meu time e nos meus chamados. */
+export function MyTicketsPanel({ onOpen }: { onOpen: (ticketId?: number) => void }) {
+  const [data, setData] = useState<Data | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const response = await fetch("/api/tickets", { cache: "no-store" });
+        if (!response.ok) return;
+        const json = await response.json() as Data;
+        if (!cancelled) setData(json);
+      } catch { /* o painel é opcional */ }
+    };
+    void run();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!data) return null;
+  const me = data.me;
+  const active = data.tickets.filter((ticket) => isActiveTicket(ticket.status));
+  const queue = active.filter((ticket) => ticket.teamId !== null && me.teamIds.includes(ticket.teamId));
+  const late = queue.filter((ticket) => slaStatus(ticket).state === "breached").length;
+  const requested = active.filter((ticket) => ticket.requesterId === me.id).length;
+  // Primeiro o que é meu; depois o que está sem dono na fila do meu time.
+  const focus = [...active.filter((ticket) => ticket.assigneeId === me.id), ...queue.filter((ticket) => ticket.assigneeId === null)].sort(compareTickets).slice(0, 4);
+
+  return <article className="hub-tasks">
+    <div className="hub-panel-title"><div><span><LifeBuoy /></span><div><h3>Chamados</h3><p>{me.teamIds.length ? `${queue.length} na fila do seu time${late ? ` · ${late} fora do prazo` : ""}` : "Você ainda não está em nenhum time"}{requested ? ` · ${requested} aberto${requested === 1 ? "" : "s"} por você` : ""}</p></div></div><button onClick={() => onOpen()}>Abrir chamados</button></div>
+    {focus.length ? focus.map((ticket) => <button key={ticket.id} className="hub-task-row" onClick={() => onOpen(ticket.id)}>
+      <UrgencyBadge urgency={ticket.urgency} /><span className="task-code">{ticketCode(ticket.id)}</span><span className="task-title">{ticket.title}</span><SlaBadge ticket={ticket} />
+    </button>) : <div className="hub-empty-row"><LifeBuoy /><span><strong>Nada esperando por você</strong><small>Chamados atribuídos a você ou sem dono na fila do seu time aparecem aqui.</small></span></div>}
+  </article>;
+}

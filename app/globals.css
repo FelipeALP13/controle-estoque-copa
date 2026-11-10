@@ -182,7 +182,7 @@ main { min-height: 100vh; margin-left: 248px; }
 .hub-welcome { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 5px 1px 23px; }
 .hub-welcome h2 { margin: 5px 0 6px; font-size: 27px; letter-spacing: -.04em; }
 .hub-welcome p:not(.eyebrow) { margin: 0; color: var(--muted); font-size: 12px; }
-.hub-welcome > span { padding: 8px 11px; border: 1px solid #dce5de; border-radius: 20px; color: #617068; background: white; font-size: 9px; font-weight: 750; text-transform: capitalize; }
+.hub-welcome > span { padding: 8px 11px; border: 1px solid #dce5de; border-radius: 20px; color: #617068; background: white; font-size: 9px; font-weight: 750; }
 .hub-modules { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
 .hub-module-card { --module: var(--green); --module-soft: var(--green-soft); position: relative; display: flex; min-height: 310px; overflow: hidden; flex-direction: column; padding: 24px; border: 1px solid #d9e3f3; border-radius: 17px; background: linear-gradient(145deg,#fff 45%,#eef4ff 100%); box-shadow: 0 5px 20px rgba(31,61,105,.055); }
 .hub-module-card::after { position: absolute; right: -45px; bottom: -65px; width: 190px; height: 190px; border: 34px solid color-mix(in srgb,var(--module) 9%,transparent); border-radius: 50%; content: ""; }
@@ -1124,3 +1124,16 @@ mark.mention { padding: 0 2px; border-radius: 4px; color: #2357bd; background: #
   .ticket-main { flex-basis: calc(100% - 80px); }
   .ticket-meta { width: 100%; justify-content: flex-end; }
 }
+
+/* Visão geral: tarefas e chamados lado a lado */
+.hub-work-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; margin-top: 15px; }
+.hub-work-grid > .hub-tasks { margin-top: 0; }
+.hub-task-row .urgency-badge { min-width: 54px; padding: 2px 6px; font-size: 9px; }
+.hub-internal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 900px) { .hub-work-grid { grid-template-columns: 1fr; } }
+.profile-teams { display: flex; flex-direction: column; gap: 7px; }
+.profile-teams > span { color: #46524a; font-size: 11px; font-weight: 800; }
+.profile-teams > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-teams small { color: #89928c; font-size: 11px; }
+/* Qualquer bloco "full" dentro de um formulário ocupa a largura toda (antes valia só para <label>). */
+.form-grid > .full { grid-column: 1 / -1; }
