@@ -8,6 +8,7 @@ import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
 import ReportsView from "./reports-view";
 import TasksView, { MyTasksPanel } from "./tasks-view";
+import NotificationsBell from "./notifications-bell";
 import ListTodo from "lucide-react/icons/list-todo";
 import { addDays, findOverlappingWeek, generateRotation, nextSupportWeek, normalizeTeamMembers, scheduleWhatsAppMessage,supportTeamColorLabels, supportTeamColors, supportWeekForDate, weekRangeError, type SupportTeam, type SupportTeamColor, type SupportWeek } from "./support-schedule";
 import Archive from "lucide-react/icons/archive";
@@ -279,6 +280,15 @@ export default function Home() {
   const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "planning" | "reports" | "history" | "team">("hub");
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
+  const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
+  const clearTaskToOpen = useCallback(() => setTaskToOpen(null), []);
+
+  function openTask(taskId?: number) {
+    setTab("tasks");
+    setStockMenu(false);
+    setMobileMenu(false);
+    if (taskId) setTaskToOpen(taskId);
+  }
   const [mobileMenu, setMobileMenu] = useState(false);
 
   const load = useCallback(async (silent = false) => {
@@ -425,14 +435,14 @@ export default function Home() {
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
           <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Tarefas" : tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
-          {tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
+          <div className="topbar-actions"><NotificationsBell onOpenTask={openTask} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 
         <section className="content">
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} /> : tab === "stock" ? (
+          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} onOpenTask={openTask} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -502,7 +512,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -512,7 +522,7 @@ export default function Home() {
   );
 }
 
-function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "tasks" | "team") => void }) {
+function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onOpenTask }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "team") => void; onOpenTask: (taskId?: number) => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
@@ -544,7 +554,7 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen }: {
       </article>
     </div>
 
-    <MyTasksPanel onOpen={() => onOpen("tasks")} />
+    <MyTasksPanel onOpen={onOpenTask} />
 
     <div className="hub-bottom-grid">
       <article className="hub-activity">

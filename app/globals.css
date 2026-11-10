@@ -960,3 +960,40 @@ main { min-height: 100vh; margin-left: 248px; }
   .task-board { grid-auto-columns: 82%; }
   .task-modal-body { padding: 14px 19px; }
 }
+
+/* Avisos (sininho) e menções */
+.topbar > .topbar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.bell { position: relative; }
+.bell-button { position: relative; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 10px; color: #475467; background: white; cursor: pointer; }
+.bell-button:hover, .bell-button.open { color: var(--ink); background: #f3f6fb; }
+.bell-button b { position: absolute; top: -6px; right: -6px; display: grid; min-width: 18px; height: 18px; padding: 0 4px; place-items: center; border: 2px solid white; border-radius: 10px; color: white; background: #e5484d; font-size: 9px; font-weight: 800; line-height: 1; }
+.bell-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; display: flex; width: min(380px, calc(100vw - 24px)); max-height: min(520px, calc(100vh - 110px)); flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 18px 48px rgba(15,23,42,.18); }
+.bell-panel header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.bell-panel header strong { font-size: 13px; }
+.bell-panel header button { border: 0; color: var(--green); background: transparent; font-size: 11px; font-weight: 750; cursor: pointer; }
+.bell-scroll { overflow-y: auto; }
+.bell-panel h4 { margin: 0; padding: 10px 14px 4px; color: #8a93a3; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.bell-item { position: relative; display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 10px 14px; border: 0; color: var(--ink); background: white; text-align: left; cursor: pointer; }
+.bell-item:hover { background: #f7f9fc; }
+.bell-item.unread { background: #f3f7ff; }
+.bell-item.unread::before { position: absolute; top: 50%; left: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--green); content: ""; transform: translateY(-50%); }
+.bell-icon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 8px; color: #475467; background: #eef2f8; }
+.bell-icon.task_mention { color: #2357bd; background: #e8effb; }
+.bell-icon.task_assigned { color: #16a06d; background: #e7f6ef; }
+.bell-icon.due.overdue { color: #b42318; background: #fff4f3; }
+.bell-icon.due.today, .bell-icon.due.soon { color: #925f00; background: #fff8e6; }
+.bell-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.bell-text strong { font-size: 12px; font-weight: 650; }
+.bell-text small { overflow: hidden; color: #667085; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.bell-text em { display: -webkit-box; overflow: hidden; color: #475467; font-size: 11px; font-style: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.bell-time { flex: 0 0 auto; color: #98a2b3; font-size: 10px; white-space: nowrap; }
+.bell-empty { margin: 0; padding: 18px 16px 22px; color: #667085; font-size: 12px; line-height: 1.5; }
+.mention-field { position: relative; width: 100%; }
+.mention-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 5; width: min(280px,100%); margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 12px 32px rgba(15,23,42,.16); list-style: none; }
+.mention-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 7px; color: var(--ink); background: transparent; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; }
+.mention-menu button.active, .mention-menu button:hover { background: #eef2f8; }
+mark.mention { padding: 0 2px; border-radius: 4px; color: #2357bd; background: #e8effb; font-weight: 650; }
+@media (max-width: 560px) {
+  .bell-button { width: 44px; height: 44px; }
+  .bell-panel { position: fixed; top: 76px; right: 12px; left: 12px; width: auto; }
+}

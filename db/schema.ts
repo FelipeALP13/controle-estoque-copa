@@ -144,6 +144,19 @@ export const taskEvents = sqliteTable("task_events", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const notifications = sqliteTable("notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status"] }).notNull(),
+  taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  actorName: text("actor_name").notNull().default("Equipe"),
+  body: text("body").notNull().default(""),
+  readAt: text("read_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const auditLogs = sqliteTable("audit_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   actorUserId: text("actor_user_id"),

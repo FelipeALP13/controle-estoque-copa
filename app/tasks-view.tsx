@@ -13,6 +13,7 @@ import Search from "lucide-react/icons/search";
 import Send from "lucide-react/icons/send";
 import Trash2 from "lucide-react/icons/trash-2";
 import X from "lucide-react/icons/x";
+import { splitMentions } from "./notifications";
 import { describeTaskEvent, dueState, isClosedStatus, sortOrderBetween, taskCode, taskPriorities, taskPriorityLabels, taskStatuses, taskStatusLabels, type TaskEventKind, type TaskPriority, type TaskStatus } from "./tasks";
 
 export type Task = {
@@ -48,7 +49,7 @@ function parseStored(value: string) {
   return new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value) ? `${value.replace(" ", "T")}Z` : value);
 }
 
-function relativeTime(value: string) {
+export function relativeTime(value: string) {
   const minutes = Math.round((Date.now() - parseStored(value).getTime()) / 60000);
   if (minutes < 1) return "agora";
   if (minutes < 60) return `há ${minutes} min`;
@@ -107,7 +108,7 @@ function readView(): "list" | "board" {
   try { return window.localStorage.getItem("tasks-view") === "board" ? "board" : "list"; } catch { return "list"; }
 }
 
-export default function TasksView() {
+export default function TasksView({ openRequest = null, onOpenRequestHandled }: { openRequest?: number | null; onOpenRequestHandled?: () => void }) {
   const [data, setData] = useState<TasksData | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"list" | "board">("list");
@@ -116,6 +117,7 @@ export default function TasksView() {
   const [creating, setCreating] = useState<TaskStatus | null>(null);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
   const busy = useRef(false);
+  const retriedRequest = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -134,6 +136,26 @@ export default function TasksView() {
     const interval = window.setInterval(() => { if (document.visibilityState === "visible" && !busy.current) void load(); }, 15000);
     return () => { window.clearTimeout(first); window.clearInterval(interval); };
   }, [load]);
+
+  // Pedido vindo do sininho ou da visão geral para abrir uma tarefa específica.
+  useEffect(() => {
+    if (!openRequest || !data) return;
+    const timer = window.setTimeout(() => {
+      if (data.tasks.some((task) => task.id === openRequest)) {
+        setOpenTaskId(openRequest);
+      } else if (retriedRequest.current !== openRequest) {
+        // A lista pode estar desatualizada: recarrega uma vez antes de desistir.
+        retriedRequest.current = openRequest;
+        void load();
+        return;
+      } else {
+        setError("Esta tarefa não existe mais.");
+      }
+      retriedRequest.current = null;
+      onOpenRequestHandled?.();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [openRequest, data, onOpenRequestHandled, load]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -436,15 +458,14 @@ function TaskDrawer({ task, members, me, today, onClose, onUpdate, onDeleted, on
             {events.map((event) => event.kind === "comment" ? (
               <li key={event.id} className="task-comment">
                 <Avatar member={event.actorId ? membersById.get(event.actorId) : null} size={24} />
-                <div><p><strong>{event.actorName}</strong><span>{relativeTime(event.createdAt)}</span>{event.canDelete && <button onClick={() => removeComment(event.id)} aria-label="Excluir comentário" title="Excluir comentário"><Trash2 size={12} /></button>}</p><div className="task-comment-body">{event.body}</div></div>
+                <div><p><strong>{event.actorName}</strong><span>{relativeTime(event.createdAt)}</span>{event.canDelete && <button onClick={() => removeComment(event.id)} aria-label="Excluir comentário" title="Excluir comentário"><Trash2 size={12} /></button>}</p><div className="task-comment-body">{splitMentions(event.body, members).map((part, index) => part.mention ? <mark key={index} className="mention">{part.text}</mark> : <span key={index}>{part.text}</span>)}</div></div>
               </li>
             ) : (
               <li key={event.id} className="task-change"><span className="task-change-dot" /><p><strong>{event.actorName}</strong> {describeTaskEvent(event.kind, event.body)} <span>· {relativeTime(event.createdAt)}</span></p></li>
             ))}
           </ol>}
           {me.canEdit && <form className="task-comment-form" onSubmit={sendComment}>
-            <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Escreva um comentário... (Ctrl + Enter envia)" rows={3} maxLength={4000}
-              onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) void sendComment(); }} />
+            <MentionTextarea value={comment} onChange={setComment} members={members} onSubmit={() => void sendComment()} />
             <button className="primary-button" disabled={sending || !comment.trim()}><Send size={14} /> {sending ? "Enviando..." : "Comentar"}</button>
           </form>}
         </div>
@@ -458,8 +479,59 @@ function TaskDrawer({ task, members, me, today, onClose, onUpdate, onDeleted, on
   </div>;
 }
 
+const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR");
+
+/** Campo de comentário que sugere pessoas ao digitar "@". */
+function MentionTextarea({ value, onChange, members, onSubmit }: { value: string; onChange: (value: string) => void; members: TaskMember[]; onSubmit: () => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [active, setActive] = useState(0);
+  const suggestions = mention ? members.filter((member) => fold(member.name).includes(fold(mention.query))).slice(0, 6) : [];
+
+  function detect(text: string, caret: number) {
+    const before = text.slice(0, caret);
+    const at = before.lastIndexOf("@");
+    const query = at >= 0 ? before.slice(at + 1) : "";
+    const valid = at >= 0 && (at === 0 || /\s/.test(before[at - 1])) && !/\n/.test(query) && query.length <= 30 && !/\s{2}/.test(query);
+    setMention(valid ? { start: at, query } : null);
+    setActive(0);
+  }
+
+  function choose(member: TaskMember) {
+    if (!mention || !ref.current) return;
+    const caret = ref.current.selectionStart;
+    const inserted = `@${member.name} `;
+    const next = value.slice(0, mention.start) + inserted + value.slice(caret);
+    onChange(next);
+    setMention(null);
+    const position = mention.start + inserted.length;
+    window.requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(position, position); });
+  }
+
+  return <div className="mention-field">
+    <textarea ref={ref} value={value} rows={3} maxLength={4000} placeholder="Escreva um comentário... Use @ para mencionar alguém (Ctrl + Enter envia)"
+      onChange={(event) => { onChange(event.target.value); detect(event.target.value, event.target.selectionStart); }}
+      onClick={(event) => detect(event.currentTarget.value, event.currentTarget.selectionStart)}
+      onBlur={() => window.setTimeout(() => setMention(null), 150)}
+      onKeyDown={(event) => {
+        if (suggestions.length) {
+          if (event.key === "ArrowDown") { event.preventDefault(); setActive((active + 1) % suggestions.length); return; }
+          if (event.key === "ArrowUp") { event.preventDefault(); setActive((active - 1 + suggestions.length) % suggestions.length); return; }
+          if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); choose(suggestions[active]); return; }
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setMention(null); return; }
+        }
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) onSubmit();
+      }} />
+    {suggestions.length > 0 && <ul className="mention-menu" role="listbox" aria-label="Mencionar">
+      {suggestions.map((member, index) => <li key={member.id} role="option" aria-selected={index === active}>
+        <button type="button" className={index === active ? "active" : ""} onMouseDown={(event) => { event.preventDefault(); choose(member); }}><Avatar member={member} size={20} />{member.name}</button>
+      </li>)}
+    </ul>}
+  </div>;
+}
+
 /** Resumo para a visão geral: as tarefas abertas atribuídas a quem está logado. */
-export function MyTasksPanel({ onOpen }: { onOpen: () => void }) {
+export function MyTasksPanel({ onOpen }: { onOpen: (taskId?: number) => void }) {
   const [data, setData] = useState<TasksData | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -484,8 +556,8 @@ export function MyTasksPanel({ onOpen }: { onOpen: () => void }) {
   const overdue = mine.filter((task) => task.dueDate && task.dueDate < today).length;
 
   return <article className="hub-tasks">
-    <div className="hub-panel-title"><div><span><ListTodo /></span><div><h3>Minhas tarefas</h3><p>{mine.length ? `${mine.length} em aberto${overdue ? ` · ${overdue} com prazo vencido` : ""}` : "Nada atribuído a você agora"}</p></div></div><button onClick={onOpen}>Abrir tarefas</button></div>
-    {mine.length ? mine.slice(0, 4).map((task) => <button key={task.id} className="hub-task-row" onClick={onOpen}>
+    <div className="hub-panel-title"><div><span><ListTodo /></span><div><h3>Minhas tarefas</h3><p>{mine.length ? `${mine.length} em aberto${overdue ? ` · ${overdue} com prazo vencido` : ""}` : "Nada atribuído a você agora"}</p></div></div><button onClick={() => onOpen()}>Abrir tarefas</button></div>
+    {mine.length ? mine.slice(0, 4).map((task) => <button key={task.id} className="hub-task-row" onClick={() => onOpen(task.id)}>
       <PriorityIcon priority={task.priority} /><span className="task-code">{taskCode(task.id)}</span><StatusIcon status={task.status} /><span className="task-title">{task.title}</span>{task.dueDate && <DueChip dueDate={task.dueDate} closed={false} today={today} />}
     </button>) : <div className="hub-empty-row"><ListTodo /><span><strong>Tudo em dia</strong><small>As tarefas atribuídas a você aparecem aqui.</small></span></div>}
   </article>;

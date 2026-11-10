@@ -1,10 +1,11 @@
 import { and, asc, desc, eq, min, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { members, taskEvents, tasks } from "../../../db/schema";
+import { members, notifications, taskEvents, tasks } from "../../../db/schema";
+import { commentRecipients, findMentions, snippet, statusRecipients, type NotificationKind } from "../../notifications";
 import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
-import { cleanMultiline, cleanTitle, isClosedStatus, isTaskPriority, isTaskStatus, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, parseDueDate, sortOrderBetween, taskCode, type TaskEventKind, type TaskStatus } from "../../tasks";
+import { cleanMultiline, cleanTitle, isClosedStatus, isTaskPriority, isTaskStatus, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, parseDueDate, sortOrderBetween, taskCode, taskStatusLabels, type TaskEventKind, type TaskStatus } from "../../tasks";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -28,6 +29,18 @@ async function activeAssignee(db: Db, value: unknown) {
   if (!Number.isInteger(id) || id <= 0) return undefined;
   const [member] = await db.select({ id: members.id, name: members.name }).from(members).where(and(eq(members.id, id), eq(members.active, true))).limit(1);
   return member ?? undefined;
+}
+
+type NewNotification = { memberId: number; kind: NotificationKind; taskId: number; body: string };
+
+/** Avisos não podem derrubar a operação principal (ex.: migração ainda não aplicada). */
+async function notify(db: Db, actorName: string, createdAt: string, rows: NewNotification[]) {
+  if (!rows.length) return;
+  try {
+    await db.insert(notifications).values(rows.map((row) => ({ ...row, actorName, createdAt })));
+  } catch (error) {
+    console.error("notification insert failed", error);
+  }
 }
 
 async function topSortOrder(db: Db, status: TaskStatus) {
@@ -113,6 +126,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       }).returning();
       await db.insert(taskEvents).values({ taskId: task.id, kind: "created", ...actor, createdAt: now });
+      if (assignee.id && assignee.id !== member.id) await notify(db, member.name, now, [{ memberId: assignee.id, kind: "task_assigned", taskId: task.id, body: "" }]);
       return json({ task }, 201);
     }
 
@@ -165,6 +179,16 @@ export async function POST(request: Request) {
       if (Object.keys(changes).length === 0) return json({ task: current });
       const [task] = await db.update(tasks).set({ ...changes, updatedAt: now }).where(eq(tasks.id, taskId)).returning();
       if (events.length) await db.insert(taskEvents).values(events.map((event) => ({ taskId, ...event, ...actor, createdAt: now })));
+
+      const alerts: NewNotification[] = [];
+      if (changes.assigneeId && changes.assigneeId !== member.id) alerts.push({ memberId: changes.assigneeId, kind: "task_assigned", taskId, body: "" });
+      if (changes.status) {
+        // Quem acabou de receber a tarefa já ganhou o aviso de atribuição.
+        for (const id of statusRecipients(member.id, task.assigneeId, current.createdById)) {
+          if (id !== changes.assigneeId) alerts.push({ memberId: id, kind: "task_status", taskId, body: taskStatusLabels[task.status] });
+        }
+      }
+      await notify(db, member.name, now, alerts);
       return json({ task, closed: isClosedStatus(task.status) });
     }
 
@@ -172,10 +196,23 @@ export async function POST(request: Request) {
       const taskId = Number(body.taskId);
       const text = cleanMultiline(body.body, MAX_COMMENT_LENGTH);
       if (!text) return json({ error: "Escreva o comentário antes de enviar." }, 400);
-      const [task] = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      const [task] = await db.select({ id: tasks.id, assigneeId: tasks.assigneeId, createdById: tasks.createdById }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
       if (!task) return json({ error: "Tarefa não encontrada." }, 404);
+      const [participants, people] = await Promise.all([
+        db.selectDistinct({ id: taskEvents.actorId }).from(taskEvents).where(and(eq(taskEvents.taskId, taskId), eq(taskEvents.kind, "comment"))),
+        db.select({ id: members.id, name: members.name }).from(members).where(eq(members.active, true)),
+      ]);
       const [event] = await db.insert(taskEvents).values({ taskId, kind: "comment", body: text, ...actor, createdAt: now }).returning();
       await db.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, taskId));
+      const recipients = commentRecipients({
+        actorId: member.id,
+        assigneeId: task.assigneeId,
+        creatorId: task.createdById,
+        participantIds: participants.map((row) => row.id).filter((id): id is number => id !== null),
+        mentionedIds: findMentions(text, people),
+      });
+      const activeIds = new Set(people.map((person) => person.id));
+      await notify(db, member.name, now, [...recipients].filter(([id]) => activeIds.has(id)).map(([memberId, kind]) => ({ memberId, kind, taskId, body: snippet(text) })));
       return json({ event }, 201);
     }
 
