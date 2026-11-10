@@ -115,6 +115,35 @@ export const supportWeeks = sqliteTable("support_weeks", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const tasks = sqliteTable("tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status", { enum: ["backlog", "todo", "in_progress", "in_review", "done", "canceled"] }).notNull().default("todo"),
+  // 0 sem prioridade, 1 urgente, 2 alta, 3 média, 4 baixa (mesma escala do Linear).
+  priority: integer("priority").notNull().default(0),
+  assigneeId: integer("assignee_id").references(() => members.id, { onDelete: "set null" }),
+  dueDate: text("due_date"),
+  sortOrder: real("sort_order").notNull().default(0),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  completedAt: text("completed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const taskEvents = sqliteTable("task_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["comment", "created", "status", "priority", "assignee", "due_date", "title"] }).notNull(),
+  body: text("body").notNull().default(""),
+  actorId: integer("actor_id").references(() => members.id, { onDelete: "set null" }),
+  actorName: text("actor_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const auditLogs = sqliteTable("audit_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   actorUserId: text("actor_user_id"),

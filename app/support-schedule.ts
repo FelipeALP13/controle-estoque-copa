@@ -96,6 +96,37 @@ export function supportWeekForDate<T extends Pick<SupportWeek, "start" | "end">>
   return weeks.find((week) => isoDate >= week.start && isoDate <= week.end) ?? null;
 }
 
+function shortDate(isoDate: string) {
+  const [, month, day] = isoDate.split("-");
+  return `${day}/${month}`;
+}
+
+/**
+ * Texto para enviar no WhatsApp com a equipe da semana atual e a da próxima.
+ * Retorna null quando não há nada programado a partir de hoje.
+ */
+export function scheduleWhatsAppMessage(teams: readonly SupportTeam[], weeks: readonly SupportWeek[], today: string) {
+  const current = supportWeekForDate(weeks, today);
+  const upcoming = nextSupportWeek(weeks, today);
+  if (!current && !upcoming) return null;
+
+  const describe = (title: string, week: SupportWeek) => {
+    const team = teams.find((entry) => entry.id === week.teamId);
+    return [
+      `*${title} (${shortDate(week.start)} a ${shortDate(week.end)}):* ${team?.name ?? "Equipe não definida"}`,
+      ...(team?.members.length ? [team.members.join(", ")] : []),
+      ...(week.note ? [`Obs.: ${week.note}`] : []),
+    ];
+  };
+
+  return [
+    "📅 *Escala de atendimento*",
+    "",
+    ...(current ? describe("Esta semana", current) : ["*Esta semana:* sem atendimento programado."]),
+    ...(upcoming ? ["", ...describe(current ? "Próxima semana" : "Próximo atendimento", upcoming)] : []),
+  ].join("\n");
+}
+
 export function nextSupportWeek<T extends Pick<SupportWeek, "start">>(weeks: readonly T[], isoDate: string) {
   return [...weeks].sort((a, b) => a.start.localeCompare(b.start)).find((week) => week.start > isoDate) ?? null;
 }

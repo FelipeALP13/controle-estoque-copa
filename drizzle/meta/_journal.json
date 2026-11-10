@@ -85,6 +85,13 @@
       "when": 1794256839284,
       "tag": "0011_support_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794319591570,
+      "tag": "0012_tasks",
+      "breakpoints": true
     }
   ]
 }

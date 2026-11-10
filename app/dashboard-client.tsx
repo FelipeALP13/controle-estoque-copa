@@ -7,7 +7,9 @@ import { passwordPolicyError } from "./auth-policy";
 import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
 import ReportsView from "./reports-view";
-import { addDays, findOverlappingWeek, generateRotation, nextSupportWeek, normalizeTeamMembers, supportTeamColorLabels, supportTeamColors, supportWeekForDate, weekRangeError, type SupportTeam, type SupportTeamColor, type SupportWeek } from "./support-schedule";
+import TasksView, { MyTasksPanel } from "./tasks-view";
+import ListTodo from "lucide-react/icons/list-todo";
+import { addDays, findOverlappingWeek, generateRotation, nextSupportWeek, normalizeTeamMembers, scheduleWhatsAppMessage,supportTeamColorLabels, supportTeamColors, supportWeekForDate, weekRangeError, type SupportTeam, type SupportTeamColor, type SupportWeek } from "./support-schedule";
 import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
@@ -274,7 +276,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "planning" | "reports" | "history" | "team">("hub");
+  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "planning" | "reports" | "history" | "team">("hub");
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -409,6 +411,7 @@ export default function Home() {
             </div>}
           </div>
           <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setStockMenu(false); setMobileMenu(false); }}><CalendarClock /> Escala</button>
+          <button className={tab === "tasks" ? "active" : ""} onClick={() => { setTab("tasks"); setStockMenu(false); setMobileMenu(false); }}><ListTodo /> Tarefas</button>
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
@@ -421,7 +424,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Tarefas" : tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
           {tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}
         </header>
 
@@ -499,7 +502,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView /> : tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -509,12 +512,13 @@ export default function Home() {
   );
 }
 
-function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "team") => void }) {
+function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "tasks" | "team") => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
   const featuredWeek = currentWeek ?? nextWeek;
   const featuredTeam = featuredWeek ? findTeam(schedule, featuredWeek.teamId) : null;
+  const whatsappMessage = scheduleWhatsAppMessage(schedule.teams, schedule.weeks, today);
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
   const openItems = items.filter((item) => item.openedQty > 0);
   const firstName = currentUser?.name.split(/\s+/)[0] || "Equipe";
@@ -535,9 +539,12 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen }: {
       <article className={`hub-module-card schedule-module ${featuredTeam?.color ?? "purple"}`}>
         <div className="hub-module-head"><span><CalendarClock /></span><div><small>MÓDULO</small><h2>Escala</h2></div></div>
         {featuredTeam && featuredWeek ? <><p>{currentWeek ? "Equipe responsável hoje" : "Próxima equipe programada"}</p><div className="hub-support-team"><strong>{featuredTeam.name}</strong><span>{featuredTeam.members.join(" · ")}</span><small>{weekLabel(featuredWeek)}</small></div></> : <p>Consulte as equipes e os próximos períodos de atendimento.</p>}
+        {whatsappMessage && <a className="hub-whatsapp" href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={15} /> Enviar escala no WhatsApp</a>}
         <button onClick={() => onOpen("schedule")}>Abrir escala de atendimento <span>→</span></button>
       </article>
     </div>
+
+    <MyTasksPanel onOpen={() => onOpen("tasks")} />
 
     <div className="hub-bottom-grid">
       <article className="hub-activity">
@@ -572,6 +579,10 @@ function weekLabel(week: Pick<SupportWeek, "start" | "end">) {
   return `${start} a ${end}`;
 }
 
+function whatsappUrl(message: string) {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
 function findTeam(schedule: Schedule, teamId: number) {
   return schedule.teams.find((team) => team.id === teamId) ?? null;
 }
@@ -595,6 +606,7 @@ function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNew
   const nextWeek = nextSupportWeek(weeks, today);
   const highlightedWeek = currentWeek ?? nextWeek ?? weeks.at(-1) ?? null;
   const highlightedTeam = highlightedWeek ? findTeam(schedule, highlightedWeek.teamId) : null;
+  const whatsappMessage = scheduleWhatsAppMessage(schedule.teams, weeks, today);
   const pastWeeks = weeks.filter((week) => week.end < today);
   const visibleWeeks = showPast ? weeks : weeks.filter((week) => week.end >= today);
 
@@ -616,6 +628,7 @@ function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNew
           <p>{currentWeek ? `Responsável pela semana de ${weekLabel(highlightedWeek)}.` : nextWeek ? `A próxima escala começa em ${scheduleDate(highlightedWeek.start, { weekday: "long", day: "2-digit", month: "long" })}.` : `A escala cadastrada terminou em ${scheduleDate(highlightedWeek.end, { day: "2-digit", month: "long" })}. Cadastre as próximas semanas.`}</p>
           {highlightedWeek.note && <p className="schedule-hero-note">{highlightedWeek.note}</p>}
           <div className="schedule-member-list">{highlightedTeam.members.map((member) => <span key={member}>{member}</span>)}</div>
+          {whatsappMessage && <a className="secondary-button whatsapp-button schedule-whatsapp" href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={17} /> Enviar escala no WhatsApp</a>}
         </div>
         <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : nextWeek ? "Próxima semana" : "Último período"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala {highlightedWeek.start.slice(0, 4)}</span></div>
       </section> : <div className="empty-state"><span><CalendarClock /></span><h3>Nenhuma semana cadastrada</h3><p>{canEdit ? (schedule.teams.length ? "Cadastre uma semana ou gere várias de uma vez com o rodízio das equipes." : "Comece criando as equipes de atendimento.") : "A escala ainda não foi preenchida. Fale com um administrador."}</p></div>}
