@@ -23,8 +23,21 @@ const worker = {
         },
       };
     }
-    return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    const https = new URL(request.url).protocol === "https:";
+    return Promise.resolve(runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx))).then((response) => withSecurityHeaders(response, https));
   },
 };
+
+/** Cabeçalhos de segurança em todas as respostas (sem mexer em respostas de troca de protocolo). */
+function withSecurityHeaders(response: Response, https: boolean) {
+  if (response.status === 101 || response.webSocket) return response;
+  const secured = new Response(response.body, response);
+  secured.headers.set("X-Content-Type-Options", "nosniff");
+  secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  // A câmera fica liberada só para o próprio Portal (leitor de código do estoque).
+  secured.headers.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=(), payment=()");
+  if (https) secured.headers.set("Strict-Transport-Security", "max-age=31536000");
+  return secured;
+}
 
 export default worker;

@@ -839,7 +839,7 @@ function ClientsModal({ clients, tasks, onClose, onSaved }: { clients: TaskClien
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal clients-modal">
-    <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Clientes e projetos</h2><p>É a lista que aparece em "Cliente / Projeto". Desativar tira o nome dos menus sem mexer nas demandas antigas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Clientes e projetos</h2><p>É a lista que aparece em “Cliente / Projeto”. Desativar tira o nome dos menus sem mexer nas demandas antigas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <form className="clients-add" onSubmit={async (event) => { event.preventDefault(); if (name.trim() && await save({ name })) setName(""); }}>
       <input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Novo cliente ou projeto" />
       <button className="primary-button" disabled={busy || !name.trim()}><Plus size={15} /> Adicionar</button>

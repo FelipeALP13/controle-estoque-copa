@@ -80,7 +80,7 @@ export function excelDate(isoDate: string) {
 
 /** Nome de aba válido: até 31 caracteres, sem : \ / ? * [ ] e sem repetir. */
 export function safeSheetName(name: string, used: Set<string>) {
-  let base = name.replace(/[:\\/?*[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, 31) || "Planilha";
+  const base = name.replace(/[:\\/?*[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, 31) || "Planilha";
   let candidate = base;
   for (let n = 2; used.has(candidate.toLowerCase()); n += 1) { const suffix = ` (${n})`; candidate = base.slice(0, 31 - suffix.length) + suffix; }
   used.add(candidate.toLowerCase());

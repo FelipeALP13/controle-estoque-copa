@@ -22,7 +22,7 @@ export default function LoginScreen() {
   useEffect(() => {
     fetch("/api/auth", { cache: "no-store" })
       .then(async (response) => {
-        const data = await response.json();
+        const data = await response.json() as { error?: string; authenticated?: boolean; setupRequired?: boolean };
         if (!response.ok) throw new Error(data.error || "Não foi possível verificar o acesso.");
         if (data.authenticated) router.replace("/painel");
         else setSetupRequired(Boolean(data.setupRequired));
@@ -43,7 +43,7 @@ export default function LoginScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: setupRequired ? "setup" : "login", name, email, username, password }),
       });
-      const data = await response.json();
+      const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error || "Não foi possível entrar.");
       router.push("/painel");
       router.refresh();

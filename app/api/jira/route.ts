@@ -20,8 +20,8 @@ function failure(error: unknown) {
   return json({ error: "Não foi possível concluir esta operação agora." }, 500);
 }
 
-/** Em ambiente local (127.0.0.1) aceita um Jira simulado para testes. */
-const isLocal = (request: Request) => ["127.0.0.1", "localhost"].includes(new URL(request.url).hostname);
+/** Só no ambiente de desenvolvimento (nunca no site publicado) aceita um Jira simulado em 127.0.0.1. */
+const isLocal = (request: Request) => Boolean(import.meta.env?.DEV) && ["127.0.0.1", "localhost"].includes(new URL(request.url).hostname);
 
 async function loadProjects(db: Db, connection: typeof jiraConnections.$inferSelect) {
   const found: { key: string; name: string }[] = [];
@@ -52,7 +52,11 @@ export async function GET() {
     ]);
     return json({
       // A chave de API nunca sai do servidor.
-      connections: connections.map(({ apiToken, lockUntil: _lock, ...rest }) => ({ ...rest, hasToken: Boolean(apiToken) })),
+      connections: connections.map((connection) => ({
+        id: connection.id, name: connection.name, baseUrl: connection.baseUrl, email: connection.email, active: connection.active, teamId: connection.teamId,
+        lastSyncAt: connection.lastSyncAt, cursorAt: connection.cursorAt, lastError: connection.lastError, createdAt: connection.createdAt,
+        hasToken: Boolean(connection.apiToken),
+      })),
       projects,
       clients: clientRows,
       teams: teamRows,
@@ -84,7 +88,8 @@ export async function POST(request: Request) {
         throw error;
       }
       return json({
-        results: isAdmin ? results : results.map(({ error: _error, ...rest }) => rest),
+        // Detalhes de erro do Jira só para administradores.
+        results: isAdmin ? results : results.map((result) => ({ ...result, error: result.error ? "erro" : null })),
         changed: results.some((result) => result.created || result.updated || result.comments),
         more: results.some((result) => result.more),
       });

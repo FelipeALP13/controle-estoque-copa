@@ -184,7 +184,8 @@ export async function POST(request: Request) {
         if (!title) return json({ error: "O título não pode ficar vazio." }, 400);
         changes.title = title;
       }
-      if ("description" in body) changes.description = cleanMultiline(body.description, MAX_DESCRIPTION_LENGTH);
+      // Chamado do Jira: a descrição é a de lá (a próxima busca sobrescreveria).
+      if ("description" in body && current.source !== "jira") changes.description = cleanMultiline(body.description, MAX_DESCRIPTION_LENGTH);
 
       // Primeira ação do time (assumir, atribuir ou mudar status) conta como primeira resposta.
       if (handler && !isRequester && !current.firstResponseAt && (changes.assigneeId !== undefined || changes.status)) changes.firstResponseAt = now;

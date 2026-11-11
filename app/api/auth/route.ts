@@ -32,8 +32,9 @@ function publicMember(member: typeof members.$inferSelect) {
 }
 
 async function setupIsAllowed() {
+  // Atalho só para o ambiente de desenvolvimento; no site publicado vale o login do proprietário.
   const host = (await headers()).get("host") ?? "";
-  if (host.startsWith("127.0.0.1") || host.startsWith("localhost")) return true;
+  if (import.meta.env?.DEV && (host.startsWith("127.0.0.1") || host.startsWith("localhost"))) return true;
   return Boolean(await getChatGPTUser());
 }
 
@@ -99,7 +100,11 @@ export async function POST(request: Request) {
     const limit = await checkRateLimit(limitKey, db);
     if (limit.blocked) return Response.json({ error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
     const [member] = await db.select().from(members).where(eq(members.username, username)).limit(1);
-    if (!member?.passwordHash || !member.passwordSalt || !(await verifyPassword(password, member.passwordHash, member.passwordSalt))) {
+    // Usuário inexistente também calcula um hash: o tempo de resposta não revela quem existe.
+    const valid = member?.passwordHash && member.passwordSalt
+      ? await verifyPassword(password, member.passwordHash, member.passwordSalt)
+      : (await verifyPassword(password, "0".repeat(64), "usuario-inexistente"), false);
+    if (!member || !valid) {
       const failure = await recordRateLimitFailure(limitKey, { maxAttempts: 5, windowMinutes: 15, blockMinutes: 15 }, db);
       if (failure.blocked) return Response.json({ error: "Muitas tentativas. O acesso foi bloqueado por 15 minutos." }, { status: 429, headers: { "Retry-After": String(failure.retryAfterSeconds) } });
       return Response.json({ error: "Usuário ou senha incorretos." }, { status: 401 });

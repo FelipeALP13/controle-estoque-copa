@@ -110,6 +110,14 @@ function suggestedIcon(name: string, current: string) {
   return current || "📦";
 }
 
+/** Registro da pessoa sem o hash e o sal da senha: nunca devem sair do servidor. */
+function safeMember<T extends { passwordHash?: string | null; passwordSalt?: string | null }>(member: T) {
+  const rest: Partial<T> = { ...member };
+  delete rest.passwordHash;
+  delete rest.passwordSalt;
+  return rest as Omit<T, "passwordHash" | "passwordSalt">;
+}
+
 export async function GET() {
   try {
     const db = getDb();
@@ -226,7 +234,7 @@ export async function POST(request: Request) {
       }
       if (currentMember.avatarKey && currentMember.avatarKey !== avatarKey) await removeMedia(currentMember.avatarKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: name, action: credentials ? "profile_and_password_updated" : "profile_updated", targetType: "member", targetId: currentMember.id });
-      return Response.json({ member: updated });
+      return Response.json({ member: safeMember(updated) });
     }
 
     if (action === "updateMemberRole") {
@@ -238,7 +246,7 @@ export async function POST(request: Request) {
       const [updated] = await db.update(members).set({ role, permissions: permissionJson(role, {}) }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_role_updated", targetType: "member", targetId: updated.id, details: `Perfil alterado para ${role}` });
-      return Response.json({ member: updated });
+      return Response.json({ member: safeMember(updated) });
     }
 
     if (action === "addMember") {
@@ -264,7 +272,7 @@ export async function POST(request: Request) {
       const credentials = await hashPassword(password);
       const [member] = await db.insert(members).values({ userId: `member:${crypto.randomUUID()}`, name, email, username, passwordHash: credentials.hash, passwordSalt: credentials.salt, role, permissions, active: true, avatarIcon, avatarKey }).returning();
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_created", targetType: "member", targetId: member.id, details: `Usuário ${username} criado como ${role}` });
-      return Response.json({ member }, { status: 201 });
+      return Response.json({ member: safeMember(member) }, { status: 201 });
     }
 
     if (action === "updateMember") {
@@ -294,7 +302,7 @@ export async function POST(request: Request) {
       if (credentials || !updated.active) await db.delete(sessions).where(eq(sessions.memberId, updated.id));
       if (target.avatarKey && target.avatarKey !== avatarKey) await removeMedia(target.avatarKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: credentials ? "member_updated_and_password_reset" : "member_updated", targetType: "member", targetId: updated.id, details: `Usuário ${username} atualizado` });
-      return Response.json({ member: updated });
+      return Response.json({ member: safeMember(updated) });
     }
 
     if (action === "updateMemberActive") {
@@ -306,7 +314,7 @@ export async function POST(request: Request) {
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       if (!updated.active) await db.delete(sessions).where(eq(sessions.memberId, updated.id));
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: updated.active ? "member_activated" : "member_deactivated", targetType: "member", targetId: updated.id, details: updated.name });
-      return Response.json({ member: updated });
+      return Response.json({ member: safeMember(updated) });
     }
 
     if (action === "deleteMember") {

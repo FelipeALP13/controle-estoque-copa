@@ -4,7 +4,9 @@ import { items } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
 
 function csvCell(value: unknown) {
-  const text = value === null || value === undefined ? "" : String(value);
+  let text = value === null || value === undefined ? "" : String(value);
+  // Texto que começa com = + - @ vira fórmula no Excel: um apóstrofo no início impede isso.
+  if (typeof value !== "number" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 

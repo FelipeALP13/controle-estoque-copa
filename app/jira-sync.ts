@@ -52,7 +52,11 @@ async function notify(db: Db, ticketId: number, kind: "ticket_new" | "ticket_com
 
 /** Grava (cria ou atualiza) um item do Jira como chamado. */
 async function upsertIssue(db: Db, connection: Connection, issue: JiraIssueData, clientName: string, teamId: number | null) {
-  const [current] = await db.select().from(tickets).where(and(eq(tickets.jiraConnectionId, connection.id), eq(tickets.externalKey, issue.key))).limit(1);
+  // Procura pela conta e chave; se a conta foi removida e cadastrada de novo, reconhece pelo link do Jira.
+  const [current] = await db.select().from(tickets)
+    .where(or(and(eq(tickets.jiraConnectionId, connection.id), eq(tickets.externalKey, issue.key)), and(isNull(tickets.jiraConnectionId), eq(tickets.externalUrl, issue.url))))
+    .limit(1);
+  if (current && current.jiraConnectionId === null) await db.update(tickets).set({ jiraConnectionId: connection.id }).where(eq(tickets.id, current.id));
   const actorName = `${issue.reporter} (Jira)`;
   let created = 0;
   let updated = 0;

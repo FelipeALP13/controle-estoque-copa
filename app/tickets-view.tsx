@@ -389,7 +389,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
           <div className="ticket-drawer-badges"><UrgencyBadge urgency={ticket.urgency} /><StatusPill status={ticket.status} />{team && <TeamChip team={team} />}<span className="ticket-type">{ticketTypeLabels[ticket.type]}</span>{ticket.client && <span className="ticket-type">Cliente: {ticket.client}</span>}</div>
           <h2 className="ticket-drawer-title">{ticket.title}</h2>
           {ticket.externalUrl && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Veio do Jira{ticket.externalStatus ? <> · lá está <b>{ticket.externalStatus}</b></> : null}. Responda ao cliente pelo Jira; os comentários daqui ficam só para a equipe. <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir no Jira</a></p>}
-          <textarea className="task-description-input" readOnly={!handler && !isRequester} value={description} rows={5} placeholder="Sem detalhes."
+          <textarea className="task-description-input" readOnly={(!handler && !isRequester) || ticket.source === "jira"} title={ticket.source === "jira" ? "A descrição vem do Jira; edite lá." : undefined} value={description} rows={5} placeholder="Sem detalhes."
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== ticket.description && handler) void onUpdate({ description }); }} />
 

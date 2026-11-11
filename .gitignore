@@ -30,6 +30,12 @@ yarn-error.log*
 .env*
 .dev.vars*
 *.pem
+*.key
+
+# Planilhas e exportações têm dados de clientes: nunca vão para o repositório
+*.xlsx
+*.xls
+*.csv
 
 # Checkout-local tool state
 /.wrangler/

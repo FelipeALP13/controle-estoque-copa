@@ -248,7 +248,7 @@ async function uploadImage(file: File, kind: "item" | "profile") {
   form.append("file", file);
   form.append("kind", kind);
   const response = await fetch("/api/media", { method: "POST", body: form });
-  const data = await response.json();
+  const data = await response.json() as { error?: string; imageKey?: string };
   if (!response.ok) throw new Error(data.error || "Não foi possível enviar a imagem.");
   return String(data.imageKey);
 }
@@ -310,7 +310,7 @@ export default function Home() {
   const [modal, setModal] = useState<ModalState>(null);
   const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
   // Uma dica por dia, a mesma para todos.
-  const dailyTip = sidebarTips[Math.floor(Date.now() / 86400000) % sidebarTips.length];
+  const [dailyTip] = useState(() => sidebarTips[Math.floor(Date.now() / 86400000) % sidebarTips.length]);
   const clearTaskToOpen = useCallback(() => setTaskToOpen(null), []);
   const [ticketToOpen, setTicketToOpen] = useState<number | null>(null);
   const clearTicketToOpen = useCallback(() => setTicketToOpen(null), []);
@@ -347,7 +347,7 @@ export default function Home() {
     try {
       if (!silent) setError("");
       const response = await fetch("/api/inventory", { cache: "no-store" });
-      const data = await response.json();
+      const data = await response.json() as { error?: string; items: Item[]; movements: Movement[]; currentUser: CurrentUser; members?: Member[]; schedule?: Schedule };
       if (response.status === 401) { router.replace("/"); return; }
       if (!response.ok) throw new Error(data.error || "Não foi possível carregar o estoque.");
       setItems(data.items);
@@ -420,7 +420,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
+      const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
       await load();
       setModal(null);
