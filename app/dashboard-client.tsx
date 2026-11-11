@@ -30,6 +30,9 @@ import TicketsView, { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import Contact from "lucide-react/icons/contact";
 import ListTodo from "lucide-react/icons/list-todo";
+import CalendarOff from "lucide-react/icons/calendar-off";
+import { absentInSchedule, describeAbsence, splitAbsences } from "./absences";
+import { useAbsences } from "./use-absences";
 import { addDays, findOverlappingWeek, generateRotation, nextSupportWeek, normalizeTeamMembers, scheduleWhatsAppMessage,supportTeamColorLabels, supportTeamColors, supportWeekForDate, weekRangeError, type SupportTeam, type SupportTeamColor, type SupportWeek } from "./support-schedule";
 import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
@@ -580,6 +583,9 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
   const openItems = items.filter((item) => item.openedQty > 0);
   const firstName = currentUser?.name.split(/\s+/)[0] || "Equipe";
+  const away = useAbsences();
+  const outToday = splitAbsences(away.absences, today).now;
+  const nameOf = (id: number) => away.people.find((person) => person.id === id)?.name ?? "";
 
   return <>
     <section className="hub-welcome">
@@ -597,6 +603,7 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
       <article className={`hub-module-card schedule-module ${featuredTeam?.color ?? "purple"}`}>
         <div className="hub-module-head"><span><CalendarClock /></span><div><small>MÓDULO</small><h2>Escala</h2></div></div>
         {featuredTeam && featuredWeek ? <><p>{currentWeek ? "Equipe responsável hoje" : "Próxima equipe programada"}</p><div className="hub-support-team"><strong>{featuredTeam.name}</strong><span>{featuredTeam.members.join(" · ")}</span><small>{weekLabel(featuredWeek)}</small></div></> : <p>Consulte as equipes e os próximos períodos de atendimento.</p>}
+        {outToday.length > 0 && <p className="hub-away"><CalendarOff size={13} /> <span><b>Fora hoje:</b> {outToday.map((absence) => `${nameOf(absence.memberId)} (${describeAbsence(absence, today).toLowerCase()})`).join(", ")}</span></p>}
         {whatsappMessage && <a className="hub-whatsapp" href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={15} /> Enviar escala no WhatsApp</a>}
         <button onClick={() => onOpen("schedule")}>Abrir escala de atendimento <span>→</span></button>
       </article>
@@ -660,8 +667,11 @@ function scheduleRangeLabel(weeks: SupportWeek[]) {
 
 function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNewWeek, onEditWeek, onGenerate }: { schedule: Schedule; loading: boolean; canEdit: boolean; onNewTeam: () => void; onEditTeam: (team: SupportTeam) => void; onNewWeek: () => void; onEditWeek: (week: SupportWeek) => void; onGenerate: () => void }) {
   const [showPast, setShowPast] = useState(false);
+  const away = useAbsences();
   if (loading) return <LoadingRows />;
   const today = isoDateInSaoPaulo();
+  // Quem da equipe estará de férias/folga no período da semana.
+  const absentIn = (week: Pick<SupportWeek, "start" | "end">, team: SupportTeam) => absentInSchedule(team.members, away.people, away.absences, week.start, week.end);
   const weeks = [...schedule.weeks].sort((a, b) => a.start.localeCompare(b.start));
   const currentWeek = supportWeekForDate(weeks, today);
   const nextWeek = nextSupportWeek(weeks, today);
@@ -689,6 +699,7 @@ function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNew
           <p>{currentWeek ? `Responsável pela semana de ${weekLabel(highlightedWeek)}.` : nextWeek ? `A próxima escala começa em ${scheduleDate(highlightedWeek.start, { weekday: "long", day: "2-digit", month: "long" })}.` : `A escala cadastrada terminou em ${scheduleDate(highlightedWeek.end, { day: "2-digit", month: "long" })}. Cadastre as próximas semanas.`}</p>
           {highlightedWeek.note && <p className="schedule-hero-note">{highlightedWeek.note}</p>}
           <div className="schedule-member-list">{highlightedTeam.members.map((member) => <span key={member}>{member}</span>)}</div>
+          {absentIn(highlightedWeek, highlightedTeam).map(({ name, absence }) => <p key={name} className="schedule-away"><CalendarOff size={14} /> {name}: {describeAbsence(absence, today).toLowerCase()}. Combine quem cobre.</p>)}
           {whatsappMessage && <a className="secondary-button whatsapp-button schedule-whatsapp" href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={17} /> Enviar escala no WhatsApp</a>}
         </div>
         <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : nextWeek ? "Próxima semana" : "Último período"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala {highlightedWeek.start.slice(0, 4)}</span></div>
@@ -711,7 +722,7 @@ function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNew
               <div className="schedule-week-date"><small>{scheduleDate(week.start, { month: "short" }).replace(".", "")}</small><strong>{scheduleDate(week.start, { day: "2-digit" })}</strong></div>
               <div><span>{state === "current" ? "Esta semana" : state === "past" ? "Concluída" : "Programada"}</span><h3>{team?.name ?? "Equipe removida"}</h3><p>{weekLabel(week)}{week.note ? ` · ${week.note}` : ""}</p></div>
               <div className="schedule-week-side">
-                <div className="schedule-week-members">{team?.members.map((member) => <span key={member}>{member}</span>)}</div>
+                <div className="schedule-week-members">{team?.members.map((member) => { const out = absentIn(week, team).find((entry) => entry.name === member); return <span key={member} className={out ? "away" : ""} title={out ? describeAbsence(out.absence, today) : undefined}>{member}{out && <CalendarOff size={11} />}</span>; })}</div>
                 {canEdit && <button className="schedule-edit-button" onClick={() => onEditWeek(week)} aria-label={`Editar semana de ${weekLabel(week)}`} title="Editar semana"><Pencil size={14} /></button>}
               </div>
             </article>;

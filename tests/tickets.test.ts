@@ -53,3 +53,19 @@ test("ordena a fila por situação, urgência e antiguidade", () => {
   ];
   assert.deepEqual([...list].sort(compareTickets).map((ticket) => ticket.id), [3, 4, 2, 1]);
 });
+
+test("prazo de solução por urgência", async () => {
+  const { resolutionStatus, isTicketLate } = await import("../app/tickets.ts");
+  const base = { createdAt: "2026-11-10T12:00:00.000Z", resolvedAt: null, firstResponseAt: "2026-11-10T12:30:00.000Z", urgency: "critical" as const, status: "in_progress" as const };
+  // Crítica: 8 h. Às 17h ainda faltam 3 h (mais de um quarto do prazo).
+  assert.deepEqual(resolutionStatus(base, new Date("2026-11-10T17:00:00.000Z")), { state: "ok", minutesLeft: 180 });
+  assert.equal(resolutionStatus(base, new Date("2026-11-10T19:00:00.000Z"))?.state, "warning");
+  assert.equal(resolutionStatus(base, new Date("2026-11-10T21:00:00.000Z"))?.state, "breached");
+  assert.equal(isTicketLate(base, new Date("2026-11-10T21:00:00.000Z")), true);
+  // Alta: 2 dias.
+  assert.equal(resolutionStatus({ ...base, urgency: "high" }, new Date("2026-11-11T21:00:00.000Z"))?.state, "ok");
+  assert.equal(resolutionStatus({ ...base, status: "resolved", resolvedAt: "2026-11-10T19:00:00.000Z" })?.state, "met");
+  assert.equal(resolutionStatus({ ...base, status: "resolved", resolvedAt: "2026-11-10T21:00:00.000Z" })?.state, "late");
+  assert.equal(resolutionStatus({ ...base, status: "canceled" }), null);
+  assert.equal(isTicketLate({ ...base, status: "resolved", resolvedAt: "2026-11-12T00:00:00.000Z" }, new Date("2026-11-13T00:00:00.000Z")), false);
+});

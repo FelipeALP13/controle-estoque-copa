@@ -21,7 +21,10 @@ import { describeTaskEvent, dueState, isClosedStatus, sortOrderBetween, taskCode
 import ImportModal from "./import-modal";
 import Download from "lucide-react/icons/download";
 import { downloadXlsx, type CellValue } from "./xlsx-writer";
+import CalendarOff from "lucide-react/icons/calendar-off";
 import Clock from "lucide-react/icons/clock";
+import { absenceOn, describeAbsence } from "./absences";
+import { useAbsences } from "./use-absences";
 import { formatHours, parseEntryHours, type TimeEntry } from "./time-entries";
 
 export type Task = {
@@ -491,6 +494,9 @@ export function PeoplePicker({ label, value, onChange, members, exclude = [], di
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const byId = new Map(members.map((member) => [member.id, member]));
+  const { absences } = useAbsences();
+  const today = todayInSaoPaulo();
+  const away = (id: number) => { const absence = absenceOn(absences, id, today); return absence ? describeAbsence(absence, today) : ""; };
 
   useEffect(() => {
     if (!open) return;
@@ -503,7 +509,7 @@ export function PeoplePicker({ label, value, onChange, members, exclude = [], di
   return <div className="people-picker" ref={root}>
     <span className="people-picker-label">{label}</span>
     <div className={`people-picker-box ${disabled ? "disabled" : ""}`}>
-      {value.map((id) => <span key={id} className="people-chip"><Avatar member={byId.get(id)} size={16} />{byId.get(id)?.name ?? "Pessoa removida"}{!disabled && <button type="button" onClick={() => onChange(value.filter((entry) => entry !== id))} aria-label={`Remover ${byId.get(id)?.name ?? "pessoa"}`}><X size={11} /></button>}</span>)}
+      {value.map((id) => <span key={id} className={`people-chip ${away(id) ? "away" : ""}`} title={away(id) || undefined}><Avatar member={byId.get(id)} size={16} />{byId.get(id)?.name ?? "Pessoa removida"}{away(id) && <CalendarOff size={11} className="people-chip-away" aria-label={away(id)} />}{!disabled && <button type="button" onClick={() => onChange(value.filter((entry) => entry !== id))} aria-label={`Remover ${byId.get(id)?.name ?? "pessoa"}`}><X size={11} /></button>}</span>)}
       {!disabled && <button type="button" className="people-add" onClick={() => setOpen((current) => !current)} aria-expanded={open}><Plus size={12} /> {value.length ? "Adicionar" : "Escolher"}</button>}
       {disabled && !value.length && <span className="people-empty">Ninguém</span>}
     </div>
@@ -511,7 +517,7 @@ export function PeoplePicker({ label, value, onChange, members, exclude = [], di
       <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pessoa" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } if (event.key === "Enter") { event.preventDefault(); const first = options.find((member) => !value.includes(member.id)); if (first) { onChange([...value, first.id]); setQuery(""); } } }} />
       <ul>{options.length ? options.map((member) => {
         const selected = value.includes(member.id);
-        return <li key={member.id}><label><input type="checkbox" checked={selected} onChange={() => onChange(selected ? value.filter((id) => id !== member.id) : [...value, member.id])} /><Avatar member={member} size={18} />{member.name}</label></li>;
+        return <li key={member.id}><label><input type="checkbox" checked={selected} onChange={() => onChange(selected ? value.filter((id) => id !== member.id) : [...value, member.id])} /><Avatar member={member} size={18} />{member.name}{away(member.id) && <small className="people-menu-away">{away(member.id)}</small>}</label></li>;
       }) : <li className="people-menu-empty">Ninguém encontrado</li>}</ul>
     </div>}
   </div>;

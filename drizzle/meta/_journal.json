@@ -127,6 +127,13 @@
       "when": 1794402506583,
       "tag": "0017_time_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1794404495141,
+      "tag": "0018_absences",
+      "breakpoints": true
     }
   ]
 }

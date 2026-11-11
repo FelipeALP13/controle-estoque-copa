@@ -49,6 +49,33 @@ export function slaStatus(ticket: { createdAt: string; firstResponseAt: string |
   return { state, minutesLeft };
 }
 
+/** Prazo de solução, em horas corridas, por urgência: Crítica 8 h, Alta 2 dias, Normal 5 dias, Baixa 10 dias. */
+export const resolutionHours: Record<TicketUrgency, number> = { critical: 8, high: 48, normal: 120, low: 240 };
+
+/**
+ * Situação do prazo de solução. Ativo: ok, warning (último quarto) ou breached.
+ * Resolvido: met (no prazo) ou late. Cancelado não tem prazo (null).
+ */
+export function resolutionStatus(ticket: { createdAt: string; resolvedAt: string | null; status: TicketStatus; urgency: TicketUrgency }, now = new Date()) {
+  if (ticket.status === "canceled") return null;
+  const created = parseStoredDate(ticket.createdAt).getTime();
+  const limitMinutes = resolutionHours[ticket.urgency] * 60;
+  const due = created + limitMinutes * 60000;
+  if (ticket.status === "resolved") {
+    const resolved = ticket.resolvedAt ? parseStoredDate(ticket.resolvedAt).getTime() : due;
+    return { state: (resolved <= due ? "met" : "late") as SlaState, minutesLeft: 0 };
+  }
+  const minutesLeft = Math.round((due - now.getTime()) / 60000);
+  const state: SlaState = minutesLeft < 0 ? "breached" : minutesLeft <= limitMinutes / 4 ? "warning" : "ok";
+  return { state, minutesLeft };
+}
+
+/** Chamado ativo fora do prazo: sem primeira resposta no prazo ou sem solução no prazo. */
+export function isTicketLate(ticket: { createdAt: string; firstResponseAt: string | null; resolvedAt: string | null; status: TicketStatus; urgency: TicketUrgency }, now = new Date()) {
+  if (!isActiveTicket(ticket.status)) return false;
+  return slaStatus(ticket, now).state === "breached" || resolutionStatus(ticket, now)?.state === "breached";
+}
+
 export function formatMinutes(total: number) {
   const minutes = Math.abs(Math.round(total));
   if (minutes < 60) return `${minutes} min`;

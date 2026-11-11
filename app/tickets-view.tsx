@@ -18,7 +18,7 @@ import { taskCode } from "./tasks";
 import { Avatar, MentionTextarea, relativeTime, TeamChip } from "./tasks-view";
 import Download from "lucide-react/icons/download";
 import { downloadXlsx } from "./xlsx-writer";
-import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, parseStoredDate, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
+import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
 
 type Ticket = {
   id: number; title: string; description: string; type: TicketType; urgency: TicketUrgency; status: TicketStatus; client: string;
@@ -52,8 +52,12 @@ function StatusPill({ status }: { status: TicketStatus }) {
 function SlaBadge({ ticket }: { ticket: Ticket }) {
   if (!isActiveTicket(ticket.status)) return <span className="sla-badge done">{ticket.resolvedAt ? `Resolvido ${relativeTime(ticket.resolvedAt)}` : "Encerrado"}</span>;
   const sla = slaStatus(ticket);
-  // Já respondido: mostra só há quanto tempo está aberto.
-  if (sla.state === "met" || sla.state === "late") return <span className={`sla-badge ${sla.state}`} title="Tempo desde a abertura"><Timer size={11} />Aberto {relativeTime(ticket.createdAt)}</span>;
+  // Já respondido: passa a valer o prazo de solução.
+  if (sla.state === "met" || sla.state === "late") {
+    const solve = resolutionStatus(ticket);
+    if (!solve) return null;
+    return <span className={`sla-badge ${solve.state}`} title="Prazo de solução"><Timer size={11} />{solve.state === "breached" ? `Solução atrasada ${formatMinutes(-solve.minutesLeft)}` : `Resolver em ${formatMinutes(solve.minutesLeft)}`}</span>;
+  }
   const text = sla.state === "breached" ? `Atrasado ${formatMinutes(-sla.minutesLeft)}` : `Responder em ${formatMinutes(sla.minutesLeft)}`;
   return <span className={`sla-badge ${sla.state}`} title="Prazo de primeira resposta"><Timer size={11} />{text}</span>;
 }
@@ -128,7 +132,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     open: active.filter((ticket) => ticket.status === "open").length,
     progress: active.filter((ticket) => ticket.status === "in_progress").length,
     waiting: active.filter((ticket) => ticket.status === "waiting").length,
-    late: active.filter((ticket) => slaStatus(ticket).state === "breached").length,
+    late: active.filter((ticket) => isTicketLate(ticket)).length,
   };
 
   async function update(ticketId: number, changes: Record<string, unknown>) {
@@ -146,6 +150,8 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     const stamp = (value: string | null) => value ? parseStoredDate(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
     const hoursBetween = (from: string, to: string | null) => to ? Math.round(((parseStoredDate(to).getTime() - parseStoredDate(from).getTime()) / 3600000) * 10) / 10 : null;
     const slaLabel = { ok: "No prazo (aguardando)", warning: "Perto do prazo", breached: "Atrasado (sem resposta)", met: "Respondido no prazo", late: "Respondido com atraso" };
+    const solveLabels = { ok: "No prazo", warning: "Perto do prazo", breached: "Atrasado (sem solução)", met: "Resolvido no prazo", late: "Resolvido com atraso" };
+    const solveLabel = (ticket: Ticket) => { const state = resolutionStatus(ticket)?.state; return state ? solveLabels[state] : "Cancelado"; };
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     downloadXlsx(`chamados-${today}.xlsx`, [
       {
@@ -154,13 +160,13 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
           { header: "Código", width: 9 }, { header: "Título", width: 46 }, { header: "Tipo", width: 11 }, { header: "Urgência", width: 10 }, { header: "Status", width: 15 },
           { header: "Cliente", width: 20 }, { header: "Time", width: 16 }, { header: "Solicitante", width: 20 }, { header: "Responsável", width: 20 },
           { header: "Aberto em", width: 17 }, { header: "1ª resposta em", width: 17 }, { header: "Horas até 1ª resposta", type: "number", width: 19 }, { header: "Prazo de 1ª resposta", width: 24 },
-          { header: "Resolvido em", width: 17 }, { header: "Horas até resolver", type: "number", width: 17 }, { header: "Demanda ligada", width: 14 }, { header: "Comentários", type: "number", width: 12 }, { header: "Descrição", width: 50 },
+          { header: "Resolvido em", width: 17 }, { header: "Horas até resolver", type: "number", width: 17 }, { header: "Prazo de solução", width: 24 }, { header: "Demanda ligada", width: 14 }, { header: "Comentários", type: "number", width: 12 }, { header: "Descrição", width: 50 },
         ],
         rows: visible.map((ticket) => [
           ticketCode(ticket.id), ticket.title, ticketTypeLabels[ticket.type], ticketUrgencyLabels[ticket.urgency], ticketStatusLabels[ticket.status],
           ticket.client, ticket.teamId ? teamsById.get(ticket.teamId)?.name ?? "" : "", ticket.requesterName, ticket.assigneeId ? peopleById.get(ticket.assigneeId)?.name ?? "" : "",
           stamp(ticket.createdAt), stamp(ticket.firstResponseAt), hoursBetween(ticket.createdAt, ticket.firstResponseAt), slaLabel[slaStatus(ticket).state],
-          stamp(ticket.resolvedAt), hoursBetween(ticket.createdAt, ticket.resolvedAt), ticket.taskId ? taskCode(ticket.taskId) : "", ticket.commentCount, ticket.description,
+          stamp(ticket.resolvedAt), hoursBetween(ticket.createdAt, ticket.resolvedAt), solveLabel(ticket),ticket.taskId ? taskCode(ticket.taskId) : "", ticket.commentCount, ticket.description,
         ]),
       },
       {
@@ -205,7 +211,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
         <article><small>Abertos</small><strong>{stats.open}</strong><p>Aguardando alguém assumir</p></article>
         <article><small>Em atendimento</small><strong>{stats.progress}</strong><p>Com alguém trabalhando</p></article>
         <article><small>Aguardando</small><strong>{stats.waiting}</strong><p>Esperando retorno</p></article>
-        <article className={stats.late ? "late" : ""}><small>Fora do prazo</small><strong>{stats.late}</strong><p>Sem primeira resposta no prazo</p></article>
+        <article className={stats.late ? "late" : ""}><small>Fora do prazo</small><strong>{stats.late}</strong><p>Sem resposta ou sem solução no prazo</p></article>
       </div>
 
       {visible.length === 0 ? <div className="empty-state"><span><LifeBuoy /></span><h3>{data.tickets.length ? "Nenhum chamado aqui" : "Nenhum chamado ainda"}</h3><p>{data.tickets.length ? "Troque a fila, o filtro de situação ou a busca." : "Quando alguém precisar de outro time, é só abrir um chamado. Ele cai direto na fila do time."}</p>{data.me.canEdit && !data.tickets.length && <div><button className="primary-button" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button></div>}</div> : (
@@ -284,6 +290,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
   const isRequester = ticket.requesterId === me.id;
   const team = ticket.teamId ? data.teams.find((entry) => entry.id === ticket.teamId) : null;
   const sla = slaStatus(ticket);
+  const solve = resolutionStatus(ticket);
 
   const loadEvents = useCallback(async () => {
     const response = await fetch(`/api/tickets?ticketId=${ticket.id}`, { cache: "no-store" });
@@ -383,6 +390,8 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
           <div className="ticket-sla">
             <span>Primeira resposta</span>
             <strong className={sla.state}>{sla.state === "met" ? "Respondido no prazo" : sla.state === "late" ? "Respondido fora do prazo" : !isActiveTicket(ticket.status) ? "Sem resposta registrada" : sla.state === "breached" ? `Atrasada em ${formatMinutes(-sla.minutesLeft)}` : `Faltam ${formatMinutes(sla.minutesLeft)}`}</strong>
+            <span>Solução (até {formatMinutes(resolutionHours[ticket.urgency] * 60)})</span>
+            <strong className={solve?.state ?? "met"}>{!solve ? "Cancelado" : solve.state === "met" ? "Resolvido no prazo" : solve.state === "late" ? "Resolvido fora do prazo" : solve.state === "breached" ? `Atrasada em ${formatMinutes(-solve.minutesLeft)}` : `Faltam ${formatMinutes(solve.minutesLeft)}`}</strong>
             {!handler && <small>Só o time {team?.name ?? "responsável"} altera estes campos.</small>}
           </div>
         </div>
@@ -412,7 +421,7 @@ export function MyTicketsPanel({ onOpen }: { onOpen: (ticketId?: number) => void
   const me = data.me;
   const active = data.tickets.filter((ticket) => isActiveTicket(ticket.status));
   const queue = active.filter((ticket) => ticket.teamId !== null && me.teamIds.includes(ticket.teamId));
-  const late = queue.filter((ticket) => slaStatus(ticket).state === "breached").length;
+  const late = queue.filter((ticket) => isTicketLate(ticket)).length;
   const requested = active.filter((ticket) => ticket.requesterId === me.id).length;
   // Primeiro o que é meu; depois o que está sem dono na fila do meu time.
   const focus = [...active.filter((ticket) => ticket.assigneeId === me.id), ...queue.filter((ticket) => ticket.assigneeId === null)].sort(compareTickets).slice(0, 4);

@@ -5,6 +5,10 @@ import Download from "lucide-react/icons/download";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
 import { downloadXlsx } from "./xlsx-writer";
 import { ClientsReport } from "./leadership-reports";
+import { absenceOn, describeAbsence } from "./absences";
+import { useAbsences } from "./use-absences";
+import MessageCircle from "lucide-react/icons/message-circle";
+import { weeklySummary } from "./weekly-summary";
 import { isOpen, inPeriod, summarize, workload, type PanelTask } from "./leadership";
 import { isClosedProject, projectFarolLabels, projectFarois, type ProjectFarol } from "./projects";
 import { StatusIcon } from "./tasks-view";
@@ -39,6 +43,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
   const [team, setTeam] = useState("");
   const [tab, setTab] = useState<"overview" | "clients">("overview");
   const [clients, setClients] = useState<Person[]>([]);
+  const { absences } = useAbsences();
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +96,23 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
     .filter((entry) => entry.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() !== "lideranca");
   const teamName = (id: number | null) => (id ? teams.find((entry) => entry.id === id)?.name : "") ?? "";
   const ownerNames = (ids: number[]) => ids.map((id) => peopleById.get(id) ?? "Pessoa removida").join(", ");
+
+  // Resumo da semana para o grupo dos líderes. Com um time escolhido, só as demandas dele
+  // e as ausências de quem está nelas; o período do painel não se aplica (é sempre a semana atual).
+  function sendSummary() {
+    const involved = new Set(teamTasks.flatMap((task) => task.owners));
+    const text = weeklySummary({
+      today,
+      tasks: teamTasks,
+      teams: team ? teams.filter((entry) => entry.id === Number(team)) : teams,
+      people,
+      absences: team ? absences.filter((absence) => involved.has(absence.memberId)) : absences,
+      teamLabel,
+      link: window.location.origin,
+      format: { code: taskCode, absence: (absence) => describeAbsence(absence, today) },
+    });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
 
   // Exporta o painel com o mesmo time e período escolhidos; as listas saem completas (a tela mostra só as 8 primeiras).
   function exportExcel() {
@@ -147,6 +169,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
       <div className="leadership-filters">
         <select aria-label="Time" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todos os times</option>{teams.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
         {tab === "overview" && <div className="report-period" role="group" aria-label="Período de abertura">{([["all", "Tudo"], ["30", "30 dias"], ["90", "90 dias"], ["year", "Este ano"]] as const).map(([value, label]) => <button key={value} className={period === value ? "active" : ""} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>)}</div>}
+        {tab === "overview" && <button className="secondary-button whatsapp-button" onClick={sendSummary} title="Abre o WhatsApp com o resumo da semana (time escolhido) para você enviar ao grupo"><MessageCircle size={15} /> Resumo no WhatsApp</button>}
         {tab === "overview" && <button className="secondary-button" onClick={exportExcel} title="Baixa o painel em Excel com o time e o período escolhidos"><Download size={15} /> Exportar Excel</button>}
       </div>
     </div>
@@ -193,7 +216,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
           {rows.length ? <div className="report-table-wrap"><table className="report-table workload-table">
             <thead><tr><th>Colaborador</th><th>Em aberto</th><th>Atrasadas</th><th>Concluídas</th><th>Total</th><th>Horas</th></tr></thead>
             <tbody>{rows.map((row) => <tr key={row.memberId}>
-              <td>{peopleById.get(row.memberId) ?? "Pessoa removida"}</td>
+              <td>{peopleById.get(row.memberId) ?? "Pessoa removida"}{(() => { const away = absenceOn(absences, row.memberId, today); return away ? <span className="person-away inline">{describeAbsence(away, today)}</span> : null; })()}</td>
               <td><span className="inline-bar"><i style={{ width: `${(row.open / maxOpen) * 100}%` }} /><b>{row.open}</b></span></td>
               <td className={row.overdue ? "late" : ""}>{row.overdue}</td><td>{row.done}</td><td>{row.total}</td><td>{number.format(row.hours)}</td>
             </tr>)}</tbody>

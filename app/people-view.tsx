@@ -11,6 +11,9 @@ import Users from "lucide-react/icons/users";
 import X from "lucide-react/icons/x";
 import { Avatar, TeamChip } from "./tasks-view";
 import { teamColorLabels, teamColors, type TeamColor } from "./teams";
+import AbsencesView from "./absences-view";
+import { absenceOn, describeAbsence } from "./absences";
+import { useAbsences } from "./use-absences";
 
 export type Person = { id: number; name: string; email: string; role: "admin" | "member" | "viewer"; active: boolean; avatarIcon: string; avatarKey: string | null; jobTitle: string; phone: string };
 export type Team = { id: number; name: string; color: TeamColor; description: string; members: { memberId: number; isLead: boolean }[] };
@@ -27,7 +30,9 @@ const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").t
 export default function PeopleView() {
   const [data, setData] = useState<PeopleData | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"people" | "teams">("people");
+  const [tab, setTab] = useState<"people" | "teams" | "absences">("people");
+  const { absences } = useAbsences();
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
@@ -68,8 +73,9 @@ export default function PeopleView() {
       <div className="tasks-scope" role="tablist" aria-label="Seções">
         <button role="tab" aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}>Pessoas <b className="count">{data.people.filter((person) => person.active).length}</b></button>
         <button role="tab" aria-selected={tab === "teams"} className={tab === "teams" ? "active" : ""} onClick={() => setTab("teams")}>Times <b className="count">{data.teams.length}</b></button>
+        <button role="tab" aria-selected={tab === "absences"} className={tab === "absences" ? "active" : ""} onClick={() => setTab("absences")}>Férias e ausências{absences.some((absence) => absence.startDate <= today && absence.endDate >= today) && <b className="count">{new Set(absences.filter((absence) => absence.startDate <= today && absence.endDate >= today).map((absence) => absence.memberId)).size}</b>}</button>
       </div>
-      {tab === "people" ? <>
+      {tab === "absences" ? null : tab === "people" ? <>
         <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, cargo ou e-mail" /></label>
         <select aria-label="Filtrar por time" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)}>
           <option value="">Todos os times</option>
@@ -81,7 +87,7 @@ export default function PeopleView() {
 
     {error && <div className="alert error"><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16} /></button></div>}
 
-    {tab === "people" ? (
+    {tab === "absences" ? <AbsencesView people={data.people} /> : tab === "people" ? (
       people.length ? <div className="people-grid">
         {people.map((person) => {
           const memberships = teamsOf(person.id);
@@ -92,7 +98,7 @@ export default function PeopleView() {
               <div><strong>{person.name}{person.id === data.me.id && <small> (você)</small>}</strong><span>{person.jobTitle || <em>Cargo não informado</em>}</span></div>
               {canEdit && <button className="person-edit" onClick={() => setEditingPerson(person)} aria-label={`Editar ${person.name}`} title="Editar"><Pencil size={14} /></button>}
             </div>
-            <div className="person-teams">{memberships.length ? memberships.map(({ team, isLead }) => <TeamChip key={team.id} team={team} lead={isLead} />) : <span className="person-noteam">Sem time</span>}{!person.active && <span className="person-inactive">Desativado</span>}</div>
+            <div className="person-teams">{memberships.length ? memberships.map(({ team, isLead }) => <TeamChip key={team.id} team={team} lead={isLead} />) : <span className="person-noteam">Sem time</span>}{!person.active && <span className="person-inactive">Desativado</span>}{(() => { const away = absenceOn(absences, person.id, today); return away ? <span className="person-away">{describeAbsence(away, today)}</span> : null; })()}</div>
             <div className="person-contact">
               <a href={`mailto:${person.email}`}><Mail size={13} />{person.email}</a>
               {person.phone && <a href={`tel:${person.phone.replace(/[^\d+]/g, "")}`}><Phone size={13} />{person.phone}</a>}

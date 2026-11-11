@@ -219,6 +219,21 @@ export const taskLegacyCodes = sqliteTable("task_legacy_codes", {
     .references(() => tasks.id, { onDelete: "cascade" }),
 });
 
+/** Férias, folgas e outras ausências: aparecem na escala, no painel e ao escolher responsáveis. */
+export const absences = sqliteTable("absences", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["vacation", "day_off", "sick", "course", "other"] }).notNull().default("vacation"),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  note: text("note").notNull().default(""),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("absences_member_idx").on(table.memberId), index("absences_end_idx").on(table.endDate)]);
+
 /** Apontamento de horas: quem trabalhou, em que dia e quanto, em cada demanda. */
 export const timeEntries = sqliteTable("time_entries", {
   id: integer("id").primaryKey({ autoIncrement: true }),
