@@ -94,3 +94,37 @@ test("mensagens de erro do Jira", () => {
   assert.match(jiraErrorMessage(400, '{"errorMessages":["O projeto XYZ não existe."]}'), /XYZ/);
   assert.match(jiraErrorMessage(503, ""), /503/);
 });
+
+test("texto vira documento do Jira", async () => {
+  const { textToAdf, adfToText } = await import("../app/jira.ts");
+  const doc = textToAdf("Olá!\nJá corrigimos.\n\nQualquer coisa, avise.");
+  assert.equal(doc.content.length, 2);
+  assert.deepEqual(doc.content[0].content.map((node) => node.type), ["text", "hardBreak", "text"]);
+  // Ida e volta: o que vai para o Jira volta igual.
+  assert.equal(adfToText(doc), "Olá!\nJá corrigimos.\n\nQualquer coisa, avise.");});
+
+test("escolhe a transição de status no fluxo do Jira", async () => {
+  const { pickTransition, needsTransition } = await import("../app/jira.ts");
+  const flow = [
+    { id: "11", name: "Iniciar atendimento", to: { name: "Em andamento", statusCategory: { key: "indeterminate" } } },
+    { id: "21", name: "Aguardar cliente", to: { name: "Aguardando cliente", statusCategory: { key: "indeterminate" } } },
+    { id: "31", name: "Resolver", to: { name: "Resolvido", statusCategory: { key: "done" } } },
+    { id: "41", name: "Cancelar", to: { name: "Cancelado", statusCategory: { key: "done" } } },
+    { id: "51", name: "Reabrir", to: { name: "Aberto", statusCategory: { key: "new" } } },
+  ];
+  assert.equal(pickTransition(flow, "in_progress")?.id, "11");
+  assert.equal(pickTransition(flow, "waiting")?.id, "21");
+  assert.equal(pickTransition(flow, "resolved")?.id, "31");
+  assert.equal(pickTransition(flow, "canceled")?.id, "41");
+  assert.equal(pickTransition(flow, "open")?.id, "51");
+  // Fluxo simples (sem espera nem cancelamento): não inventa.
+  const simple = [{ id: "1", name: "Fazer", to: { name: "Fazendo", statusCategory: { key: "indeterminate" } } }, { id: "2", name: "Pronto", to: { name: "Done", statusCategory: { key: "done" } } }];
+  assert.equal(pickTransition(simple, "waiting"), null);
+  assert.equal(pickTransition(simple, "canceled"), null);
+  assert.equal(pickTransition(simple, "resolved")?.id, "2");
+  assert.equal(pickTransition(simple, "in_progress")?.id, "1");
+  assert.equal(pickTransition([], "resolved"), null);
+  assert.equal(needsTransition("done", "resolved"), false);
+  assert.equal(needsTransition("indeterminate", "resolved"), true);
+  assert.equal(needsTransition("indeterminate", "waiting"), true);
+});

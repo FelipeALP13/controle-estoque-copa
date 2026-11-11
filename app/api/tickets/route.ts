@@ -6,6 +6,7 @@ import { writeAudit } from "../../audit";
 import { asTicketKind, commentRecipients, findMentions, snippet, type NotificationKind } from "../../notifications";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, cleanTitle, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, sortOrderBetween, taskCode } from "../../tasks";
+import { sendJiraComment, transitionJira } from "../../jira-sync";
 import { canHandleTicket, isTicketStatus, isTicketType, isTicketUrgency, requesterCanSetStatus, ticketCode, ticketStatusLabels, type TicketUrgency } from "../../tickets";
 
 type Db = ReturnType<typeof getDb>;
@@ -56,11 +57,12 @@ export async function GET(request: Request) {
     const ticketId = Number(new URL(request.url).searchParams.get("ticketId"));
     if (ticketId) {
       const events = await db.select().from(ticketEvents).where(eq(ticketEvents.ticketId, ticketId)).orderBy(asc(ticketEvents.createdAt), asc(ticketEvents.id));
-      return json({ events: events.map((event) => ({ ...event, canDelete: event.kind === "comment" && (event.actorId === member.id || viewer.isAdmin) })) });
+      // Comentário que veio do Jira ou já foi enviado ao cliente não se apaga por aqui (continuaria lá).
+      return json({ events: events.map((event) => ({ ...event, canDelete: event.kind === "comment" && !event.externalId && (event.actorId === member.id || viewer.isAdmin) })) });
     }
 
     const [ticketRows, memberRows, teamRows, commentRows] = await Promise.all([
-      db.select().from(tickets).orderBy(desc(tickets.createdAt)).limit(1000),
+      db.select().from(tickets).orderBy(desc(tickets.createdAt)).limit(3000),
       db.select({ id: members.id, name: members.name, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey }).from(members).where(eq(members.active, true)).orderBy(asc(members.name)),
       db.select({ id: teams.id, name: teams.name, color: teams.color }).from(teams).orderBy(asc(teams.name)),
       db.select({ ticketId: ticketEvents.ticketId }).from(ticketEvents).where(eq(ticketEvents.kind, "comment")),
@@ -187,14 +189,27 @@ export async function POST(request: Request) {
       // Chamado do Jira: a descrição é a de lá (a próxima busca sobrescreveria).
       if ("description" in body && current.source !== "jira") changes.description = cleanMultiline(body.description, MAX_DESCRIPTION_LENGTH);
 
+      // Chamado do Jira: o título é o de lá (a próxima busca sobrescreveria).
+      if (current.source === "jira") delete changes.title;
+
       // Primeira ação do time (assumir, atribuir ou mudar status) conta como primeira resposta.
       if (handler && !isRequester && !current.firstResponseAt && (changes.assigneeId !== undefined || changes.status)) changes.firstResponseAt = now;
 
       if (!Object.keys(changes).length) return json({ ticket: current });
-      const [ticket] = await db.update(tickets).set({ ...changes, updatedAt: now }).where(eq(tickets.id, ticketId)).returning();
+      let [ticket] = await db.update(tickets).set({ ...changes, updatedAt: now }).where(eq(tickets.id, ticketId)).returning();
       if (events.length) await db.insert(ticketEvents).values(events.map((event) => ({ ticketId, ...event, ...actor, createdAt: now })));
       await notify(db, member.name, now, ticketId, alerts, member.id);
-      return json({ ticket });
+      // Leva o novo status para o Jira; se não der, o Portal mantém e avisa.
+      let jiraWarning: string | null = null;
+      if (changes.status && current.source === "jira" && handler) {
+        const result = await transitionJira(db, current, changes.status);
+        jiraWarning = result.message;
+        if (result.moved) {
+          [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+          await db.insert(ticketEvents).values({ ticketId, kind: "status", body: changes.status, actorId: null, actorName: `Jira (${result.statusName})`, createdAt: now });
+        }
+      }
+      return json({ ticket, jiraWarning });
     }
 
     if (action === "addComment") {
@@ -205,8 +220,20 @@ export async function POST(request: Request) {
         db.selectDistinct({ id: ticketEvents.actorId }).from(ticketEvents).where(and(eq(ticketEvents.ticketId, ticketId), eq(ticketEvents.kind, "comment"))),
         db.select({ id: members.id, name: members.name }).from(members).where(eq(members.active, true)),
       ]);
-      const [event] = await db.insert(ticketEvents).values({ ticketId, kind: "comment", body: text, ...actor, createdAt: now }).returning();
-      const firstResponse = !current.firstResponseAt && current.requesterId !== member.id && canHandleTicket(viewer, current.teamId);
+      // Chamado do Jira com "enviar ao cliente": vai primeiro para o Jira; se falhar, nada é gravado aqui.
+      const toJira = body.sendToJira === true && current.source === "jira";
+      if (toJira && !canHandleTicket(viewer, current.teamId)) return json({ error: "Somente o time responsável responde ao cliente no Jira." }, 403);
+      let externalId: string | null = null;
+      if (toJira) {
+        try {
+          externalId = `comment:${await sendJiraComment(db, current, text)}`;
+        } catch (error) {
+          return json({ error: `Não foi enviado ao Jira: ${error instanceof Error ? error.message : "erro desconhecido"}` }, 502);
+        }
+      }
+      const [event] = await db.insert(ticketEvents).values({ ticketId, kind: "comment", body: text, ...actor, createdAt: now, externalId }).returning();
+      // Em chamado do Jira, só a resposta enviada ao cliente conta como primeira resposta (nota interna não).
+      const firstResponse = !current.firstResponseAt && current.requesterId !== member.id && canHandleTicket(viewer, current.teamId) && (current.source !== "jira" || toJira);
       await db.update(tickets).set({ updatedAt: now, ...(firstResponse ? { firstResponseAt: now } : {}) }).where(eq(tickets.id, ticketId));
       const recipients = commentRecipients({
         actorId: member.id,
@@ -225,6 +252,7 @@ export async function POST(request: Request) {
       const [event] = await db.select().from(ticketEvents).where(eq(ticketEvents.id, eventId)).limit(1);
       if (!event || event.kind !== "comment") return json({ error: "Comentário não encontrado." }, 404);
       if (event.actorId !== member.id && !viewer.isAdmin) return json({ error: "Você só pode excluir os seus comentários." }, 403);
+      if (event.externalId) return json({ error: "Este comentário está no Jira; apague lá se precisar." }, 400);
       await db.delete(ticketEvents).where(eq(ticketEvents.id, eventId));
       return json({ ok: true });
     }

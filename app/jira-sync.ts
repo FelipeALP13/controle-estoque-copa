@@ -2,7 +2,8 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { getDb } from "../db";
 import { jiraConnections, jiraProjects, clients, members, notifications, teamMembers, teams, ticketEvents, tickets } from "../db/schema";
-import { basicAuth, buildJql, JIRA_FIELDS, jiraErrorMessage, MAX_PAGES_PER_SYNC, minutesSince, nextStatus, PAGE_SIZE, parseIssue, SYNC_INTERVAL_MS, type JiraIssueData } from "./jira";
+import { basicAuth, buildJql, JIRA_FIELDS, jiraErrorMessage, MAX_PAGES_PER_SYNC, minutesSince, needsTransition, nextStatus, PAGE_SIZE, parseIssue, pickTransition, SYNC_INTERVAL_MS, textToAdf, type JiraIssueData, type JiraTransition } from "./jira";
+import { ticketStatusLabels, type TicketStatus } from "./tickets";
 
 type Db = ReturnType<typeof getDb>;
 type Connection = typeof jiraConnections.$inferSelect;
@@ -80,8 +81,9 @@ async function upsertIssue(db: Db, connection: Connection, issue: JiraIssueData,
     assigneeId = current.assigneeId;
     if (current.externalUpdatedAt !== issue.updated || current.title !== issue.title) {
       const status = nextStatus(current.status, current.externalCategory, issue);
+      // Urgência e tipo vêm do Jira só na criação: depois, vale a triagem feita no Portal.
       await db.update(tickets).set({
-        title: issue.title, description: issue.description, type: issue.type, urgency: issue.urgency, status,
+        title: issue.title, description: issue.description, status,
         client: clientName.slice(0, 80) || current.client,
         firstResponseAt: current.firstResponseAt ?? issue.firstResponse,
         resolvedAt: status === "resolved" ? current.resolvedAt ?? issue.resolved : null,
@@ -108,6 +110,48 @@ async function upsertIssue(db: Db, connection: Connection, issue: JiraIssueData,
     if (fresh.length && !created && assigneeId) await notify(db, ticketId, "ticket_comment", [assigneeId], `${issue.key}: ${fresh.at(-1)!.body}`, `${fresh.at(-1)!.author} (Jira)`);
   }
   return { created, updated, comments };
+}
+
+type JiraTicket = Pick<typeof tickets.$inferSelect, "id" | "jiraConnectionId" | "externalKey" | "externalCategory">;
+
+async function connectionOf(db: Db, ticket: JiraTicket) {
+  if (!ticket.jiraConnectionId || !ticket.externalKey) return null;
+  const [connection] = await db.select().from(jiraConnections).where(eq(jiraConnections.id, ticket.jiraConnectionId)).limit(1);
+  return connection ?? null;
+}
+
+/** Envia um comentário ao cliente no Jira, só com o texto escrito. Devolve o id do comentário lá. */
+export async function sendJiraComment(db: Db, ticket: JiraTicket, text: string) {
+  const connection = await connectionOf(db, ticket);
+  if (!connection) throw new Error("A conta do Jira deste chamado não está mais conectada.");
+  const created = await jiraFetch(connection, `/rest/api/3/issue/${encodeURIComponent(ticket.externalKey!)}/comment`, { method: "POST", body: JSON.stringify({ body: textToAdf(text.trim()) }) }) as { id?: string } | null;
+  if (!created?.id) throw new Error("O Jira não confirmou o comentário. Confira lá antes de reenviar.");
+  return String(created.id);
+}
+
+/**
+ * Leva o status do Portal para o Jira, usando a transição equivalente do fluxo do projeto.
+ * Nunca derruba a mudança no Portal: devolve um aviso quando não dá para mudar lá.
+ */
+export async function transitionJira(db: Db, ticket: JiraTicket, status: TicketStatus): Promise<{ moved: boolean; message: string | null; statusName?: string; category?: string }> {
+  const connection = await connectionOf(db, ticket);
+  if (!connection) return { moved: false, message: "Status mudou só no Portal: a conta do Jira não está conectada." };
+  if (!needsTransition(ticket.externalCategory, status)) return { moved: false, message: null };
+  try {
+    const key = encodeURIComponent(ticket.externalKey!);
+    const data = await jiraFetch(connection, `/rest/api/3/issue/${key}/transitions`) as { transitions?: JiraTransition[] } | null;
+    const transition = pickTransition(data?.transitions ?? [], status);
+    if (!transition) return { moved: false, message: `Status mudou só no Portal: o fluxo do Jira não tem um caminho para “${ticketStatusLabels[status]}” a partir de onde o chamado está lá.` };
+    await jiraFetch(connection, `/rest/api/3/issue/${key}/transitions`, { method: "POST", body: JSON.stringify({ transition: { id: transition.id } }) });
+    const statusName = transition.to?.name ?? transition.name;
+    const category = transition.to?.statusCategory?.key ?? ticket.externalCategory ?? "new";
+    // Guarda o novo status do Jira: a próxima busca não trata isso como mudança vinda de lá.
+    await db.update(tickets).set({ externalStatus: statusName, externalCategory: category }).where(eq(tickets.id, ticket.id));
+    return { moved: true, message: null, statusName, category };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "erro desconhecido";
+    return { moved: false, message: `Status mudou só no Portal; no Jira não foi possível: ${reason}` };
+  }
 }
 
 /** Sincroniza uma conta. Usa uma trava no banco para duas abas não buscarem ao mesmo tempo. */

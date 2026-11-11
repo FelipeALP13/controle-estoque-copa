@@ -1644,3 +1644,31 @@ mark.mention { padding: 0 2px; border-radius: 4px; color: #2357bd; background: #
   .calendar-agenda .calendar-item:disabled { cursor: default; }
   .calendar-nav h2 { min-width: 0; font-size: 16px; }
 }
+
+/* Jira: resposta ao cliente */
+.jira-send { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 7px 10px; border: 1px dashed #b9c8e4; border-radius: 9px; color: #344054; font-size: 12px; font-weight: 650; cursor: pointer; }
+.jira-send input { accent-color: #0747a6; }
+.jira-send small { color: #8a93a3; font-weight: 500; }
+.jira-send.on { border-style: solid; border-color: #0747a6; background: #deebff; color: #0747a6; }
+.comment-tag { margin-left: 6px; padding: 1px 7px; border-radius: 20px; font-size: 10px; font-style: normal; font-weight: 750; }
+.comment-tag.sent { color: #0747a6; background: #deebff; }
+.comment-tag.internal { color: #667085; background: #f2f4f7; }
+
+/* Qualidade do Suporte */
+.quality-page { display: flex; flex-direction: column; gap: 14px; }
+.quality-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.quality-toolbar h3 { margin: 0 0 3px; font-size: 15px; }
+.quality-toolbar p { margin: 0; color: var(--muted); font-size: 11px; }
+.chart-legend { display: flex; gap: 12px; color: var(--muted); font-size: 11px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.chart-legend i.opened, .quality-bars .opened { background: var(--series-open); }
+.chart-legend i.resolved, .quality-bars .resolved { background: var(--series-purchase); }
+.quality-trend { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
+.quality-month { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.quality-bars { display: flex; align-items: flex-end; justify-content: center; gap: 4px; width: 100%; height: 140px; border-bottom: 1px solid var(--chart-baseline); }
+.quality-bars span { position: relative; width: 30%; max-width: 28px; min-height: 2px; border-radius: 4px 4px 0 0; }
+.quality-bars b { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); color: #344054; font-size: 10px; }
+.quality-month small { color: #8a93a3; font-size: 11px; text-transform: capitalize; }
+.quality-month em { color: #067647; font-size: 11px; font-style: normal; font-weight: 750; }
+.quality-month em.late { color: #b42318; }

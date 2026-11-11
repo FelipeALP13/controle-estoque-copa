@@ -175,7 +175,56 @@ export function nextStatus(current: TicketStatus, previousCategory: string | nul
   return issue.status;
 }
 
-export const JIRA_FIELDS = ["summary", "description", "issuetype", "priority", "status", "reporter", "created", "updated", "resolutiondate", "comment", "project"];
+/** Texto simples → documento do Jira (ADF): parágrafos por linha em branco, quebras simples mantidas. */
+export function textToAdf(text: string) {
+  const paragraphs = text.replace(/\r\n/g, "\n").trim().split(/\n{2,}/).filter((block) => block.trim());
+  return {
+    type: "doc",
+    version: 1,
+    content: (paragraphs.length ? paragraphs : [""]).map((block) => ({
+      type: "paragraph",
+      content: block.split("\n").flatMap((line, index) => [
+        ...(index ? [{ type: "hardBreak" }] : []),
+        ...(line ? [{ type: "text", text: line }] : []),
+      ]),
+    })),
+  };
+}
+
+export type JiraTransition = { id: string; name: string; to?: { name?: string; statusCategory?: { key?: string } } };
+
+const statusTargets: Record<TicketStatus, { category: string; words: RegExp; required?: boolean }> = {
+  open: { category: "new", words: /reabr|reopen|aberto|open|to ?do|a fazer|backlog/ },
+  in_progress: { category: "indeterminate", words: /andamento|progress|atendimento|working|fazendo|analise|análise/ },
+  // "Aguardando" só muda no Jira se o fluxo tiver um status de espera de verdade.
+  waiting: { category: "indeterminate", words: /aguard|waiting|pending|pendente|espera/, required: true },
+  resolved: { category: "done", words: /resolv|conclu|done|fech|closed|finaliz|complete|solucion/ },
+  canceled: { category: "done", words: /cancel|won.?t|descart|recus|declin|rejeit|invalid/ },
+};
+
+/**
+ * Transição do Jira que leva ao status equivalente ao do Portal.
+ * Prefere a de nome parecido dentro da mesma categoria; `null` quando não há caminho no fluxo.
+ */
+export function pickTransition(transitions: readonly JiraTransition[], status: TicketStatus) {
+  const target = statusTargets[status];
+  const sameCategory = transitions.filter((transition) => transition.to?.statusCategory?.key === target.category);
+  const named = (transition: JiraTransition) => target.words.test(fold(`${transition.name} ${transition.to?.name ?? ""}`));
+  const best = sameCategory.find(named);
+  if (best) return best;
+  if (target.required) return null;
+  // Cancelado não usa uma transição genérica de "concluído" para não marcar como resolvido.
+  if (status === "canceled") return null;
+  return sameCategory[0] ?? null;
+}
+
+/** Precisa mudar no Jira? Não, se lá já está na categoria certa (exceto "aguardando", que é um status específico). */
+export function needsTransition(currentCategory: string | null, status: TicketStatus) {
+  if (status === "waiting" || status === "canceled") return true;
+  return currentCategory !== statusTargets[status].category;
+}
+
+export const JIRA_FIELDS =["summary", "description", "issuetype", "priority", "status", "reporter", "created", "updated", "resolutiondate", "comment", "project"];
 
 /** Mensagem curta para erros da API do Jira. */
 export function jiraErrorMessage(status: number, body: string) {

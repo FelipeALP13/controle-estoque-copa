@@ -36,13 +36,13 @@ type Ticket = {
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
 type Team = { id: number; name: string; color: string };
 type Viewer = { id: number; isAdmin: boolean; canEdit: boolean; teamIds: number[] };
-type TicketEvent = { id: number; kind: TicketEventKind; body: string; actorId: number | null; actorName: string; createdAt: string; canDelete: boolean };
+type TicketEvent = { id: number; kind: TicketEventKind; body: string; actorId: number | null; actorName: string; createdAt: string; canDelete: boolean; externalId?: string | null };
 type Data = { tickets: Ticket[]; members: Person[]; teams: Team[]; me: Viewer };
 type Scope = "queue" | "requested" | "assigned" | "all";
 
 async function post(payload: Record<string, unknown>) {
   const response = await fetch("/api/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  const data = await response.json() as { error?: string; ticket?: Ticket; task?: { id: number } };
+  const data = await response.json() as { error?: string; ticket?: Ticket; task?: { id: number }; jiraWarning?: string | null };
   if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
   return data;
 }
@@ -150,6 +150,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
   async function update(ticketId: number, changes: Record<string, unknown>) {
     try {
       const result = await post({ action: "updateTicket", ticketId, ...changes });
+      if (result.jiraWarning) setError(result.jiraWarning);
       if (result.ticket) setData((current) => current && { ...current, tickets: current.tickets.map((ticket) => ticket.id === ticketId ? { ...ticket, ...result.ticket } : ticket) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar.");
@@ -322,6 +323,8 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
   const team = ticket.teamId ? data.teams.find((entry) => entry.id === ticket.teamId) : null;
   const sla = slaStatus(ticket);
   const solve = resolutionStatus(ticket);
+  const fromJira = ticket.source === "jira";
+  const [toClient, setToClient] = useState(false);
 
   const loadEvents = useCallback(async () => {
     const response = await fetch(`/api/tickets?ticketId=${ticket.id}`, { cache: "no-store" });
@@ -344,8 +347,9 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
 
   const send = () => run(async () => {
     if (!comment.trim()) return;
-    await post({ action: "addComment", ticketId: ticket.id, body: comment });
+    await post({ action: "addComment", ticketId: ticket.id, body: comment, sendToJira: fromJira && toClient });
     setComment("");
+    setToClient(false);
     await Promise.all([loadEvents(), onReload()]);
   });
 
@@ -415,7 +419,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
             {events.map((event) => event.kind === "comment" ? (
               <li key={event.id} className="task-comment">
                 <Avatar member={event.actorId ? data.members.find((person) => person.id === event.actorId) : null} size={24} />
-                <div><p><strong>{event.actorName}</strong><span>{relativeTime(event.createdAt)}</span>{event.canDelete && <button onClick={() => removeComment(event.id)} aria-label="Excluir comentário" title="Excluir comentário"><Trash2 size={12} /></button>}</p><div className="task-comment-body">{splitMentions(event.body, data.members).map((part, index) => part.mention ? <mark key={index} className="mention">{part.text}</mark> : <span key={index}>{part.text}</span>)}</div></div>
+                <div><p><strong>{event.actorName}</strong><span>{relativeTime(event.createdAt)}</span>{fromJira && event.actorId !== null && (event.externalId ? <em className="comment-tag sent">Enviado ao cliente</em> : <em className="comment-tag internal">Nota interna</em>)}{event.canDelete && <button onClick={() => removeComment(event.id)} aria-label="Excluir comentário" title="Excluir comentário"><Trash2 size={12} /></button>}</p><div className="task-comment-body">{splitMentions(event.body, data.members).map((part, index) => part.mention ? <mark key={index} className="mention">{part.text}</mark> : <span key={index}>{part.text}</span>)}</div></div>
               </li>
             ) : (
               <li key={event.id} className="task-change"><span className="task-change-dot" /><p><strong>{event.actorName}</strong> {describeTicketEvent(event.kind, event.body)} <span>· {relativeTime(event.createdAt)}</span></p></li>
@@ -423,7 +427,8 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
           </ol>}
           {me.canEdit && <form className="task-comment-form" onSubmit={(event) => { event.preventDefault(); void send(); }}>
             <MentionTextarea value={comment} onChange={setComment} members={data.members} onSubmit={() => void send()} />
-            <button className="primary-button" disabled={busy || !comment.trim()}><Send size={14} /> Comentar</button>
+            {fromJira && handler && <label className={`jira-send ${toClient ? "on" : ""}`}><input type="checkbox" checked={toClient} onChange={(event) => setToClient(event.target.checked)} /> Enviar ao cliente no Jira <small>{toClient ? "o cliente vê este comentário no Jira" : "sem marcar, fica só como nota interna da equipe"}</small></label>}
+            <button className="primary-button" disabled={busy || !comment.trim()}><Send size={14} /> {fromJira && toClient ? "Enviar ao cliente" : "Comentar"}</button>
           </form>}
         </div>
         <div className="task-drawer-side ticket-side">
