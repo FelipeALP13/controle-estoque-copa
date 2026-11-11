@@ -136,7 +136,7 @@ export function Avatar({ member, size = 22 }: { member: TaskMember | null | unde
 }
 
 /** Até 3 avatares sobrepostos e "+N" para o resto. */
-function AvatarStack({ ids, membersById, size = 22 }: { ids: number[]; membersById: Map<number, TaskMember>; size?: number }) {
+export function AvatarStack({ ids, membersById, size = 22 }: { ids: number[]; membersById: Map<number, TaskMember>; size?: number }) {
   if (!ids.length) return <Avatar member={null} size={size} />;
   const names = ids.map((id) => membersById.get(id)?.name ?? "Pessoa removida").join(", ");
   return <span className="avatar-stack" title={names} aria-label={`Responsáveis: ${names}`}>
@@ -427,7 +427,7 @@ function Board({ byStatus, lookups, teamsById, canEdit, today, onOpen, onMove, o
 }
 
 /** Seleção de várias pessoas com busca. */
-function PeoplePicker({ label, value, onChange, members, exclude = [], disabled }: { label: string; value: number[]; onChange: (ids: number[]) => void; members: TaskMember[]; exclude?: number[]; disabled?: boolean }) {
+export function PeoplePicker({ label, value, onChange, members, exclude = [], disabled }: { label: string; value: number[]; onChange: (ids: number[]) => void; members: TaskMember[]; exclude?: number[]; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);

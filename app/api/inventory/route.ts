@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { createSession, getSessionMember, hashPassword, normalizeUsername, passwordPolicyError, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
-import { inventoryLocks, items, members, movements, openBatches, sessions, supportTeams, supportWeeks } from "../../../db/schema";
+import { inventoryLocks, items, members, movements, openBatches, projectPeople, sessions, supportTeams, supportWeeks, taskPeople, tickets } from "../../../db/schema";
 import { writeAudit } from "../../audit";
 import { movementOccursBeforeOpening, parseMovementDate } from "../../movement-policy";
 import { hasTrustedOrigin } from "../../request-security";
@@ -28,6 +28,17 @@ async function loadSchedule(db: Db) {
     console.error("schedule load failed", error);
     return { teams: [], weeks: [] };
   }
+}
+
+/** Quantas demandas, projetos e chamados ligam a pessoa (vazio se as tabelas ainda não existem). */
+async function historyOf(db: Db, memberId: number) {
+  const count = async (query: Promise<{ value: number }[]>) => { try { return (await query)[0]?.value ?? 0; } catch { return 0; } };
+  const [demands, projectsCount, ticketsCount] = await Promise.all([
+    count(db.select({ value: sql<number>`count(distinct ${taskPeople.taskId})` }).from(taskPeople).where(eq(taskPeople.memberId, memberId))),
+    count(db.select({ value: sql<number>`count(*)` }).from(projectPeople).where(eq(projectPeople.memberId, memberId))),
+    count(db.select({ value: sql<number>`count(*)` }).from(tickets).where(sql`${tickets.requesterId} = ${memberId} or ${tickets.assigneeId} = ${memberId}`)),
+  ]);
+  return { demands, projects: projectsCount, tickets: ticketsCount, total: demands + projectsCount + ticketsCount };
 }
 
 async function scheduleWeekRows(db: Db) {
@@ -307,6 +318,12 @@ export async function POST(request: Request) {
       if (target.role === "admin" && target.active) {
         const activeAdmins = await db.select({ id: members.id }).from(members).where(and(eq(members.role, "admin"), eq(members.active, true)));
         if (activeAdmins.length <= 1) return Response.json({ error: "O sistema precisa manter pelo menos um administrador ativo." }, { status: 400 });
+      }
+      // Quem tem histórico não pode ser excluído: a exclusão apagaria os vínculos com demandas, projetos e chamados.
+      const history = await historyOf(db, target.id);
+      if (history.total) {
+        const parts = [history.demands && `${history.demands} demanda${history.demands > 1 ? "s" : ""}`, history.projects && `${history.projects} projeto${history.projects > 1 ? "s" : ""}`, history.tickets && `${history.tickets} chamado${history.tickets > 1 ? "s" : ""}`].filter(Boolean).join(", ").replace(/, ([^,]*)$/, " e $1");
+        return Response.json({ error: `${target.name} tem ${parts} no histórico. Para não apagar esses registros, desative o acesso em vez de excluir.` }, { status: 409 });
       }
       await db.delete(members).where(eq(members.id, target.id));
       await removeMedia(target.avatarKey);

@@ -22,6 +22,10 @@ const sidebarTips = [
   "Use “Do meu time” nas demandas e “Fila do meu time” nos chamados para focar no que é seu.",
 ];
 import PeopleView from "./people-view";
+import ProjectsView from "./projects-view";
+import LeadershipView from "./leadership-view";
+import FolderKanban from "lucide-react/icons/folder-kanban";
+import Gauge from "lucide-react/icons/gauge";
 import TicketsView, { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import Contact from "lucide-react/icons/contact";
@@ -294,7 +298,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "tickets" | "people" | "planning" | "reports" | "history" | "team">("hub");
+  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "people" | "planning" | "reports" | "history" | "team">("hub");
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
@@ -422,7 +426,7 @@ export default function Home() {
   }
 
   async function deleteMember(member: Member) {
-    if (!window.confirm(`Excluir o acesso de ${member.name}? Esta ação remove a conta, mas preserva o histórico do estoque.`)) return;
+    if (!window.confirm(`Excluir ${member.name}? Só é possível para quem não tem demandas, projetos ou chamados; para quem tem histórico, use "Desativado" na coluna Status.`)) return;
     await submit({ action: "deleteMember", userId: member.userId }, "Membro excluído.");
   }
 
@@ -450,6 +454,8 @@ export default function Home() {
           </div>
           <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setStockMenu(false); setMobileMenu(false); }}><CalendarClock /> Escala</button>
           <button className={tab === "tasks" ? "active" : ""} onClick={() => { setTab("tasks"); setStockMenu(false); setMobileMenu(false); }}><ListTodo /> Demandas</button>
+          <button className={tab === "projects" ? "active" : ""} onClick={() => { setTab("projects"); setStockMenu(false); setMobileMenu(false); }}><FolderKanban /> Projetos</button>
+          <button className={tab === "panel" ? "active" : ""} onClick={() => { setTab("panel"); setStockMenu(false); setMobileMenu(false); }}><Gauge /> Painel</button>
           <button className={tab === "tickets" ? "active" : ""} onClick={() => openTicket()}><LifeBuoy /> Chamados</button>
           <button className={tab === "people" ? "active" : ""} onClick={() => { setTab("people"); setStockMenu(false); setMobileMenu(false); }}><Contact /> Pessoas</button>
           {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setStockMenu(false); setMobileMenu(false); }}><UserCog /> Usuários</button>}
@@ -465,7 +471,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "tickets" ? "Chamados internos" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
           <div className="topbar-actions"><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 
@@ -543,7 +549,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} /> : tab === "people" ? <PeopleView /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} onOpenTask={openTask} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} /> : tab === "people" ? <PeopleView /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} onOpenTask={openTask} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
