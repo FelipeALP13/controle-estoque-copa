@@ -35,6 +35,7 @@ import AdminView from "./admin-view";
 import CalendarView from "./calendar-view";
 import CalendarDays from "lucide-react/icons/calendar-days";
 import CommandSearch from "./command-search";
+import SidebarNav, { useNavCounts } from "./sidebar-nav";
 import type { SearchHit } from "./search";
 import ShieldCheck from "lucide-react/icons/shield-check";
 import { useJiraAutoSync } from "./use-jira-sync";
@@ -48,7 +49,6 @@ import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
 import CalendarClock from "lucide-react/icons/calendar-clock";
-import ChevronDown from "lucide-react/icons/chevron-down";
 import CircleUserRound from "lucide-react/icons/circle-user-round";
 import Coffee from "lucide-react/icons/coffee";
 import Ellipsis from "lucide-react/icons/ellipsis";
@@ -327,6 +327,25 @@ export default function Home() {
   const clearProjectToOpen = useCallback(() => setProjectToOpen(null), []);
   const [personSearch, setPersonSearch] = useState("");
 
+  // Menu lateral: troca de tela (os itens do estoque mantêm o submenu aberto) e fecha o menu no celular.
+  function go(next: typeof tab, keepStock = false) {
+    setTab(next);
+    setStockMenu(keepStock);
+    setMobileMenu(false);
+  }
+  const { counts: navCounts } = useNavCounts(Boolean(currentUser?.active));
+  // A dica do dia pode ser escondida até amanhã (vale só neste navegador).
+  const tipKey = `dica-escondida-${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())}`;
+  const [showTip, setShowTip] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { try { if (window.localStorage.getItem(tipKey)) setShowTip(false); } catch { /* opcional */ } }, 0);
+    return () => window.clearTimeout(timer);
+  }, [tipKey]);
+  function hideTip() {
+    setShowTip(false);
+    try { window.localStorage.setItem(tipKey, "1"); } catch { /* opcional */ }
+  }
+
   // Resultado escolhido na busca geral: abre a tela certa já no item.
   function openSearchHit(hit: SearchHit) {
     setStockMenu(false);
@@ -482,32 +501,38 @@ export default function Home() {
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
         <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>{APP_NAME}</strong><small>{APP_TAGLINE}</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
-        <nav>
-          <button className={tab === "hub" ? "active" : ""} onClick={() => { setTab("hub"); setStockMenu(false); setMobileMenu(false); }}><LayoutDashboard /> Visão geral</button>
-          <div className={`sidebar-module ${["stock", "planning", "reports", "history"].includes(tab) ? "selected" : ""}`}>
-            <button className="module-trigger" aria-expanded={stockMenu} onClick={() => setStockMenu((open) => !open)}><PackageCheck /> <span>Estoque</span><ChevronDown className={stockMenu ? "open" : ""} /></button>
-            {stockMenu && <div className="sidebar-subnav">
-              <button className={tab === "stock" ? "active" : ""} onClick={() => { setTab("stock"); setStockMenu(true); setMobileMenu(false); }}>Itens e saldos</button>
-              {permissions.viewPlanning && <button className={tab === "planning" ? "active" : ""} onClick={() => { setTab("planning"); setStockMenu(true); setMobileMenu(false); }}>Planejamento</button>}
-              {permissions.viewHistory && <button className={tab === "reports" ? "active" : ""} onClick={() => { setTab("reports"); setStockMenu(true); setMobileMenu(false); }}>Relatórios</button>}
-              {permissions.viewHistory && <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); setStockMenu(true); setMobileMenu(false); }}>Histórico</button>}
-            </div>}
-          </div>
-          <button className={tab === "schedule" ? "active" : ""} onClick={() => { setTab("schedule"); setStockMenu(false); setMobileMenu(false); }}><CalendarClock /> Escala</button>
-          <button className={tab === "calendar" ? "active" : ""} onClick={() => { setTab("calendar"); setStockMenu(false); setMobileMenu(false); }}><CalendarDays /> Calendário</button>
-          <button className={tab === "tasks" ? "active" : ""} onClick={() => { setTab("tasks"); setStockMenu(false); setMobileMenu(false); }}><ListTodo /> Demandas</button>
-          <button className={tab === "projects" ? "active" : ""} onClick={() => { setTab("projects"); setStockMenu(false); setMobileMenu(false); }}><FolderKanban /> Projetos</button>
-          <button className={tab === "panel" ? "active" : ""} onClick={() => { setTab("panel"); setStockMenu(false); setMobileMenu(false); }}><Gauge /> Painel</button>
-          <button className={tab === "tickets" ? "active" : ""} onClick={() => openTicket()}><LifeBuoy /> Chamados</button>
-          <button className={tab === "knowledge" ? "active" : ""} onClick={() => openKnowledge()}><BookOpen /> Base de conhecimento</button>
-          <button className={tab === "people" ? "active" : ""} onClick={() => { setPersonSearch(""); setTab("people"); setStockMenu(false); setMobileMenu(false); }}><Contact /> Pessoas</button>
-          {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setStockMenu(false); setMobileMenu(false); }}><UserCog /> Usuários</button>}
-          {isAdmin && <button className={tab === "admin" ? "active" : ""} onClick={() => { setTab("admin"); setStockMenu(false); setMobileMenu(false); }}><ShieldCheck /> Histórico e cópias</button>}
-        </nav>
-        <div className="sidebar-tip">
-          <span><Sparkles size={16} /> Dica</span>
+        <SidebarNav activeKey={tab} sections={[
+          { items: [
+            { key: "hub", label: "Visão geral", icon: <LayoutDashboard />, onClick: () => go("hub") },
+            { key: "calendar", label: "Calendário", icon: <CalendarDays />, onClick: () => go("calendar") },
+          ] },
+          { label: "Trabalho", items: [
+            { key: "tasks", label: "Demandas", icon: <ListTodo />, onClick: () => go("tasks"), badge: navCounts ? { count: navCounts.tasks, tone: navCounts.tasksOverdue ? "alert" : "info", title: navCounts.tasksOverdue ? `${navCounts.tasks} suas em aberto, ${navCounts.tasksOverdue} com prazo vencido` : `${navCounts.tasks} suas em aberto` } : null },
+            { key: "tickets", label: "Chamados", icon: <LifeBuoy />, onClick: () => openTicket(), badge: navCounts ? { count: navCounts.tickets, tone: navCounts.ticketsLate ? "alert" : "info", title: `${navCounts.tickets} na fila do seu time${navCounts.ticketsUnassigned ? `, ${navCounts.ticketsUnassigned} sem dono` : ""}${navCounts.ticketsLate ? `, ${navCounts.ticketsLate} fora do prazo` : ""}` } : null },
+            { key: "projects", label: "Projetos", icon: <FolderKanban />, onClick: () => go("projects") },
+            { key: "knowledge", label: "Base de conhecimento", icon: <BookOpen />, onClick: () => openKnowledge() },
+          ] },
+          { label: "Equipe", items: [
+            { key: "schedule", label: "Escala", icon: <CalendarClock />, onClick: () => go("schedule") },
+            { key: "people", label: "Pessoas", icon: <Contact />, onClick: () => { setPersonSearch(""); go("people"); } },
+            { key: "panel", label: "Painel", icon: <Gauge />, onClick: () => go("panel") },
+          ] },
+          { label: "Copa", items: [
+            { key: "stock-module", label: "Estoque", icon: <PackageCheck />, open: stockMenu, onClick: () => setStockMenu((open) => !open), children: [
+              { key: "stock", label: "Itens e saldos", icon: null, onClick: () => go("stock", true) },
+              ...(permissions.viewPlanning ? [{ key: "planning", label: "Planejamento", icon: null, onClick: () => go("planning", true) }] : []),
+              ...(permissions.viewHistory ? [{ key: "reports", label: "Relatórios", icon: null, onClick: () => go("reports", true) }, { key: "history", label: "Histórico", icon: null, onClick: () => go("history", true) }] : []),
+            ] },
+          ] },
+          { label: "Administração", items: isAdmin ? [
+            { key: "team", label: "Usuários", icon: <UserCog />, onClick: () => go("team") },
+            { key: "admin", label: "Histórico e cópias", icon: <ShieldCheck />, onClick: () => go("admin") },
+          ] : [] },
+        ]} />
+        {showTip && <div className="sidebar-tip">
+          <span><Sparkles size={15} className="tip-sparkle" /> Dica do dia<button type="button" onClick={hideTip} aria-label="Esconder a dica de hoje" title="Esconder até amanhã"><X size={13} /></button></span>
           <p>{dailyTip}</p>
-        </div>
+        </div>}
         <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div><CircleUserRound size={18} /></button>
         <button className="signout-link" onClick={logout}><LogOut size={15} /> Sair do sistema</button>
       </aside>
