@@ -331,7 +331,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
 
   useEffect(() => { const timer = window.setTimeout(() => { void loadEvents(); }, 0); return () => window.clearTimeout(timer); }, [loadEvents, ticket.updatedAt]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target as HTMLElement).closest("textarea, input")) onClose(); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("textarea, input"))) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);

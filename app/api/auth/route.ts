@@ -106,6 +106,8 @@ export async function POST(request: Request) {
       : (await verifyPassword(password, "0".repeat(64), "usuario-inexistente"), false);
     if (!member || !valid) {
       const failure = await recordRateLimitFailure(limitKey, { maxAttempts: 5, windowMinutes: 15, blockMinutes: 15 }, db);
+      // Registra a tentativa (usuário digitado e IP), nunca a senha.
+      await writeAudit(db, { actorUserId: member?.userId ?? null, actorName: member?.name ?? `Usuário “${username.slice(0, 40)}”`, action: failure.blocked ? "login_blocked" : "login_failed", targetType: "session", targetId: member?.id ?? null, details: `IP ${clientIp(request)}${member ? "" : " · usuário inexistente"}` }).catch((error) => console.error("audit log failed", error));
       if (failure.blocked) return Response.json({ error: "Muitas tentativas. O acesso foi bloqueado por 15 minutos." }, { status: 429, headers: { "Retry-After": String(failure.retryAfterSeconds) } });
       return Response.json({ error: "Usuário ou senha incorretos." }, { status: 401 });
     }

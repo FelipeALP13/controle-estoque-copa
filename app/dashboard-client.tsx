@@ -31,6 +31,10 @@ import LifeBuoy from "lucide-react/icons/life-buoy";
 import BookOpen from "lucide-react/icons/book-open";
 import KnowledgeView, { type ArticleDraft } from "./knowledge-view";
 import NoticeBoard from "./notice-board";
+import AdminView from "./admin-view";
+import CommandSearch from "./command-search";
+import type { SearchHit } from "./search";
+import ShieldCheck from "lucide-react/icons/shield-check";
 import { useJiraAutoSync } from "./use-jira-sync";
 import Contact from "lucide-react/icons/contact";
 import ListTodo from "lucide-react/icons/list-todo";
@@ -305,7 +309,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "knowledge" | "people" | "planning" | "reports" | "history" | "team">("hub");
+  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "knowledge" | "admin" | "people" | "planning" | "reports" | "history" | "team">("hub");
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
@@ -317,6 +321,21 @@ export default function Home() {
   const [articleToOpen, setArticleToOpen] = useState<number | null>(null);
   const [articleDraft, setArticleDraft] = useState<ArticleDraft | null>(null);
   const clearArticleRequest = useCallback(() => { setArticleToOpen(null); setArticleDraft(null); }, []);
+  const [projectToOpen, setProjectToOpen] = useState<number | null>(null);
+  const clearProjectToOpen = useCallback(() => setProjectToOpen(null), []);
+  const [personSearch, setPersonSearch] = useState("");
+
+  // Resultado escolhido na busca geral: abre a tela certa já no item.
+  function openSearchHit(hit: SearchHit) {
+    setStockMenu(false);
+    setMobileMenu(false);
+    if (hit.kind === "task") openTask(hit.id);
+    else if (hit.kind === "ticket") openTicket(hit.id);
+    else if (hit.kind === "article") openKnowledge({ articleId: hit.id });
+    else if (hit.kind === "project") { setTab("projects"); setProjectToOpen(hit.id); }
+    else { setPersonSearch(hit.title); setTab("people"); }
+  }
+
   // Chamados novos do Jira chegam enquanto alguém da equipe está com o Portal aberto.
   useJiraAutoSync(Boolean(currentUser?.active));
 
@@ -478,8 +497,9 @@ export default function Home() {
           <button className={tab === "panel" ? "active" : ""} onClick={() => { setTab("panel"); setStockMenu(false); setMobileMenu(false); }}><Gauge /> Painel</button>
           <button className={tab === "tickets" ? "active" : ""} onClick={() => openTicket()}><LifeBuoy /> Chamados</button>
           <button className={tab === "knowledge" ? "active" : ""} onClick={() => openKnowledge()}><BookOpen /> Base de conhecimento</button>
-          <button className={tab === "people" ? "active" : ""} onClick={() => { setTab("people"); setStockMenu(false); setMobileMenu(false); }}><Contact /> Pessoas</button>
+          <button className={tab === "people" ? "active" : ""} onClick={() => { setPersonSearch(""); setTab("people"); setStockMenu(false); setMobileMenu(false); }}><Contact /> Pessoas</button>
           {isAdmin && <button className={tab === "team" ? "active" : ""} onClick={() => { setTab("team"); setStockMenu(false); setMobileMenu(false); }}><UserCog /> Usuários</button>}
+          {isAdmin && <button className={tab === "admin" ? "active" : ""} onClick={() => { setTab("admin"); setStockMenu(false); setMobileMenu(false); }}><ShieldCheck /> Histórico e cópias</button>}
         </nav>
         <div className="sidebar-tip">
           <span><Sparkles size={16} /> Dica</span>
@@ -492,8 +512,8 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
-          <div className="topbar-actions"><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
+          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Histórico e cópia de segurança" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div className="topbar-actions"><CommandSearch onPick={openSearchHit} /><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 
         <section className="content">
@@ -570,7 +590,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} /> : tab === "people" ? <PeopleView /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 

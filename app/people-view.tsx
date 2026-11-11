@@ -27,13 +27,13 @@ async function post(payload: Record<string, unknown>) {
 
 const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR");
 
-export default function PeopleView() {
+export default function PeopleView({ initialSearch = "" }: { initialSearch?: string }) {
   const [data, setData] = useState<PeopleData | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"people" | "teams" | "absences">("people");
   const { absences } = useAbsences();
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [teamFilter, setTeamFilter] = useState("");
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [editingTeam, setEditingTeam] = useState<Team | "new" | null>(null);

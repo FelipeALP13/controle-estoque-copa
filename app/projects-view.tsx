@@ -50,7 +50,7 @@ function Progress({ statuses }: { statuses: string[] }) {
   </span>;
 }
 
-export default function ProjectsView({ onOpenTask }: { onOpenTask: (taskId: number) => void }) {
+export default function ProjectsView({ onOpenTask, openRequest = null, onOpenRequestHandled }: { onOpenTask: (taskId: number) => void; openRequest?: number | null; onOpenRequestHandled?: () => void }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -71,6 +71,16 @@ export default function ProjectsView({ onOpenTask }: { onOpenTask: (taskId: numb
   }, []);
 
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
+
+  // Pedido vindo da busca geral: abre o projeto (mesmo encerrado).
+  useEffect(() => {
+    if (!openRequest || !data) return;
+    const timer = window.setTimeout(() => {
+      if (data.projects.some((project) => project.id === openRequest)) { setScope("all"); setOpenId(openRequest); } else setError("Este projeto não existe mais.");
+      onOpenRequestHandled?.();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [openRequest, data, onOpenRequestHandled]);
 
   const clientsById = useMemo(() => new Map((data?.clients ?? []).map((client) => [client.id, client])), [data]);
   const membersById = useMemo(() => new Map((data?.members ?? []).map((member) => [member.id, member])), [data]);
@@ -184,7 +194,7 @@ function ProjectDrawer({ project, data, onClose, onSaved, onDeleted, onOpenTask 
   const dirty = !project || JSON.stringify(form) !== JSON.stringify({ name: project.name, description: project.description, clientId: project.clientId, status: project.status, farol: project.farol, phase: project.phase, deadlineLabel: project.deadlineLabel, startDate: project.startDate ?? "", endForecast: project.endForecast, notes: project.notes, people: project.people });
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target as HTMLElement).closest("textarea, input, select")) onClose(); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("textarea, input, select"))) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);

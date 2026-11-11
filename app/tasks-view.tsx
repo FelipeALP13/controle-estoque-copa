@@ -220,8 +220,8 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (target.closest("input, textarea, select, [contenteditable]") || event.ctrlKey || event.metaKey || event.altKey) return;
+      const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable]");
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key.toLowerCase() === "c" && data?.me.canEdit && !creating && !openTaskId && !importing) { event.preventDefault(); setCreating("todo"); }
     };
     window.addEventListener("keydown", onKey);
@@ -612,7 +612,7 @@ function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, on
   useEffect(() => { const timer = window.setTimeout(() => { void loadEvents(); }, 0); return () => window.clearTimeout(timer); }, [loadEvents, task.updatedAt]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target as HTMLElement).closest("textarea, input")) onClose(); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("textarea, input"))) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
