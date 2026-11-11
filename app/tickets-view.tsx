@@ -17,6 +17,9 @@ import { splitMentions } from "./notifications";
 import { taskCode } from "./tasks";
 import { Avatar, MentionTextarea, relativeTime, TeamChip } from "./tasks-view";
 import Download from "lucide-react/icons/download";
+import BookOpen from "lucide-react/icons/book-open";
+import { relatedArticles, type SearchableArticle } from "./knowledge";
+import type { ArticleDraft } from "./knowledge-view";
 import { downloadXlsx } from "./xlsx-writer";
 import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
 
@@ -62,7 +65,7 @@ function SlaBadge({ ticket }: { ticket: Ticket }) {
   return <span className={`sla-badge ${sla.state}`} title="Prazo de primeira resposta"><Timer size={11} />{text}</span>;
 }
 
-export default function TicketsView({ openRequest = null, onOpenRequestHandled, onOpenTask }: { openRequest?: number | null; onOpenRequestHandled?: () => void; onOpenTask: (taskId: number) => void }) {
+export default function TicketsView({ openRequest = null, onOpenRequestHandled, onOpenTask, onOpenArticle, onSaveSolution }: { openRequest?: number | null; onOpenRequestHandled?: () => void; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [scope, setScope] = useState<Scope | null>(null);
@@ -237,7 +240,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     </>}
 
     {creating && data && <NewTicketModal teams={data.teams} defaultTeamId={teamFilter ? Number(teamFilter) : null} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); setStatusFilter("active"); await load(); setOpenId(id); }} />}
-    {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} />}
+    {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} onOpenArticle={onOpenArticle} onSaveSolution={onSaveSolution} />}
   </div>;
 }
 
@@ -279,7 +282,24 @@ function NewTicketModal({ teams, defaultTeamId, onClose, onCreated }: { teams: T
   </form></div>;
 }
 
-function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }: { ticket: Ticket; data: Data; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onReload: () => Promise<void>; onOpenTask: (taskId: number) => void }) {
+// Artigos da base para sugerir nos chamados (carregados uma vez por minuto, no máximo).
+let articlesCache: { at: number; promise: Promise<SearchableArticle[]> } | null = null;
+function loadArticles() {
+  if (articlesCache && Date.now() - articlesCache.at < 60000) return articlesCache.promise;
+  const promise = fetch("/api/knowledge", { cache: "no-store" })
+    .then(async (response) => response.ok ? ((await response.json()) as { articles: SearchableArticle[] }).articles.map((article) => ({ ...article, client: "" })) : [])
+    .catch(() => [] as SearchableArticle[]);
+  articlesCache = { at: Date.now(), promise };
+  return promise;
+}
+
+function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, onOpenArticle, onSaveSolution }: { ticket: Ticket; data: Data; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onReload: () => Promise<void>; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
+  const [related, setRelated] = useState<SearchableArticle[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadArticles().then((articles) => { if (!cancelled) setRelated(relatedArticles(articles, `${ticket.title} ${ticket.client}`)); });
+    return () => { cancelled = true; };
+  }, [ticket.title, ticket.client]);
   const [events, setEvents] = useState<TicketEvent[] | null>(null);
   const [comment, setComment] = useState("");
   const [description, setDescription] = useState(ticket.description);
@@ -324,6 +344,13 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
     if (result.task && window.confirm(`Demanda ${taskCode(result.task.id)} criada. Abrir agora?`)) onOpenTask(result.task.id);
   });
 
+  // Rascunho do artigo: o relato do chamado e os comentários de quem atendeu (revisados antes de salvar).
+  function saveSolution() {
+    const comments = (events ?? []).filter((event) => event.kind === "comment" && event.actorId !== ticket.requesterId).map((event) => `- ${event.body.replace(/\s+/g, " ").trim()}`);
+    const body = [`Sintoma:\n${ticket.description.trim() || ticket.title}`, comments.length ? `Como foi resolvido:\n${comments.join("\n")}` : "Como foi resolvido:\n1. "].join("\n\n");
+    onSaveSolution({ title: ticket.title, body, ticketId: ticket.id, teamId: ticket.teamId, clientName: ticket.client });
+  }
+
   const removeComment = (eventId: number) => run(async () => {
     if (!window.confirm("Excluir este comentário?")) return;
     await post({ action: "deleteComment", eventId });
@@ -361,7 +388,13 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask }:
             {ticket.taskId && <button className="secondary-button" onClick={() => onOpenTask(ticket.taskId!)}><ListTodo size={15} /> Ver {taskCode(ticket.taskId)}</button>}
             {!handler && isRequester && isActiveTicket(ticket.status) && <button className="secondary-button modal-delete" disabled={busy} onClick={() => run(() => onUpdate({ status: "canceled" }))}><X size={15} /> Cancelar chamado</button>}
             {isRequester && ticket.status === "resolved" && <button className="secondary-button" disabled={busy} onClick={() => run(() => onUpdate({ status: "open" }))}><RotateCcw size={15} /> Reabrir</button>}
+            {me.canEdit && ticket.status === "resolved" && <button className="secondary-button" onClick={saveSolution} title="Cria um artigo na base de conhecimento com o que resolveu este chamado"><BookOpen size={15} /> Salvar solução na base</button>}
           </div>
+
+          {related.length > 0 && isActiveTicket(ticket.status) && <div className="kb-related">
+            <span><BookOpen size={13} /> Pode ajudar (base de conhecimento)</span>
+            {related.map((article) => <button key={article.id} onClick={() => onOpenArticle(article.id)}>{article.title}</button>)}
+          </div>}
 
           {error && <p className="modal-error task-drawer-error">{error}</p>}
 

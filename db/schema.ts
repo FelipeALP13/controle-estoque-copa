@@ -219,6 +219,44 @@ export const taskLegacyCodes = sqliteTable("task_legacy_codes", {
     .references(() => tasks.id, { onDelete: "cascade" }),
 });
 
+/** Base de conhecimento: soluções que se repetem, com busca. Pode nascer de um chamado resolvido. */
+export const kbArticles = sqliteTable("kb_articles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  tags: text("tags").notNull().default(""),
+  ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "set null" }),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  updatedByName: text("updated_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/** Mural de avisos da Visão geral, com confirmação de leitura. */
+export const announcements = sqliteTable("announcements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  important: integer("important", { mode: "boolean" }).notNull().default(false),
+  expiresOn: text("expires_on"),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const announcementReads = sqliteTable("announcement_reads", {
+  announcementId: integer("announcement_id")
+    .notNull()
+    .references(() => announcements.id, { onDelete: "cascade" }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  readAt: text("read_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [primaryKey({ columns: [table.announcementId, table.memberId] })]);
+
 /** Férias, folgas e outras ausências: aparecem na escala, no painel e ao escolher responsáveis. */
 export const absences = sqliteTable("absences", {
   id: integer("id").primaryKey({ autoIncrement: true }),
