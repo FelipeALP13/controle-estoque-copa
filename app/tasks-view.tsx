@@ -171,7 +171,7 @@ function readView(): "list" | "board" {
 
 const involves = (task: Task, memberId: number) => task.owners.includes(memberId) || task.support.includes(memberId);
 
-export default function TasksView({ openRequest = null, onOpenRequestHandled }: { openRequest?: number | null; onOpenRequestHandled?: () => void }) {
+export default function TasksView({ openRequest = null, onOpenRequestHandled, createRequest = 0 }: { openRequest?: number | null; onOpenRequestHandled?: () => void; createRequest?: number }) {
   const [data, setData] = useState<TasksData | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"list" | "board">("list");
@@ -202,6 +202,15 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
     const interval = window.setInterval(() => { if (document.visibilityState === "visible" && !busy.current) void load(); }, 30000);
     return () => { window.clearTimeout(first); window.clearInterval(interval); };
   }, [load]);
+
+  // Atalho "Nova demanda" da visão geral: abre o formulário assim que a lista carregar.
+  const handledCreate = useRef(0);
+  useEffect(() => {
+    if (!createRequest || !data?.me.canEdit || handledCreate.current === createRequest) return;
+    handledCreate.current = createRequest;
+    const timer = window.setTimeout(() => setCreating("todo"), 0);
+    return () => window.clearTimeout(timer);
+  }, [createRequest, data]);
 
   // Pedido vindo do sininho ou da visão geral para abrir uma demanda específica.
   useEffect(() => {

@@ -70,7 +70,7 @@ function SlaBadge({ ticket }: { ticket: Ticket }) {
   return <span className={`sla-badge ${sla.state}`} title="Prazo de primeira resposta"><Timer size={11} />{text}</span>;
 }
 
-export default function TicketsView({ openRequest = null, onOpenRequestHandled, onOpenTask, onOpenArticle, onSaveSolution }: { openRequest?: number | null; onOpenRequestHandled?: () => void; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
+export default function TicketsView({ openRequest = null, onOpenRequestHandled, onOpenTask, onOpenArticle, onSaveSolution, createRequest = 0 }: { openRequest?: number | null; onOpenRequestHandled?: () => void; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void; createRequest?: number }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [scope, setScope] = useState<Scope | null>(null);
@@ -114,6 +114,15 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     }, 0);
     return () => window.clearTimeout(timer);
   }, [openRequest, data, onOpenRequestHandled, load]);
+
+  // Atalho "Abrir chamado" da visão geral.
+  const handledCreate = useRef(0);
+  useEffect(() => {
+    if (!createRequest || !data?.me.canEdit || handledCreate.current === createRequest) return;
+    handledCreate.current = createRequest;
+    const timer = window.setTimeout(() => setCreating(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [createRequest, data]);
 
   const effectiveScope: Scope = scope ?? (data?.me.teamIds.length ? "queue" : "requested");
   const teamsById = useMemo(() => new Map((data?.teams ?? []).map((team) => [team.id, team])), [data]);

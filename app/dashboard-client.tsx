@@ -35,7 +35,7 @@ import AdminView from "./admin-view";
 import CalendarView from "./calendar-view";
 import CalendarDays from "lucide-react/icons/calendar-days";
 import CommandSearch from "./command-search";
-import SidebarNav, { useNavCounts } from "./sidebar-nav";
+import SidebarNav, { useNavCounts, type NavCounts } from "./sidebar-nav";
 import type { SearchHit } from "./search";
 import ShieldCheck from "lucide-react/icons/shield-check";
 import { useJiraAutoSync } from "./use-jira-sync";
@@ -334,6 +334,9 @@ export default function Home() {
     setMobileMenu(false);
   }
   const { counts: navCounts } = useNavCounts(Boolean(currentUser?.active));
+  // Atalhos da visão geral para abrir o formulário de nova demanda / novo chamado.
+  const [newTaskRequest, setNewTaskRequest] = useState(0);
+  const [newTicketRequest, setNewTicketRequest] = useState(0);
   // A dica do dia pode ser escondida até amanhã (vale só neste navegador).
   const tipKey = `dica-escondida-${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())}`;
   const [showTip, setShowTip] = useState(true);
@@ -548,7 +551,7 @@ export default function Home() {
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} isAdmin={isAdmin} onOpen={(destination) => setTab(destination)} onOpenTask={openTask} onOpenTicket={openTicket} /> : tab === "stock" ? (
+          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} counts={navCounts} onOpen={(destination) => go(destination)} onOpenTask={openTask} onOpenTicket={openTicket} onNewTask={() => { openTask(); setNewTaskRequest((value) => value + 1); }} onNewTicket={() => { openTicket(); setNewTicketRequest((value) => value + 1); }} onSearch={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -618,7 +621,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "calendar" ? <CalendarView schedule={schedule} onOpenTask={openTask} onOpenProject={(id) => { setTab("projects"); setProjectToOpen(id); }} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} createRequest={newTaskRequest} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} createRequest={newTicketRequest} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "calendar" ? <CalendarView schedule={schedule} onOpenTask={openTask} onOpenProject={(id) => { setTab("projects"); setProjectToOpen(id); }} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -639,7 +642,7 @@ function todayLong() {
   return text.charAt(0).toLocaleUpperCase("pt-BR") + text.slice(1);
 }
 
-function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onOpenTask, onOpenTicket }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; isAdmin: boolean; onOpen: (destination: "stock" | "schedule" | "people" | "team") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void }) {
+function HubView({ items, movements, schedule, currentUser, counts, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket, onSearch }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch: () => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
@@ -647,51 +650,79 @@ function HubView({ items, movements, schedule, currentUser, isAdmin, onOpen, onO
   const featuredTeam = featuredWeek ? findTeam(schedule, featuredWeek.teamId) : null;
   const whatsappMessage = scheduleWhatsAppMessage(schedule.teams, schedule.weeks, today);
   const lowItems = items.filter((item) => item.unopenedQty + item.openedQty <= itemReorderPoint(item));
-  const openItems = items.filter((item) => item.openedQty > 0);
   const firstName = currentUser?.name.split(/\s+/)[0] || "Equipe";
+  const canEdit = currentUser ? currentUser.role !== "viewer" : false;
   const away = useAbsences();
-  const outToday = splitAbsences(away.absences, today).now;
-  const nameOf = (id: number) => away.people.find((person) => person.id === id)?.name ?? "";
+  const absenceGroups = splitAbsences(away.absences, today, 7);
+  const nameOf = (id: number) => away.people.find((person) => person.id === id)?.name ?? "Alguém";
+  const awayNames = [...new Set(absenceGroups.now.map((absence) => nameOf(absence.memberId)))];
 
-  return <>
-    <section className="hub-welcome">
-      <div><p className="eyebrow">{greeting()}, {firstName.toLocaleUpperCase("pt-BR")}</p><h2>O que você precisa hoje?</h2><p>Suas demandas, os chamados do seu time, a escala e o estoque da copa, num só lugar.</p></div>
-      <span>{todayLong()}</span>
+  // Resumo de agora: o que pede atenção primeiro, cada um leva à tela certa.
+  const summary = [
+    { key: "tasks", icon: <ListTodo />, label: "Minhas demandas", value: counts?.tasks ?? null, detail: counts ? (counts.tasksOverdue ? `${counts.tasksOverdue} com prazo vencido` : "nenhuma vencida") : "carregando…", alert: Boolean(counts?.tasksOverdue), action: () => onOpenTask() },
+    { key: "tickets", icon: <LifeBuoy />, label: "Fila de chamados", value: counts?.tickets ?? null, detail: counts ? (counts.ticketsLate ? `${counts.ticketsLate} fora do prazo` : counts.ticketsUnassigned ? `${counts.ticketsUnassigned} sem dono` : "tudo em dia") : "carregando…", alert: Boolean(counts?.ticketsLate), action: () => onOpenTicket() },
+    { key: "away", icon: <CalendarOff />, label: "Fora hoje", value: awayNames.length, detail: awayNames.length ? awayNames.slice(0, 2).join(", ") + (awayNames.length > 2 ? ` e mais ${awayNames.length - 2}` : "") : "equipe completa", alert: false, action: () => onOpen("calendar") },
+    { key: "stock", icon: <Archive />, label: "Copa: para repor", value: lowItems.length, detail: lowItems.length ? lowItems.slice(0, 2).map((item) => item.name).join(", ") : "estoque em dia", alert: false, warn: lowItems.length > 0, action: () => onOpen("stock") },
+  ];
+
+  return <div className="hub">
+    <section className="hub-hero">
+      <div>
+        <p className="eyebrow">{greeting()}, {firstName.toLocaleUpperCase("pt-BR")}</p>
+        <h2>O que você precisa hoje?</h2>
+        <p className="hub-hero-date">{todayLong()}</p>
+      </div>
+      <div className="hub-actions">
+        {canEdit && <button className="primary-button" onClick={onNewTask}><Plus size={16} /> Nova demanda</button>}
+        {canEdit && <button className="secondary-button" onClick={onNewTicket}><LifeBuoy size={16} /> Abrir chamado</button>}
+        <button className="secondary-button" onClick={onSearch}><Search size={16} /> Buscar <kbd>Ctrl K</kbd></button>
+      </div>
     </section>
 
-    <div className="hub-modules">
-      <article className="hub-module-card inventory-module">
-        <div className="hub-module-head"><span><Archive /></span><div><small>MÓDULO</small><h2>Estoque</h2></div></div>
-        <p>Itens, compras, consumo, planejamento e histórico em uma área exclusiva.</p>
-        <div className="hub-module-metrics"><div><strong>{items.length}</strong><span>itens</span></div><div><strong>{openItems.length}</strong><span>em uso</span></div><div className={lowItems.length ? "attention" : ""}><strong>{lowItems.length}</strong><span>para repor</span></div></div>
-        <button onClick={() => onOpen("stock")}>Abrir módulo de estoque <span>→</span></button>
-      </article>
-      <article className={`hub-module-card schedule-module ${featuredTeam?.color ?? "purple"}`}>
-        <div className="hub-module-head"><span><CalendarClock /></span><div><small>MÓDULO</small><h2>Escala</h2></div></div>
-        {featuredTeam && featuredWeek ? <><p>{currentWeek ? "Equipe responsável hoje" : "Próxima equipe programada"}</p><div className="hub-support-team"><strong>{featuredTeam.name}</strong><span>{featuredTeam.members.join(" · ")}</span><small>{weekLabel(featuredWeek)}</small></div></> : <p>Consulte as equipes e os próximos períodos de atendimento.</p>}
-        {outToday.length > 0 && <p className="hub-away"><CalendarOff size={13} /> <span><b>Fora hoje:</b> {outToday.map((absence) => `${nameOf(absence.memberId)} (${describeAbsence(absence, today).toLowerCase()})`).join(", ")}</span></p>}
-        {whatsappMessage && <a className="hub-whatsapp" href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={15} /> Enviar escala no WhatsApp</a>}
-        <button onClick={() => onOpen("schedule")}>Abrir escala de atendimento <span>→</span></button>
-      </article>
+    <div className="hub-summary">
+      {summary.map((tile, index) => <button key={tile.key} className={`hub-stat ${tile.alert ? "alert" : "warn" in tile && tile.warn ? "warn" : ""}`} style={{ "--i": index } as React.CSSProperties} onClick={tile.action}>
+        <span className="hub-stat-icon">{tile.icon}</span>
+        <span className="hub-stat-body"><small>{tile.label}</small><strong>{tile.value ?? "—"}</strong><em>{tile.detail}</em></span>
+        <span className="hub-stat-go" aria-hidden="true">→</span>
+      </button>)}
     </div>
 
     <NoticeBoard />
 
+    <h3 className="hub-heading">Meu trabalho</h3>
     <div className="hub-work-grid">
       <MyTasksPanel onOpen={onOpenTask} />
       <MyTicketsPanel onOpen={onOpenTicket} />
     </div>
 
-    <div className="hub-bottom-grid">
-      <article className="hub-activity">
-        <div className="hub-panel-title"><div><span><History /></span><div><h3>Últimas movimentações</h3><p>Atividade recente do estoque</p></div></div><button onClick={() => onOpen("stock")}>Ver estoque</button></div>
-        {movements.length ? movements.slice(0, 3).map((movement) => <div className="hub-activity-row" key={movement.id}><span>{movementCopy[movement.type].label.slice(0,1)}</span><div><strong>{movementCopy[movement.type].label} · {movement.itemName}</strong><small>{movement.createdByName || "Equipe"} · {exactDate(movement.createdAt)}</small></div><b>{fmt(Math.abs(movement.quantity))} {movement.unit}</b></div>) : <div className="hub-empty-row"><History /><span><strong>Nenhuma movimentação ainda</strong><small>As atualizações do estoque aparecerão aqui.</small></span></div>}
+    <h3 className="hub-heading">Hoje na equipe</h3>
+    <div className="hub-team-grid">
+      <article className={`hub-card hub-schedule ${featuredTeam?.color ?? "purple"}`}>
+        <div className="hub-panel-title"><div><span><CalendarClock /></span><div><h3>{currentWeek ? "Atendimento desta semana" : "Próximo atendimento"}</h3><p>{featuredWeek ? weekLabel(featuredWeek) : "Escala sem semanas cadastradas"}</p></div></div><button onClick={() => onOpen("schedule")}>Ver escala</button></div>
+        {featuredTeam ? <div className="hub-schedule-team"><strong>{featuredTeam.name}</strong><div>{featuredTeam.members.map((member) => <span key={member}>{member}</span>)}</div></div> : <p className="muted">Cadastre as semanas da escala para aparecer aqui.</p>}
+        {whatsappMessage && <a className="hub-whatsapp" href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={15} /> Enviar escala no WhatsApp</a>}
       </article>
-      <article className="hub-internal-card">
-        <span><Users /></span><div><small>{APP_TAGLINE.toLocaleUpperCase("pt-BR")}</small><h3>Pessoas e times</h3><p>Veja quem é quem, de qual time e como falar com cada pessoa. Cada um usa sua própria conta, e as ações ficam registradas.</p><div className="hub-internal-actions"><button onClick={() => onOpen("people")}>Ver pessoas</button>{isAdmin && <button onClick={() => onOpen("team")}>Gerenciar usuários</button>}</div></div>
+      <article className="hub-card">
+        <div className="hub-panel-title"><div><span><CalendarOff /></span><div><h3>Ausências</h3><p>Hoje e nos próximos 7 dias</p></div></div><button onClick={() => onOpen("calendar")}>Ver calendário</button></div>
+        {absenceGroups.now.length || absenceGroups.upcoming.length ? <ul className="hub-away-list">
+          {absenceGroups.now.map((absence) => <li key={`n${absence.id}`} className="now"><b>{nameOf(absence.memberId)}</b><span>{describeAbsence(absence, today)}</span><em>Fora hoje</em></li>)}
+          {absenceGroups.upcoming.map((absence) => <li key={`u${absence.id}`}><b>{nameOf(absence.memberId)}</b><span>{describeAbsence(absence, today)}</span></li>)}
+        </ul> : <p className="hub-calm">Ninguém fora hoje nem nos próximos dias.</p>}
       </article>
     </div>
-  </>;
+
+    <h3 className="hub-heading">Copa</h3>
+    <div className="hub-team-grid">
+      <article className="hub-card">
+        <div className="hub-panel-title"><div><span><Archive /></span><div><h3>Para repor</h3><p>{items.length} itens no estoque</p></div></div><button onClick={() => onOpen("stock")}>Abrir estoque</button></div>
+        {lowItems.length ? <ul className="hub-restock">{lowItems.slice(0, 4).map((item) => <li key={item.id}><ItemVisual item={item} /><span>{item.name}</span><b>{fmt(item.unopenedQty + item.openedQty)} {item.unit}</b></li>)}{lowItems.length > 4 && <li className="more">e mais {lowItems.length - 4}</li>}</ul> : <p className="hub-calm">Tudo acima do mínimo.</p>}
+      </article>
+      <article className="hub-card">
+        <div className="hub-panel-title"><div><span><History /></span><div><h3>Últimas movimentações</h3><p>Atividade recente da copa</p></div></div></div>
+        {movements.length ? movements.slice(0, 3).map((movement) => <div className="hub-activity-row" key={movement.id}><span>{movementCopy[movement.type].label.slice(0, 1)}</span><div><strong>{movementCopy[movement.type].label} · {movement.itemName}</strong><small>{movement.createdByName || "Equipe"} · {exactDate(movement.createdAt)}</small></div><b>{fmt(Math.abs(movement.quantity))} {movement.unit}</b></div>) : <p className="hub-calm">Nenhuma movimentação ainda.</p>}
+      </article>
+    </div>
+  </div>;
 }
 
 function isoDateInSaoPaulo(date = new Date()) {

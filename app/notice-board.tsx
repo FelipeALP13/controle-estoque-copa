@@ -45,6 +45,12 @@ export default function NoticeBoard() {
   }
 
   if (!data || (!data.notices.length && !data.me.canPost)) return null;
+  // Sem avisos: só uma linha discreta para quem pode publicar (não ocupa o topo da visão geral).
+  if (!data.notices.length) return <article className="notice-board empty">
+    <Megaphone size={16} /><p>Mural de avisos vazio.</p>
+    <button onClick={() => setCreating(true)}><Plus size={14} /> Novo aviso</button>
+    {creating && <NoticeModal onClose={() => setCreating(false)} onSaved={async () => { setCreating(false); await load(); }} />}
+  </article>;
   const unread = data.notices.filter((notice) => !notice.readByMe).length;
   // Primeiro os não lidos; os lidos ficam recolhidos depois dos 3 primeiros.
   const ordered = [...data.notices.filter((notice) => !notice.readByMe), ...data.notices.filter((notice) => notice.readByMe)];
