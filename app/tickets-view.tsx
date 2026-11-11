@@ -16,7 +16,9 @@ import X from "lucide-react/icons/x";
 import { splitMentions } from "./notifications";
 import { taskCode } from "./tasks";
 import { Avatar, MentionTextarea, relativeTime, TeamChip } from "./tasks-view";
-import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
+import Download from "lucide-react/icons/download";
+import { downloadXlsx } from "./xlsx-writer";
+import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, parseStoredDate, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
 
 type Ticket = {
   id: number; title: string; description: string; type: TicketType; urgency: TicketUrgency; status: TicketStatus; client: string;
@@ -138,6 +140,44 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     }
   }
 
+  // Exporta os chamados que estão na tela (mesmo escopo, time, situação e busca).
+  function exportExcel() {
+    if (!data) return;
+    const stamp = (value: string | null) => value ? parseStoredDate(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+    const hoursBetween = (from: string, to: string | null) => to ? Math.round(((parseStoredDate(to).getTime() - parseStoredDate(from).getTime()) / 3600000) * 10) / 10 : null;
+    const slaLabel = { ok: "No prazo (aguardando)", warning: "Perto do prazo", breached: "Atrasado (sem resposta)", met: "Respondido no prazo", late: "Respondido com atraso" };
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+    downloadXlsx(`chamados-${today}.xlsx`, [
+      {
+        name: "Chamados",
+        columns: [
+          { header: "Código", width: 9 }, { header: "Título", width: 46 }, { header: "Tipo", width: 11 }, { header: "Urgência", width: 10 }, { header: "Status", width: 15 },
+          { header: "Cliente", width: 20 }, { header: "Time", width: 16 }, { header: "Solicitante", width: 20 }, { header: "Responsável", width: 20 },
+          { header: "Aberto em", width: 17 }, { header: "1ª resposta em", width: 17 }, { header: "Horas até 1ª resposta", type: "number", width: 19 }, { header: "Prazo de 1ª resposta", width: 24 },
+          { header: "Resolvido em", width: 17 }, { header: "Horas até resolver", type: "number", width: 17 }, { header: "Demanda ligada", width: 14 }, { header: "Comentários", type: "number", width: 12 }, { header: "Descrição", width: 50 },
+        ],
+        rows: visible.map((ticket) => [
+          ticketCode(ticket.id), ticket.title, ticketTypeLabels[ticket.type], ticketUrgencyLabels[ticket.urgency], ticketStatusLabels[ticket.status],
+          ticket.client, ticket.teamId ? teamsById.get(ticket.teamId)?.name ?? "" : "", ticket.requesterName, ticket.assigneeId ? peopleById.get(ticket.assigneeId)?.name ?? "" : "",
+          stamp(ticket.createdAt), stamp(ticket.firstResponseAt), hoursBetween(ticket.createdAt, ticket.firstResponseAt), slaLabel[slaStatus(ticket).state],
+          stamp(ticket.resolvedAt), hoursBetween(ticket.createdAt, ticket.resolvedAt), ticket.taskId ? taskCode(ticket.taskId) : "", ticket.commentCount, ticket.description,
+        ]),
+      },
+      {
+        name: "Filtros",
+        columns: [{ header: "Filtro", width: 20 }, { header: "Valor", width: 40 }],
+        rows: [
+          ["Exportado em", new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })],
+          ["Chamados no arquivo", `${visible.length}`],
+          ["Quais", scopes.find((entry) => entry.key === effectiveScope)?.label ?? ""],
+          ["Time", teamFilter ? teamsById.get(Number(teamFilter))?.name ?? "" : "Todos os times"],
+          ["Situação", statusFilter === "active" ? "Em aberto" : statusFilter === "closed" ? "Encerrados" : "Todos"],
+          ["Busca", search.trim() || "—"],
+        ],
+      },
+    ]);
+  }
+
   const openTicket = data?.tickets.find((ticket) => ticket.id === openId) ?? null;
   const scopes: { key: Scope; label: string; show: boolean }[] = [
     { key: "queue", label: "Fila do meu time", show: Boolean(data?.me.teamIds.length) },
@@ -154,6 +194,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
       <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por título, código ou cliente" /></label>
       {(data?.teams.length ?? 0) > 0 && <select aria-label="Filtrar por time" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)}><option value="">Todos os times</option>{data?.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select>}
       <select aria-label="Situação" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="active">Em aberto</option><option value="closed">Encerrados</option><option value="all">Todos</option></select>
+      {data && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os chamados que estão na tela, com os filtros aplicados"><Download size={15} /> Exportar Excel</button>}
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button>}
     </div>
 

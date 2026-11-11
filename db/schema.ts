@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -186,7 +186,9 @@ export const tasks = sqliteTable("tasks", {
   dueDate: text("due_date"),
   completedOn: text("completed_on"),
   estimatedHours: real("estimated_hours"),
+  // Total = horas anteriores (planilha ou digitadas antes do apontamento) + lançamentos de horas.
   workedHours: real("worked_hours"),
+  baseHours: real("base_hours"),
   hoursFlag: integer("hours_flag", { mode: "boolean" }).notNull().default(false),
   origin: text("origin").notNull().default(""),
   notes: text("notes").notNull().default(""),
@@ -216,6 +218,21 @@ export const taskLegacyCodes = sqliteTable("task_legacy_codes", {
     .notNull()
     .references(() => tasks.id, { onDelete: "cascade" }),
 });
+
+/** Apontamento de horas: quem trabalhou, em que dia e quanto, em cada demanda. */
+export const timeEntries = sqliteTable("time_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").references(() => members.id, { onDelete: "set null" }),
+  memberName: text("member_name").notNull().default("Equipe"),
+  workDate: text("work_date").notNull(),
+  hours: real("hours").notNull(),
+  note: text("note").notNull().default(""),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("time_entries_task_idx").on(table.taskId), index("time_entries_date_idx").on(table.workDate), index("time_entries_member_idx").on(table.memberId)]);
 
 export const taskEvents = sqliteTable("task_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),

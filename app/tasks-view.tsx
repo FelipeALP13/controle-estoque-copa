@@ -21,6 +21,8 @@ import { describeTaskEvent, dueState, isClosedStatus, sortOrderBetween, taskCode
 import ImportModal from "./import-modal";
 import Download from "lucide-react/icons/download";
 import { downloadXlsx, type CellValue } from "./xlsx-writer";
+import Clock from "lucide-react/icons/clock";
+import { formatHours, parseEntryHours, type TimeEntry } from "./time-entries";
 
 export type Task = {
   id: number;
@@ -38,6 +40,7 @@ export type Task = {
   completedOn: string | null;
   estimatedHours: number | null;
   workedHours: number | null;
+  baseHours: number | null;
   hoursFlag: boolean;
   origin: string;
   notes: string;
@@ -514,15 +517,15 @@ export function PeoplePicker({ label, value, onChange, members, exclude = [], di
   </div>;
 }
 
-type Fields = Pick<Task, "status" | "priority" | "owners" | "support" | "teamId" | "clientId" | "projectId" | "category" | "startDate" | "dueDate" | "completedOn" | "estimatedHours" | "workedHours" | "origin">;
+type Fields = Pick<Task, "status" | "priority" | "owners" | "support" | "teamId" | "clientId" | "projectId" | "category" | "startDate" | "dueDate" | "completedOn" | "estimatedHours" | "origin">;
 
 /** Campos da demanda; usado na criação e no painel lateral. Horas e textos salvam ao sair do campo. */
 function PropertyFields({ value, onChange, lookups, disabled, compact }: { value: Fields; onChange: (changes: Partial<Fields>) => void; lookups: Lookups; disabled?: boolean; compact?: boolean }) {
   const team = lookups.teams.find((entry) => entry.id === value.teamId);
-  const [hours, setHours] = useState({ estimatedHours: value.estimatedHours?.toString().replace(".", ",") ?? "", workedHours: value.workedHours?.toString().replace(".", ",") ?? "" });
+  const [hours, setHours] = useState({ estimatedHours: value.estimatedHours?.toString().replace(".", ",") ?? "" });
   const [origin, setOrigin] = useState(value.origin);
   const categories = value.category && !lookups.categories.includes(value.category) ? [value.category, ...lookups.categories] : lookups.categories;
-  const commitHours = (field: "estimatedHours" | "workedHours") => {
+  const commitHours = (field: "estimatedHours") => {
     const text = hours[field].trim();
     const parsed = text ? Number(text.replace(",", ".")) : null;
     if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) { setHours({ ...hours, [field]: value[field]?.toString().replace(".", ",") ?? "" }); return; }
@@ -544,7 +547,6 @@ function PropertyFields({ value, onChange, lookups, disabled, compact }: { value
     {!compact && dateField("completedOn", "Data de Conclusão")}
     <div className="task-hours">
       <label className="task-prop"><span>Horas estimadas</span><span className="task-prop-control"><input disabled={disabled} inputMode="decimal" value={hours.estimatedHours} onChange={(event) => setHours({ ...hours, estimatedHours: event.target.value })} onBlur={() => commitHours("estimatedHours")} placeholder="0" /><small>h</small></span></label>
-      {!compact && <label className="task-prop"><span>Horas trabalhadas</span><span className="task-prop-control"><input disabled={disabled} inputMode="decimal" value={hours.workedHours} onChange={(event) => setHours({ ...hours, workedHours: event.target.value })} onBlur={() => commitHours("workedHours")} placeholder="0" /><small>h</small></span></label>}
     </div>
     <label className="task-prop"><span>Origem / Ticket</span><span className="task-prop-control"><input disabled={disabled} maxLength={300} value={origin} onChange={(event) => setOrigin(event.target.value)} onBlur={() => { if (origin !== value.origin) onChange({ origin }); }} placeholder="Ex.: WhatsApp, TICKET-663" /></span></label>
   </div>;
@@ -553,7 +555,7 @@ function PropertyFields({ value, onChange, lookups, disabled, compact }: { value
 function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defaultClientId, onClose, onCreated }: { initialStatus: TaskStatus; lookups: Lookups; meId: number; defaultTeamId: number | null; defaultClientId: number | null; onClose: () => void; onCreated: (task: Task) => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [fields, setFields] = useState<Fields>({ status: initialStatus, priority: 0, owners: lookups.members.some((member) => member.id === meId) ? [meId] : [], support: [], teamId: defaultTeamId, clientId: defaultClientId, projectId: null, category: "", startDate: null, dueDate: null, completedOn: null, estimatedHours: null, workedHours: null, origin: "" });
+  const [fields, setFields] = useState<Fields>({ status: initialStatus, priority: 0, owners: lookups.members.some((member) => member.id === meId) ? [meId] : [], support: [], teamId: defaultTeamId, clientId: defaultClientId, projectId: null, category: "", startDate: null, dueDate: null, completedOn: null, estimatedHours: null, origin: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -673,10 +675,12 @@ function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, on
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== task.description) void save({ description }); }} />
           <label className="task-notes"><span>OBS / Impedimentos</span><textarea readOnly={readOnly} value={notes} rows={3} placeholder={readOnly ? "Nenhuma observação." : "Bloqueios, dependências, combinados..."} onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== task.notes) void save({ notes }); }} /></label>
-          {task.hoursFlag && <p className="hours-warning"><TriangleAlert size={14} /> As horas vieram da planilha com um valor fora do normal para o período. Confira e corrija; o aviso some quando as horas forem salvas de novo.</p>}
+          {task.hoursFlag && <p className="hours-warning"><TriangleAlert size={14} /> As horas vieram da planilha com um valor fora do normal para o período. Confira e corrija em “Horas anteriores”; o aviso some quando o valor for salvo.</p>}
           <div className="mobile-only task-mobile-fields">{fields}</div>
 
           {error && <p className="modal-error task-drawer-error">{error}</p>}
+
+          <TimeLog task={task} me={me} lookups={lookups} today={today} onSaveBase={(baseHours) => save({ baseHours })} onChanged={onCommented} />
 
           <h3 className="task-activity-title">Atividade</h3>
           {!events ? <div className="loading-list"><span /></div> : <ol className="task-activity">
@@ -702,6 +706,103 @@ function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, on
       </div>
     </aside>
   </div>;
+}
+
+type LoggedEntry = TimeEntry & { canDelete: boolean };
+
+/** Apontamento de horas da demanda: total, horas anteriores e lançamentos por pessoa e dia. */
+function TimeLog({ task, me, lookups, today, onSaveBase, onChanged }: { task: Task; me: Me; lookups: Lookups; today: string; onSaveBase: (value: number | null) => Promise<void>; onChanged: () => Promise<void> }) {
+  const [entries, setEntries] = useState<LoggedEntry[] | null>(null);
+  const [form, setForm] = useState({ workDate: today, hours: "", note: "", memberId: String(me.id) });
+  const [base, setBase] = useState(task.baseHours?.toString().replace(".", ",") ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    const response = await fetch(`/api/time-entries?taskId=${task.id}`, { cache: "no-store" });
+    const data = await response.json() as { entries?: LoggedEntry[]; error?: string };
+    if (response.ok && data.entries) setEntries(data.entries); else { setEntries([]); setError(data.error || "Não foi possível carregar as horas."); }
+  }, [task.id]);
+  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
+
+  async function post(body: Record<string, unknown>) {
+    const response = await fetch("/api/time-entries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await response.json() as { error?: string; message?: string };
+    if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
+    return data;
+  }
+
+  async function add(event: React.FormEvent) {
+    event.preventDefault();
+    const hours = parseEntryHours(form.hours);
+    if (hours === null) { setError("Informe as horas: por exemplo 1,5 ou 1:30."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await post({ action: "addEntry", taskId: task.id, workDate: form.workDate, hours: form.hours, note: form.note, memberId: Number(form.memberId) });
+      setForm({ ...form, hours: "", note: "" });
+      setNotice(result.message ?? "Horas lançadas.");
+      await Promise.all([load(), onChanged()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível lançar as horas.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(entry: LoggedEntry) {
+    if (!window.confirm(`Excluir o lançamento de ${formatHours(entry.hours)} de ${entry.memberName} em ${fullDate(entry.workDate)}?`)) return;
+    setError(""); setNotice("");
+    try {
+      await post({ action: "deleteEntry", entryId: entry.id });
+      await Promise.all([load(), onChanged()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível excluir.");
+    }
+  }
+
+  function commitBase() {
+    const text = base.trim();
+    const parsed = text ? Number(text.replace(",", ".")) : null;
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) { setBase(task.baseHours?.toString().replace(".", ",") ?? ""); return; }
+    if (parsed !== task.baseHours) void onSaveBase(parsed);
+  }
+
+  const logged = (entries ?? []).reduce((sum, entry) => sum + entry.hours, 0);
+  const total = task.workedHours ?? 0;
+  const estimate = task.estimatedHours;
+  const canLog = me.canEdit;
+  const people = me.isAdmin ? lookups.members : lookups.members.filter((member) => member.id === me.id);
+
+  return <section className="time-log">
+    <header className="time-log-head">
+      <h3>Horas</h3>
+      <p><strong>{formatHours(total)}</strong> no total{estimate ? <> de <b>{formatHours(estimate)}</b> estimadas{total > estimate && <span className="time-log-over"> · {formatHours(total - estimate)} acima</span>}</> : null}</p>
+    </header>
+    {estimate ? <span className="time-log-bar" aria-hidden="true"><i className={total > estimate ? "over" : ""} style={{ width: `${Math.min(100, (total / estimate) * 100)}%` }} /></span> : null}
+    <p className="time-log-split">
+      {task.baseHours !== null || me.isAdmin ? <label>Horas anteriores <input disabled={!canLog} inputMode="decimal" value={base} onChange={(event) => setBase(event.target.value)} onBlur={commitBase} placeholder="0" /> h</label> : null}
+      <span>{formatHours(logged)} lançadas{entries && entries.length ? ` em ${entries.length} registro${entries.length > 1 ? "s" : ""}` : ""}</span>
+    </p>
+    {canLog && people.length > 0 && <form className="time-log-form" onSubmit={add}>
+      {me.isAdmin && <select aria-label="Pessoa" value={form.memberId} onChange={(event) => setForm({ ...form, memberId: event.target.value })}>{people.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select>}
+      <input aria-label="Dia trabalhado" type="date" max={today} value={form.workDate} onChange={(event) => setForm({ ...form, workDate: event.target.value })} required />
+      <input aria-label="Horas" className="time-log-hours" inputMode="decimal" placeholder="1:30" value={form.hours} onChange={(event) => setForm({ ...form, hours: event.target.value })} required />
+      <input aria-label="O que foi feito" className="time-log-note" maxLength={300} placeholder="O que foi feito (opcional)" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
+      <button className="primary-button" disabled={busy || !form.hours.trim()}><Clock size={14} /> {busy ? "Lançando..." : "Lançar"}</button>
+    </form>}
+    {error && <p className="modal-error">{error}</p>}
+    {notice && !error && <p className="time-log-notice">{notice}</p>}
+    {entries && entries.length > 0 && <ul className="time-log-list">
+      {[...entries].reverse().map((entry) => <li key={entry.id}>
+        <span className="time-log-date">{fullDate(entry.workDate)}</span>
+        <span className="time-log-person">{entry.memberName}</span>
+        <b>{formatHours(entry.hours)}</b>
+        <span className="time-log-text">{entry.note}</span>
+        {entry.canDelete && <button onClick={() => remove(entry)} aria-label="Excluir lançamento" title="Excluir lançamento"><Trash2 size={12} /></button>}
+      </li>)}
+    </ul>}
+  </section>;
 }
 
 /** Lista de clientes/projetos usada nos menus (antes ficava na aba Configurações das planilhas). */

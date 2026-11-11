@@ -1342,3 +1342,49 @@ mark.mention { padding: 0 2px; border-radius: 4px; color: #2357bd; background: #
   .status-bar-row { grid-template-columns: 120px minmax(0,1fr) 56px; }
   .project-row > :nth-child(3), .project-row > :nth-child(6) { display: none; }
 }
+
+/* Apontamento de horas na demanda */
+.time-log { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.time-log-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.time-log-head h3 { margin: 0; font-size: 13px; }
+.time-log-head p { margin: 0; color: #667085; font-size: 12px; }
+.time-log-head strong { color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+.time-log-over { color: #b42318; font-weight: 650; }
+.time-log-bar { display: block; height: 6px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: #edf1f6; }
+.time-log-bar i { display: block; height: 100%; border-radius: 3px; background: var(--series-purchase); }
+.time-log-bar i.over { background: #d92d20; }
+.time-log-split { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 10px 0 0; color: #667085; font-size: 12px; }
+.time-log-split label { display: inline-flex; align-items: center; gap: 6px; }
+.time-log-split input { width: 70px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; outline: none; font: inherit; font-size: 12px; text-align: right; }
+.time-log-form { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.time-log-form input, .time-log-form select { height: 34px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: #344054; font: inherit; font-size: 12px; background: #fff; }
+.time-log-form input:focus, .time-log-form select:focus, .time-log-split input:focus { border-color: #9db7ea; box-shadow: 0 0 0 3px #e8effb; }
+.time-log-form .time-log-hours { width: 72px; }
+.time-log-form .time-log-note { flex: 1 1 160px; min-width: 0; }
+.time-log-form .primary-button { height: 34px; padding: 0 12px; font-size: 12px; }
+.time-log-notice { margin: 8px 0 0; color: #067647; font-size: 12px; }
+.time-log-list { margin: 12px 0 0; padding: 0; list-style: none; }
+.time-log-list li { display: grid; grid-template-columns: 78px minmax(70px,auto) 48px minmax(0,1fr) 22px; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid #f0f2f6; color: #344054; font-size: 12px; }
+.time-log-list b { font-variant-numeric: tabular-nums; text-align: right; }
+.time-log-date { color: #8a93a3; font-variant-numeric: tabular-nums; }
+.time-log-text { overflow: hidden; color: #667085; text-overflow: ellipsis; white-space: nowrap; }
+.time-log-list button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; color: #98a2b3; background: transparent; cursor: pointer; }
+.time-log-list button:hover { color: #b42318; background: #fef3f2; }
+@media (max-width: 640px) { .time-log-list li { grid-template-columns: 70px minmax(0,1fr) 44px 22px; } .time-log-text { display: none; } }
+
+/* Painel: abas e relatórios por cliente e de horas */
+.panel-tabs { display: flex; gap: 4px; margin: 4px 0 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.panel-tabs button { padding: 9px 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--muted); background: transparent; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.panel-tabs button:hover { color: var(--ink); }
+.panel-tabs button.active { color: var(--green); border-bottom-color: var(--green); }
+.report-card-toolbar { flex-wrap: wrap; margin-bottom: 12px; }
+.report-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.month-picker { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.month-picker button { display: inline-grid; place-items: center; min-height: 28px; padding: 0 10px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 750; cursor: pointer; }
+.month-picker button.month-step { width: 28px; padding: 0; }
+.month-picker button.month-name { min-width: 138px; }
+.month-picker button.month-name::first-letter { text-transform: uppercase; }
+.month-picker button.active { color: white; background: var(--green); }
+.month-picker button:disabled { opacity: .35; cursor: default; }
+.report-table tfoot td { border-top: 1px solid var(--line); border-bottom: 0; font-weight: 750; }
+.report-footnote { margin: 10px 0 0; color: #8a93a3; font-size: 11px; line-height: 1.45; }

@@ -216,7 +216,7 @@ async function commit(db: Db, plan: Plan, actor: { userId: string; name: string 
           assigneeId: owners[0] ?? null, teamId: demand.workbook === "leadership" ? null : teamIds[demand.workbook],
           clientId: demand.client ? clientIds.get(fold(demand.client)) ?? null : null, category: demand.category,
           openedOn: demand.openedOn, startDate: demand.startDate, dueDate: demand.dueDate, completedOn: demand.completedOn,
-          estimatedHours: demand.estimatedHours, workedHours: demand.workedHours, hoursFlag: plan.flaggedKeys.has(demand),
+          estimatedHours: demand.estimatedHours, workedHours: demand.workedHours, baseHours: demand.workedHours, hoursFlag: plan.flaggedKeys.has(demand),
           origin: demand.origin.slice(0, 300), notes: demand.notes, sortOrder: position,
           createdById: null, createdByName: "Planilha",
           completedAt: demand.status === "done" ? (demand.completedOn ? `${demand.completedOn}T12:00:00.000Z` : now) : null,

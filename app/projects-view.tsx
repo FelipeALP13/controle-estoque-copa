@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Download from "lucide-react/icons/download";
 import FolderKanban from "lucide-react/icons/folder-kanban";
+import { downloadXlsx } from "./xlsx-writer";
 import Link2 from "lucide-react/icons/link-2";
 import Plus from "lucide-react/icons/plus";
 import Search from "lucide-react/icons/search";
@@ -87,6 +89,49 @@ export default function ProjectsView({ onOpenTask }: { onOpenTask: (taskId: numb
     return Object.fromEntries(projectFarois.map((value) => [value, active.filter((project) => project.farol === value).length])) as Record<ProjectFarol, number>;
   }, [data]);
 
+  // Exporta os projetos que estão na tela (situação, farol, fase e busca), com as demandas de cada um.
+  function exportExcel() {
+    if (!data) return;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+    const clientName = (id: number | null) => (id ? clientsById.get(id)?.name ?? "" : "");
+    downloadXlsx(`projetos-${today}.xlsx`, [
+      {
+        name: "Projetos",
+        columns: [
+          { header: "Código", width: 9 }, { header: "Projeto", width: 34 }, { header: "Cliente", width: 20 }, { header: "Farol", width: 10 }, { header: "Fase", width: 14 }, { header: "Status", width: 16 },
+          { header: "Prazo", width: 16 }, { header: "Início", type: "date", width: 12 }, { header: "Previsão de término", width: 18 }, { header: "Responsáveis", width: 30 },
+          { header: "Demandas ligadas", type: "number", width: 16 }, { header: "Concluídas", type: "number", width: 11 }, { header: "Andamento", type: "percent", width: 11 },
+          { header: "Escopo", width: 50 }, { header: "Observações", width: 40 },
+        ],
+        rows: visible.map((project) => {
+          const progress = projectProgress(project.tasks.map((task) => task.status));
+          return [
+            projectCode(project.id), project.name, clientName(project.clientId), projectFarolLabels[project.farol], projectPhaseLabels[project.phase], taskStatusLabels[project.status],
+            project.deadlineLabel, project.startDate, fullDate(project.endForecast), project.people.map((id) => membersById.get(id)?.name ?? "").filter(Boolean).join(", "),
+            progress.total, progress.done, progress.total ? progress.done / progress.total : null, project.description, project.notes,
+          ];
+        }),
+      },
+      {
+        name: "Demandas dos projetos",
+        columns: [{ header: "Projeto", width: 9 }, { header: "Nome do projeto", width: 30 }, { header: "Demanda", width: 10 }, { header: "Título", width: 48 }, { header: "Status", width: 18 }, { header: "Prazo", type: "date", width: 12 }],
+        rows: visible.flatMap((project) => project.tasks.map((task) => [projectCode(project.id), project.name, taskCode(task.id), task.title, taskStatusLabels[task.status], task.dueDate])),
+      },
+      {
+        name: "Filtros",
+        columns: [{ header: "Filtro", width: 20 }, { header: "Valor", width: 40 }],
+        rows: [
+          ["Exportado em", new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })],
+          ["Projetos no arquivo", `${visible.length} de ${data.projects.length}`],
+          ["Situação", scope === "active" ? "Em andamento" : scope === "closed" ? "Encerrados" : "Todos"],
+          ["Farol", farol ? projectFarolLabels[farol as ProjectFarol] : "Todos"],
+          ["Fase", phase ? projectPhaseLabels[phase as ProjectPhase] : "Todas"],
+          ["Busca", search.trim() || "—"],
+        ],
+      },
+    ]);
+  }
+
   if (!data) return error ? <div className="alert error"><span>{error}</span></div> : <div className="loading-list">{[1, 2, 3].map((line) => <span key={line} />)}</div>;
   const open = openId === "new" ? null : data.projects.find((project) => project.id === openId) ?? null;
 
@@ -99,6 +144,7 @@ export default function ProjectsView({ onOpenTask }: { onOpenTask: (taskId: numb
       </div>
       <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar projeto, cliente ou escopo" /></label>
       <select aria-label="Filtrar por fase" value={phase} onChange={(event) => setPhase(event.target.value)}><option value="">Todas as fases</option>{projectPhases.map((value) => <option key={value} value={value}>{projectPhaseLabels[value]}</option>)}</select>
+      <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os projetos que estão na tela, com as demandas de cada um"><Download size={15} /> Exportar Excel</button>
       {data.me.canEdit && <button className="primary-button tasks-new" onClick={() => setOpenId("new")}><Plus size={16} /> Novo projeto</button>}
     </div>
 

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, min, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { clients, members, notifications, projects, taskEvents, taskLegacyCodes, taskPeople, tasks, teamMembers, teams } from "../../../db/schema";
+import { clients, members, notifications, projects, taskEvents, taskLegacyCodes, taskPeople, tasks, teamMembers, teams, timeEntries } from "../../../db/schema";
+import { totalHours } from "../../time-entries";
 import { commentRecipients, findMentions, snippet, type NotificationKind } from "../../notifications";
 import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
@@ -153,6 +154,7 @@ export async function GET(request: Request) {
         completedOn: tasks.completedOn,
         estimatedHours: tasks.estimatedHours,
         workedHours: tasks.workedHours,
+        baseHours: tasks.baseHours,
         hoursFlag: tasks.hoursFlag,
         origin: tasks.origin,
         notes: tasks.notes,
@@ -349,11 +351,16 @@ export async function POST(request: Request) {
           if (field === "dueDate") events.push({ kind: "due_date", body: value ?? "" });
         }
       }
-      for (const field of ["estimatedHours", "workedHours"] as const) {
+      // Horas trabalhadas não se digitam: são as horas anteriores (editáveis) + os lançamentos.
+      for (const field of ["estimatedHours", "baseHours"] as const) {
         if (!(field in body)) continue;
         const value = parseHoursField(body[field]);
         if (value === undefined) return json({ error: "Informe horas válidas (número maior ou igual a zero)." }, 400);
         if (value !== current[field]) { changes[field] = value; changes.hoursFlag = false; }
+      }
+      if ("baseHours" in changes) {
+        const [logged] = await db.select({ count: sql<number>`count(*)`, total: sql<number>`coalesce(sum(${timeEntries.hours}), 0)` }).from(timeEntries).where(eq(timeEntries.taskId, taskId));
+        changes.workedHours = totalHours(changes.baseHours ?? null, Number(logged?.count) ? [Number(logged.total)] : []);
       }
 
       let peopleChanged = false;

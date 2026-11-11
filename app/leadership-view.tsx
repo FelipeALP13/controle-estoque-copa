@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Download from "lucide-react/icons/download";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
 import { downloadXlsx } from "./xlsx-writer";
+import { ClientsReport } from "./leadership-reports";
 import { isOpen, inPeriod, summarize, workload, type PanelTask } from "./leadership";
 import { isClosedProject, projectFarolLabels, projectFarois, type ProjectFarol } from "./projects";
 import { StatusIcon } from "./tasks-view";
 import { taskCode, taskStatuses, taskStatusLabels, type TaskStatus } from "./tasks";
 
-type Task = PanelTask & { title: string; clientId: number | null };
+type Task = PanelTask & { title: string; clientId: number | null; completedOn: string | null };
 type Person = { id: number; name: string };
 type Team = { id: number; name: string; color: string };
 type Project = { id: number; status: TaskStatus; phase: string; farol: ProjectFarol };
@@ -36,19 +37,22 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
   const [error, setError] = useState("");
   const [period, setPeriod] = useState<"all" | "30" | "90" | "year">("all");
   const [team, setTeam] = useState("");
+  const [tab, setTab] = useState<"overview" | "clients">("overview");
+  const [clients, setClients] = useState<Person[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const [taskResponse, projectResponse] = await Promise.all([fetch("/api/tasks", { cache: "no-store" }), fetch("/api/projects", { cache: "no-store" })]);
-        const taskData = await taskResponse.json() as { tasks: Task[]; members: Person[]; teams: Team[]; error?: string };
+        const taskData = await taskResponse.json() as { tasks: Task[]; members: Person[]; teams: Team[]; clients: Person[]; error?: string };
         if (!taskResponse.ok) throw new Error(taskData.error || "Não foi possível carregar as demandas.");
         const projectData = projectResponse.ok ? await projectResponse.json() as { projects: Project[] } : { projects: [] };
         if (cancelled) return;
         setTasks(taskData.tasks);
         setPeople(taskData.members);
         setTeams(taskData.teams);
+        setClients(taskData.clients ?? []);
         setProjects(projectData.projects);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Não foi possível carregar o painel.");
@@ -60,6 +64,9 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
   const today = todayInSaoPaulo();
   const filtered = useMemo(() => (tasks ?? []).filter((task) => inPeriod(task, period, today) && (!team || task.teamId === Number(team))), [tasks, period, team, today]);
   const summary = useMemo(() => summarize(filtered, today), [filtered, today]);
+  // Relatórios por cliente e de horas usam só o filtro de time (o período é o mês escolhido neles).
+  const teamTasks = useMemo(() => (tasks ?? []).filter((task) => !team || task.teamId === Number(team)), [tasks, team]);
+  const teamLabel = team ? teams.find((entry) => entry.id === Number(team))?.name ?? "" : "Todos os times";
   const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person.name])), [people]);
 
   if (error) return <div className="alert error"><span>{error}</span></div>;
@@ -79,7 +86,9 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
   const stuckAll = filtered.filter((task) => task.status === "blocked" || task.status === "waiting");
   const stuckList = stuckAll.slice(0, 8);
   const hoursToReview = filtered.filter((task) => task.hoursFlag);
-  const visibleTeams = team ? teams.filter((entry) => entry.id === Number(team)) : teams;
+  // A carga por pessoa é só dos times que executam: a Liderança fica de fora.
+  const visibleTeams = (team ? teams.filter((entry) => entry.id === Number(team)) : teams)
+    .filter((entry) => entry.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() !== "lideranca");
   const teamName = (id: number | null) => (id ? teams.find((entry) => entry.id === id)?.name : "") ?? "";
   const ownerNames = (ids: number[]) => ids.map((id) => peopleById.get(id) ?? "Pessoa removida").join(", ");
 
@@ -134,13 +143,19 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
 
   return <div className="leadership-page">
     <div className="report-filters">
-      <div><h2>Painel de demandas</h2><p>Substitui o Dashboard da planilha da Liderança. Demanda compartilhada conta uma vez para cada responsável na carga por pessoa.</p></div>
+      <div><h2>Painel de demandas</h2><p>{tab === "overview" ? "Substitui o Dashboard da planilha da Liderança. Demanda compartilhada conta uma vez para cada responsável na carga por pessoa." : "Demandas e horas de cada cliente, para prestar contas ou faturar."}</p></div>
       <div className="leadership-filters">
         <select aria-label="Time" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todos os times</option>{teams.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
-        <div className="report-period" role="group" aria-label="Período de abertura">{([["all", "Tudo"], ["30", "30 dias"], ["90", "90 dias"], ["year", "Este ano"]] as const).map(([value, label]) => <button key={value} className={period === value ? "active" : ""} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>)}</div>
-        <button className="secondary-button" onClick={exportExcel} title="Baixa o painel em Excel com o time e o período escolhidos"><Download size={15} /> Exportar Excel</button>
+        {tab === "overview" && <div className="report-period" role="group" aria-label="Período de abertura">{([["all", "Tudo"], ["30", "30 dias"], ["90", "90 dias"], ["year", "Este ano"]] as const).map(([value, label]) => <button key={value} className={period === value ? "active" : ""} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>)}</div>}
+        {tab === "overview" && <button className="secondary-button" onClick={exportExcel} title="Baixa o painel em Excel com o time e o período escolhidos"><Download size={15} /> Exportar Excel</button>}
       </div>
     </div>
+    <div className="panel-tabs" role="tablist" aria-label="Relatórios do painel">
+      {([["overview", "Visão geral"], ["clients", "Por cliente"]] as const).map(([value, label]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}
+    </div>
+
+    {tab === "clients" && <ClientsReport tasks={teamTasks} clients={clients} today={today} teamLabel={teamLabel} />}
+    {tab === "overview" && <>
 
     <div className="leadership-tiles">
       <article><small>Demandas</small><strong>{summary.total}</strong><p>{summary.open} em aberto</p></article>
@@ -198,5 +213,6 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
         {hoursToReview.length > 0 && <p className="hours-warning"><TriangleAlert size={14} /> {hoursToReview.length} demanda{hoursToReview.length > 1 ? "s" : ""} com horas importadas fora do normal para revisar (ícone ⚠ na lista de Demandas).</p>}
       </section>
     </div>
+    </>}
   </div>;
 }
