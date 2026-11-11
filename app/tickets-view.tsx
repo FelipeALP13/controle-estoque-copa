@@ -18,6 +18,10 @@ import { taskCode } from "./tasks";
 import { Avatar, MentionTextarea, relativeTime, TeamChip } from "./tasks-view";
 import Download from "lucide-react/icons/download";
 import BookOpen from "lucide-react/icons/book-open";
+import ExternalLink from "lucide-react/icons/external-link";
+import Plug from "lucide-react/icons/plug";
+import JiraSettings from "./jira-settings";
+import { TICKETS_CHANGED } from "./use-jira-sync";
 import { relatedArticles, type SearchableArticle } from "./knowledge";
 import type { ArticleDraft } from "./knowledge-view";
 import { downloadXlsx } from "./xlsx-writer";
@@ -27,6 +31,7 @@ type Ticket = {
   id: number; title: string; description: string; type: TicketType; urgency: TicketUrgency; status: TicketStatus; client: string;
   teamId: number | null; requesterId: number | null; requesterName: string; assigneeId: number | null; taskId: number | null;
   firstResponseAt: string | null; resolvedAt: string | null; createdAt: string; updatedAt: string; commentCount: number;
+  source: "portal" | "jira"; externalKey: string | null; externalUrl: string | null; externalStatus: string | null;
 };
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
 type Team = { id: number; name: string; color: string };
@@ -74,6 +79,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [jiraOpen, setJiraOpen] = useState(false);
   const retried = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -91,7 +97,10 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
   useEffect(() => {
     const first = window.setTimeout(() => { void load(); }, 0);
     const interval = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 20000);
-    return () => { window.clearTimeout(first); window.clearInterval(interval); };
+    // Chamados novos do Jira: recarrega na hora.
+    const onJira = () => { void load(); };
+    window.addEventListener(TICKETS_CHANGED, onJira);
+    return () => { window.clearTimeout(first); window.clearInterval(interval); window.removeEventListener(TICKETS_CHANGED, onJira); };
   }, [load]);
 
   useEffect(() => {
@@ -126,7 +135,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     return inScope.filter((ticket) => {
       if (statusFilter === "active" && !isActiveTicket(ticket.status)) return false;
       if (statusFilter === "closed" && isActiveTicket(ticket.status)) return false;
-      return !query || fold(`${ticketCode(ticket.id)} ${ticket.title} ${ticket.client} ${ticket.requesterName}`).includes(query);
+      return !query || fold(`${ticketCode(ticket.id)} ${ticket.externalKey ?? ""} ${ticket.title} ${ticket.client} ${ticket.requesterName}`).includes(query);
     }).sort(compareTickets);
   }, [inScope, statusFilter, search]);
 
@@ -160,13 +169,13 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
       {
         name: "Chamados",
         columns: [
-          { header: "Código", width: 9 }, { header: "Título", width: 46 }, { header: "Tipo", width: 11 }, { header: "Urgência", width: 10 }, { header: "Status", width: 15 },
+          { header: "Código", width: 9 }, { header: "Jira", width: 11 }, { header: "Título", width: 46 }, { header: "Tipo", width: 11 }, { header: "Urgência", width: 10 }, { header: "Status", width: 15 },
           { header: "Cliente", width: 20 }, { header: "Time", width: 16 }, { header: "Solicitante", width: 20 }, { header: "Responsável", width: 20 },
           { header: "Aberto em", width: 17 }, { header: "1ª resposta em", width: 17 }, { header: "Horas até 1ª resposta", type: "number", width: 19 }, { header: "Prazo de 1ª resposta", width: 24 },
           { header: "Resolvido em", width: 17 }, { header: "Horas até resolver", type: "number", width: 17 }, { header: "Prazo de solução", width: 24 }, { header: "Demanda ligada", width: 14 }, { header: "Comentários", type: "number", width: 12 }, { header: "Descrição", width: 50 },
         ],
         rows: visible.map((ticket) => [
-          ticketCode(ticket.id), ticket.title, ticketTypeLabels[ticket.type], ticketUrgencyLabels[ticket.urgency], ticketStatusLabels[ticket.status],
+          ticketCode(ticket.id), ticket.externalKey ?? "", ticket.title, ticketTypeLabels[ticket.type], ticketUrgencyLabels[ticket.urgency], ticketStatusLabels[ticket.status],
           ticket.client, ticket.teamId ? teamsById.get(ticket.teamId)?.name ?? "" : "", ticket.requesterName, ticket.assigneeId ? peopleById.get(ticket.assigneeId)?.name ?? "" : "",
           stamp(ticket.createdAt), stamp(ticket.firstResponseAt), hoursBetween(ticket.createdAt, ticket.firstResponseAt), slaLabel[slaStatus(ticket).state],
           stamp(ticket.resolvedAt), hoursBetween(ticket.createdAt, ticket.resolvedAt), solveLabel(ticket),ticket.taskId ? taskCode(ticket.taskId) : "", ticket.commentCount, ticket.description,
@@ -203,6 +212,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
       <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por título, código ou cliente" /></label>
       {(data?.teams.length ?? 0) > 0 && <select aria-label="Filtrar por time" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)}><option value="">Todos os times</option>{data?.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select>}
       <select aria-label="Situação" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="active">Em aberto</option><option value="closed">Encerrados</option><option value="all">Todos</option></select>
+      {data?.me.isAdmin && <button className="secondary-button" onClick={() => setJiraOpen(true)} title="Trazer chamados das contas do Jira"><Plug size={15} /> Jira</button>}
       {data && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os chamados que estão na tela, com os filtros aplicados"><Download size={15} /> Exportar Excel</button>}
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button>}
     </div>
@@ -224,7 +234,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
             return <button key={ticket.id} className={`ticket-row ${isActiveTicket(ticket.status) ? "" : "closed"}`} onClick={() => setOpenId(ticket.id)}>
               <UrgencyBadge urgency={ticket.urgency} />
               <span className="ticket-main">
-                <span className="ticket-title"><span className="task-code">{ticketCode(ticket.id)}</span><strong>{ticket.title}</strong></span>
+                <span className="ticket-title"><span className="task-code">{ticketCode(ticket.id)}</span>{ticket.externalKey && <span className="jira-badge" title={`Veio do Jira: ${ticket.externalKey}${ticket.externalStatus ? ` (${ticket.externalStatus})` : ""}`}>{ticket.externalKey}</span>}<strong>{ticket.title}</strong></span>
                 <span className="ticket-sub">{ticketTypeLabels[ticket.type]}{ticket.client && ` · ${ticket.client}`} · por {ticket.requesterName}{ticket.commentCount > 0 && <span className="task-comments"><MessageSquare size={11} />{ticket.commentCount}</span>}</span>
               </span>
               <span className="ticket-meta">
@@ -239,6 +249,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
       )}
     </>}
 
+    {jiraOpen && <JiraSettings onClose={() => setJiraOpen(false)} onSynced={load} />}
     {creating && data && <NewTicketModal teams={data.teams} defaultTeamId={teamFilter ? Number(teamFilter) : null} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); setStatusFilter("active"); await load(); setOpenId(id); }} />}
     {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} onOpenArticle={onOpenArticle} onSaveSolution={onSaveSolution} />}
   </div>;
@@ -377,6 +388,7 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
         <div className="task-drawer-main">
           <div className="ticket-drawer-badges"><UrgencyBadge urgency={ticket.urgency} /><StatusPill status={ticket.status} />{team && <TeamChip team={team} />}<span className="ticket-type">{ticketTypeLabels[ticket.type]}</span>{ticket.client && <span className="ticket-type">Cliente: {ticket.client}</span>}</div>
           <h2 className="ticket-drawer-title">{ticket.title}</h2>
+          {ticket.externalUrl && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Veio do Jira{ticket.externalStatus ? <> · lá está <b>{ticket.externalStatus}</b></> : null}. Responda ao cliente pelo Jira; os comentários daqui ficam só para a equipe. <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir no Jira</a></p>}
           <textarea className="task-description-input" readOnly={!handler && !isRequester} value={description} rows={5} placeholder="Sem detalhes."
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== ticket.description && handler) void onUpdate({ description }); }} />

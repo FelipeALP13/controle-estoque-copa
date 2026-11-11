@@ -1465,3 +1465,33 @@ mark.mention { padding: 0 2px; border-radius: 4px; color: #2357bd; background: #
 .notice-more { margin-top: 10px; padding: 0; border: 0; color: #2357bd; background: none; font-size: 12px; font-weight: 700; cursor: pointer; }
 .checkbox-line { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; align-self: end; padding-bottom: 10px; }
 .checkbox-line input { width: auto !important; height: auto !important; }
+
+/* Integração com o Jira */
+.jira-badge { flex: 0 0 auto; padding: 1px 7px; border-radius: 6px; color: #0747a6; background: #deebff; font-size: 10px; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
+.ticket-title .jira-badge { margin-right: 2px; }
+.jira-origin { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; padding: 9px 11px; border-radius: 9px; color: #344054; background: #f0f5ff; font-size: 12px; line-height: 1.45; }
+.jira-origin a { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: #0747a6; font-weight: 750; }
+.jira-modal { width: min(780px, 100%); max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.jira-body { padding: 4px 25px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.jira-notice { margin: 0; padding: 9px 11px; border-radius: 9px; color: #067647; background: #ecfdf3; font-size: 12px; }
+.jira-account { padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.jira-account.failing { border-color: #f3c3c3; }
+.jira-account header { display: flex; align-items: center; gap: 8px; }
+.jira-account header > div { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.jira-account header strong { font-size: 14px; }
+.jira-account header a { display: inline-flex; align-items: center; gap: 3px; color: #2357bd; font-size: 12px; }
+.jira-account header small { color: #8a93a3; font-size: 11px; }
+.jira-account header .secondary-button { height: 32px; font-size: 12px; }
+.jira-error { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; color: #b42318; background: #fef3f2; font-size: 12px; }
+.jira-projects { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 12px; }
+.jira-projects th { padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; text-align: left; }
+.jira-projects td { padding: 6px 8px; border-bottom: 1px solid #f0f2f6; }
+.jira-projects tr:not(.on) td:nth-child(2) { color: #8a93a3; }
+.jira-projects select { width: 100%; height: 30px; padding: 0 6px; border: 1px solid var(--line); border-radius: 7px; background: white; font-size: 12px; }
+.jira-help { padding: 14px 16px; border: 1px dashed #b9c8e4; border-radius: 12px; background: #f8faff; font-size: 13px; }
+.jira-help ol { margin: 8px 0; padding-left: 20px; line-height: 1.6; }
+.jira-help small { color: var(--muted); }
+.jira-add { align-self: flex-start; }
+.modal-layer.nested { z-index: 90; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

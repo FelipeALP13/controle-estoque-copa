@@ -31,6 +31,7 @@ import LifeBuoy from "lucide-react/icons/life-buoy";
 import BookOpen from "lucide-react/icons/book-open";
 import KnowledgeView, { type ArticleDraft } from "./knowledge-view";
 import NoticeBoard from "./notice-board";
+import { useJiraAutoSync } from "./use-jira-sync";
 import Contact from "lucide-react/icons/contact";
 import ListTodo from "lucide-react/icons/list-todo";
 import CalendarOff from "lucide-react/icons/calendar-off";
@@ -316,6 +317,8 @@ export default function Home() {
   const [articleToOpen, setArticleToOpen] = useState<number | null>(null);
   const [articleDraft, setArticleDraft] = useState<ArticleDraft | null>(null);
   const clearArticleRequest = useCallback(() => { setArticleToOpen(null); setArticleDraft(null); }, []);
+  // Chamados novos do Jira chegam enquanto alguém da equipe está com o Portal aberto.
+  useJiraAutoSync(Boolean(currentUser?.active));
 
   function openKnowledge(request?: { articleId?: number; draft?: ArticleDraft }) {
     setTab("knowledge");

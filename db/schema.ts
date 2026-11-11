@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -316,7 +316,42 @@ export const tickets = sqliteTable("tickets", {
   resolvedAt: text("resolved_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  // Chamados que vieram do Jira: chave (ex.: DRH-123), link e status lá.
+  source: text("source", { enum: ["portal", "jira"] }).notNull().default("portal"),
+  jiraConnectionId: integer("jira_connection_id").references(() => jiraConnections.id, { onDelete: "set null" }),
+  externalKey: text("external_key"),
+  externalUrl: text("external_url"),
+  externalStatus: text("external_status"),
+  externalCategory: text("external_category"),
+  externalUpdatedAt: text("external_updated_at"),
+}, (table) => [uniqueIndex("tickets_jira_key_unique").on(table.jiraConnectionId, table.externalKey)]);
+
+/** Contas do Jira Cloud de onde os chamados são trazidos. A chave de API nunca volta para a tela. */
+export const jiraConnections = sqliteTable("jira_connections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  baseUrl: text("base_url").notNull(),
+  email: text("email").notNull(),
+  apiToken: text("api_token").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  lastSyncAt: text("last_sync_at"),
+  cursorAt: text("cursor_at"),
+  lastError: text("last_error"),
+  lockUntil: text("lock_until"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/** Projetos de cada conta: quais trazer e de qual cliente são. */
+export const jiraProjects = sqliteTable("jira_projects", {
+  connectionId: integer("connection_id")
+    .notNull()
+    .references(() => jiraConnections.id, { onDelete: "cascade" }),
+  projectKey: text("project_key").notNull(),
+  projectName: text("project_name").notNull().default(""),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+}, (table) => [primaryKey({ columns: [table.connectionId, table.projectKey] })]);
 
 export const ticketEvents = sqliteTable("ticket_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -328,7 +363,9 @@ export const ticketEvents = sqliteTable("ticket_events", {
   actorId: integer("actor_id").references(() => members.id, { onDelete: "set null" }),
   actorName: text("actor_name").notNull().default("Equipe"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+  // Comentário trazido do Jira: id dele lá, para não trazer duas vezes.
+  externalId: text("external_id"),
+}, (table) => [uniqueIndex("ticket_events_external_unique").on(table.ticketId, table.externalId)]);
 
 export const notifications = sqliteTable("notifications", {
   id: integer("id").primaryKey({ autoIncrement: true }),
