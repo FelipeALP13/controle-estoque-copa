@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Download from "lucide-react/icons/download";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
+import { downloadXlsx } from "./xlsx-writer";
 import { isOpen, inPeriod, summarize, workload, type PanelTask } from "./leadership";
 import { isClosedProject, projectFarolLabels, projectFarois, type ProjectFarol } from "./projects";
 import { StatusIcon } from "./tasks-view";
@@ -74,8 +76,61 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
   const statusRows = taskStatuses.map((status) => ({ status, count: summary.byStatus.get(status) ?? 0 })).filter((row) => row.count > 0);
   const maxStatus = Math.max(...statusRows.map((row) => row.count), 1);
   const overdueList = filtered.filter((task) => isOpen(task.status) && task.dueDate && task.dueDate < today).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")).slice(0, 8);
-  const stuckList = filtered.filter((task) => task.status === "blocked" || task.status === "waiting").slice(0, 8);
+  const stuckAll = filtered.filter((task) => task.status === "blocked" || task.status === "waiting");
+  const stuckList = stuckAll.slice(0, 8);
   const hoursToReview = filtered.filter((task) => task.hoursFlag);
+  const visibleTeams = team ? teams.filter((entry) => entry.id === Number(team)) : teams;
+  const teamName = (id: number | null) => (id ? teams.find((entry) => entry.id === id)?.name : "") ?? "";
+  const ownerNames = (ids: number[]) => ids.map((id) => peopleById.get(id) ?? "Pessoa removida").join(", ");
+
+  // Exporta o painel com o mesmo time e período escolhidos; as listas saem completas (a tela mostra só as 8 primeiras).
+  function exportExcel() {
+    const periodLabel = { all: "Tudo", "30": "Últimos 30 dias", "90": "Últimos 90 dias", year: "Este ano" }[period];
+    const taskColumns = [{ header: "Código", width: 10 }, { header: "Título", width: 50 }, { header: "Status", width: 18 }, { header: "Prazo", type: "date" as const, width: 12 }, { header: "Responsáveis", width: 30 }, { header: "Time", width: 16 }];
+    const taskRow = (task: Task) => [taskCode(task.id), task.title, taskStatusLabels[task.status], task.dueDate, ownerNames(task.owners), teamName(task.teamId)];
+    downloadXlsx(`painel-lideranca-${today}.xlsx`, [
+      {
+        name: "Indicadores",
+        columns: [{ header: "Indicador", width: 26 }, { header: "Valor", type: "number", width: 12 }, { header: "Detalhe", width: 40 }],
+        rows: [
+          ["Demandas", summary.total, `${summary.open} em aberto`],
+          ["A fazer", summary.toDo, "A Fazer + Backlog"],
+          ["Fazendo", summary.doing, "Fazendo + Em Validação"],
+          ["Concluídas", summary.done, summary.completion === null ? "" : `${percent.format(summary.completion)} de conclusão`],
+          ["Paradas", summary.stalled, "Pausadas, bloqueadas ou aguardando"],
+          ["Prazo vencido", summary.overdue, "Em aberto e atrasadas"],
+          ["Colaboradores", summary.people, "com demandas no período"],
+          ["Horas a revisar", hoursToReview.length, "Horas importadas fora do normal"],
+          [],
+          ["Time (filtro)", null, team ? teamName(Number(team)) : "Todos os times"],
+          ["Período de abertura (filtro)", null, periodLabel],
+          ["Exportado em", null, new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })],
+        ],
+      },
+      {
+        name: "Por status",
+        columns: [{ header: "Status", width: 22 }, { header: "Quantidade", type: "number", width: 12 }, { header: "Participação", type: "percent", width: 13 }],
+        rows: statusRows.map((row) => [taskStatusLabels[row.status], row.count, row.count / Math.max(summary.total, 1)]),
+      },
+      {
+        name: "Por origem",
+        columns: [{ header: "Origem", width: 22 }, { header: "Total", type: "number", width: 10 }, { header: "Em aberto", type: "number", width: 11 }],
+        rows: origin.map((row) => [row.label, row.total, row.open]),
+      },
+      {
+        name: "Carga por pessoa",
+        columns: [{ header: "Time", width: 16 }, { header: "Colaborador", width: 24 }, { header: "Em aberto", type: "number", width: 11 }, { header: "Atrasadas", type: "number", width: 11 }, { header: "Concluídas", type: "number", width: 11 }, { header: "Total", type: "number", width: 9 }, { header: "Horas trabalhadas", type: "number", width: 17 }],
+        rows: visibleTeams.flatMap((entry) => workload(filtered.filter((task) => task.teamId === entry.id), today)
+          .map((row) => [entry.name, peopleById.get(row.memberId) ?? "Pessoa removida", row.open, row.overdue, row.done, row.total, Math.round(row.hours * 100) / 100])),
+      },
+      {
+        name: "Prazos vencidos",
+        columns: taskColumns,
+        rows: filtered.filter((task) => isOpen(task.status) && task.dueDate && task.dueDate < today).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")).map(taskRow),
+      },
+      { name: "Bloqueadas e aguardando", columns: taskColumns, rows: stuckAll.map(taskRow) },
+    ]);
+  }
 
   return <div className="leadership-page">
     <div className="report-filters">
@@ -83,6 +138,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
       <div className="leadership-filters">
         <select aria-label="Time" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todos os times</option>{teams.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
         <div className="report-period" role="group" aria-label="Período de abertura">{([["all", "Tudo"], ["30", "30 dias"], ["90", "90 dias"], ["year", "Este ano"]] as const).map(([value, label]) => <button key={value} className={period === value ? "active" : ""} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>)}</div>
+        <button className="secondary-button" onClick={exportExcel} title="Baixa o painel em Excel com o time e o período escolhidos"><Download size={15} /> Exportar Excel</button>
       </div>
     </div>
 
@@ -114,7 +170,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
     </div>
 
     <div className="report-columns equal">
-      {(team ? teams.filter((entry) => entry.id === Number(team)) : teams).map((entry) => {
+      {visibleTeams.map((entry) => {
         const rows = workload(filtered.filter((task) => task.teamId === entry.id), today);
         const maxOpen = Math.max(...rows.map((row) => row.open), 1);
         return <section key={entry.id} className="report-card">

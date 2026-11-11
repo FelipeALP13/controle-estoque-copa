@@ -19,6 +19,8 @@ import X from "lucide-react/icons/x";
 import { splitMentions } from "./notifications";
 import { describeTaskEvent, dueState, isClosedStatus, sortOrderBetween, taskCode, taskPriorities, taskPriorityLabels, taskStatuses, taskStatusLabels, type TaskEventKind, type TaskPriority, type TaskStatus } from "./tasks";
 import ImportModal from "./import-modal";
+import Download from "lucide-react/icons/download";
+import { downloadXlsx, type CellValue } from "./xlsx-writer";
 
 export type Task = {
   id: number;
@@ -284,6 +286,59 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
     await update(taskId, task.status === status ? { sortOrder } : { status, sortOrder });
   }
 
+  // Exporta exatamente o que a tela mostra (mesmos filtros, busca e ordem da lista).
+  function exportExcel() {
+    if (!data) return;
+    const names = (ids: number[]) => ids.map((id) => lookups.membersById.get(id)?.name ?? `#${id}`).join(", ");
+    const projectsById = new Map(lookups.projects.map((project) => [project.id, project.name]));
+    const ordered = taskStatuses.flatMap((status) => byStatus[status]);
+    const rows: CellValue[][] = ordered.map((task) => {
+      const closed = isClosedStatus(task.status);
+      const due = task.dueDate && !closed ? dueState(task.dueDate, today) : null;
+      return [
+        taskCode(task.id), task.codes.join(", "), task.title,
+        task.clientId ? lookups.clientsById.get(task.clientId)?.name ?? "" : "", task.category,
+        taskStatusLabels[task.status], taskPriorityLabels[task.priority],
+        names(task.owners), names(task.support),
+        task.teamId ? teamsById.get(task.teamId)?.name ?? "" : "", task.projectId ? projectsById.get(task.projectId) ?? "" : "",
+        task.openedOn, task.startDate, task.dueDate, task.completedOn,
+        due === "overdue" ? "Vencida" : due === "today" ? "Vence hoje" : due === "soon" ? "Vence em breve" : "",
+        task.estimatedHours, task.workedHours, task.hoursFlag ? "Sim" : "",
+        task.origin, task.notes, task.description, task.commentCount, task.createdByName,
+      ];
+    });
+    const filterRows: CellValue[][] = [
+      ["Exportado em", new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })],
+      ["Demandas no arquivo", `${visible.length} de ${data.tasks.length}`],
+      ["Quais", filters.scope === "mine" ? "Minhas" : filters.scope === "team" ? "Do meu time" : "Todas"],
+      ["Busca", filters.search.trim()],
+      ["Pessoa", filters.person === "none" ? "Sem responsável" : filters.person ? lookups.membersById.get(Number(filters.person))?.name ?? "" : ""],
+      ["Cliente", filters.client ? lookups.clientsById.get(Number(filters.client))?.name ?? "" : ""],
+      ["Categoria", filters.category],
+      ["Time", filters.team === "none" ? "Sem time" : filters.team ? teamsById.get(Number(filters.team))?.name ?? "" : ""],
+      ["Prioridade", filters.priority ? taskPriorityLabels[Number(filters.priority) as TaskPriority] : ""],
+    ].map(([label, value]) => [label, value || "—"]);
+    downloadXlsx(`demandas-${today}.xlsx`, [
+      {
+        name: "Demandas",
+        columns: [
+          { header: "Código", width: 10 }, { header: "Códigos antigos", width: 16 }, { header: "Título", width: 50 },
+          { header: "Cliente / projeto", width: 22 }, { header: "Categoria", width: 18 },
+          { header: "Status", width: 18 }, { header: "Prioridade", width: 14 },
+          { header: "Responsáveis", width: 26 }, { header: "Resp. Suporte", width: 22 },
+          { header: "Time", width: 16 }, { header: "Projeto grande", width: 22 },
+          { header: "Abertura", type: "date", width: 12 }, { header: "Início", type: "date", width: 12 }, { header: "Prazo", type: "date", width: 12 }, { header: "Conclusão", type: "date", width: 12 },
+          { header: "Situação do prazo", width: 16 },
+          { header: "Horas estimadas", type: "number", width: 15 }, { header: "Horas trabalhadas", type: "number", width: 17 }, { header: "Horas a revisar", width: 14 },
+          { header: "Origem", width: 18 }, { header: "Observações", width: 40 }, { header: "Descrição", width: 50 },
+          { header: "Comentários", type: "number", width: 12 }, { header: "Criada por", width: 18 },
+        ],
+        rows,
+      },
+      { name: "Filtros", columns: [{ header: "Filtro", width: 22 }, { header: "Valor", width: 40 }], rows: filterRows },
+    ]);
+  }
+
   const openTask = data?.tasks.find((task) => task.id === openTaskId) ?? null;
   const myOpen = data ? data.tasks.filter((task) => involves(task, data.me.id) && !isClosedStatus(task.status)).length : 0;
   const activeFilters = [filters.person, filters.priority, filters.team, filters.client, filters.category].filter(Boolean).length;
@@ -300,6 +355,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
         <button className={view === "list" ? "active" : ""} aria-pressed={view === "list"} onClick={() => changeView("list")} title="Lista"><LayoutList size={15} /><span>Lista</span></button>
         <button className={view === "board" ? "active" : ""} aria-pressed={view === "board"} onClick={() => changeView("board")} title="Quadro"><Columns3 size={15} /><span>Quadro</span></button>
       </div>
+      {data && data.tasks.length > 0 && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel as demandas que estão na tela, com os filtros e a busca aplicados"><Download size={15} /> Exportar Excel</button>}
       {data?.me.isAdmin && <button className="secondary-button" onClick={() => setManagingClients(true)} title="Lista de clientes/projetos"><Building2 size={15} /> Clientes</button>}
       {data?.me.isAdmin && <button className="secondary-button" onClick={() => setImporting(true)}><FileSpreadsheet size={15} /> Importar planilhas</button>}
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating("todo")} title="Atalho: tecla C"><Plus size={16} /> Nova demanda</button>}
