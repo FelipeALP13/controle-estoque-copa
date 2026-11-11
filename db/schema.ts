@@ -211,6 +211,35 @@ export const taskPeople = sqliteTable("task_people", {
   role: text("role", { enum: ["owner", "support"] }).notNull().default("owner"),
 }, (table) => [primaryKey({ columns: [table.taskId, table.memberId, table.role] })]);
 
+/** Passos da demanda (checklist), marcados um a um. */
+export const taskChecklistItems = sqliteTable("task_checklist_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  done: integer("done", { mode: "boolean" }).notNull().default(false),
+  doneByName: text("done_by_name"),
+  doneAt: text("done_at"),
+  sortOrder: real("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("task_checklist_task_idx").on(table.taskId)]);
+
+/** Modelos de demanda: campos já preenchidos e os passos do checklist. */
+export const taskTemplates = sqliteTable("task_templates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  title: text("title").notNull().default(""),
+  description: text("description").notNull().default(""),
+  category: text("category").notNull().default(""),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  priority: integer("priority").notNull().default(0),
+  items: text("items").notNull().default("[]"),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 /** Códigos das planilhas antigas (AS-0019, JG-0001...), para busca e para não importar duas vezes. */
 export const taskLegacyCodes = sqliteTable("task_legacy_codes", {
   code: text("code").primaryKey(),

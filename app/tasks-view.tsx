@@ -22,6 +22,9 @@ import ImportModal from "./import-modal";
 import Download from "lucide-react/icons/download";
 import { downloadXlsx, type CellValue } from "./xlsx-writer";
 import CalendarOff from "lucide-react/icons/calendar-off";
+import ListChecks from "lucide-react/icons/list-checks";
+import Pencil from "lucide-react/icons/pencil";
+import { checklistProgress, type ChecklistItem } from "./checklists";
 import Clock from "lucide-react/icons/clock";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
@@ -56,6 +59,7 @@ export type Task = {
   owners: number[];
   support: number[];
   codes: string[];
+  checklist: { done: number; total: number } | null;
 };
 
 type TaskMember = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
@@ -176,6 +180,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
   const [creating, setCreating] = useState<TaskStatus | null>(null);
   const [importing, setImporting] = useState(false);
   const [managingClients, setManagingClients] = useState(false);
+  const [managingTemplates, setManagingTemplates] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
   const busy = useRef(false);
   const retriedRequest = useRef<number | null>(null);
@@ -362,6 +367,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
         <button className={view === "board" ? "active" : ""} aria-pressed={view === "board"} onClick={() => changeView("board")} title="Quadro"><Columns3 size={15} /><span>Quadro</span></button>
       </div>
       {data && data.tasks.length > 0 && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel as demandas que estão na tela, com os filtros e a busca aplicados"><Download size={15} /> Exportar Excel</button>}
+      {data?.me.isAdmin && <button className="secondary-button" onClick={() => setManagingTemplates(true)} title="Modelos de demanda com checklist"><ListChecks size={15} /> Modelos</button>}
       {data?.me.isAdmin && <button className="secondary-button" onClick={() => setManagingClients(true)} title="Lista de clientes/projetos"><Building2 size={15} /> Clientes</button>}
       {data?.me.isAdmin && <button className="secondary-button" onClick={() => setImporting(true)}><FileSpreadsheet size={15} /> Importar planilhas</button>}
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating("todo")} title="Atalho: tecla C"><Plus size={16} /> Nova demanda</button>}
@@ -422,6 +428,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
                 <span className="task-row-meta">
                   {task.hoursFlag && <span className="hours-flag" title="Horas importadas fora do normal: revise"><TriangleAlert size={12} /></span>}
                   {task.teamId && teamsById.get(task.teamId) && <span className="task-team"><TeamChip team={teamsById.get(task.teamId)!} /></span>}
+                  {task.checklist && task.checklist.total > 0 && <span className={`task-checklist ${task.checklist.done === task.checklist.total ? "complete" : ""}`} title={`Checklist: ${task.checklist.done} de ${task.checklist.total} passos`}><ListChecks size={12} />{task.checklist.done}/{task.checklist.total}</span>}
                   {task.commentCount > 0 && <span className="task-comments" title={`${task.commentCount} comentários`}><MessageSquare size={12} />{task.commentCount}</span>}
                   {task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}
                   <AvatarStack ids={task.owners} membersById={lookups.membersById} />
@@ -438,6 +445,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled }: 
     {creating && data && <NewTaskModal initialStatus={creating} lookups={lookups} meId={data.me.id} defaultTeamId={filters.team && filters.team !== "none" ? Number(filters.team) : data.me.teamIds.length === 1 ? data.me.teamIds[0] : null} defaultClientId={filters.client ? Number(filters.client) : null} onClose={() => setCreating(null)} onCreated={async (task) => { setCreating(null); await load(); setOpenTaskId(task.id); }} />}
     {openTask && data && <TaskDrawer key={openTask.id} task={openTask} lookups={lookups} me={data.me} today={today} onClose={() => setOpenTaskId(null)} onUpdate={(changes) => update(openTask.id, changes)} onDeleted={async () => { setOpenTaskId(null); await load(); }} onCommented={load} />}
     {importing && <ImportModal onClose={() => setImporting(false)} onImported={load} />}
+    {managingTemplates && <TemplatesModal lookups={lookups} onClose={() => setManagingTemplates(false)} />}
     {managingClients && data && <ClientsModal clients={data.clients} tasks={data.tasks} onClose={() => setManagingClients(false)} onSaved={load} />}
   </div>;
 }
@@ -564,13 +572,42 @@ function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defaultClie
   const [fields, setFields] = useState<Fields>({ status: initialStatus, priority: 0, owners: lookups.members.some((member) => member.id === meId) ? [meId] : [], support: [], teamId: defaultTeamId, clientId: defaultClientId, projectId: null, category: "", startDate: null, dueDate: null, completedOn: null, estimatedHours: null, origin: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templateId, setTemplateId] = useState("");
+  const [steps, setSteps] = useState("");
+  const [showSteps, setShowSteps] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/templates", { cache: "no-store" }).then(async (response) => {
+      if (response.ok && !cancelled) setTemplates(((await response.json()) as { templates: Template[] }).templates);
+    }).catch(() => { /* modelos são opcionais */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Escolher um modelo preenche o que ainda está vazio e traz os passos.
+  function applyTemplate(id: string) {
+    setTemplateId(id);
+    const template = templates.find((entry) => String(entry.id) === id);
+    if (!template) return;
+    if (!title.trim() && template.title) setTitle(template.title);
+    if (!description.trim() && template.description) setDescription(template.description);
+    setFields((current) => ({
+      ...current,
+      category: current.category || template.category,
+      teamId: current.teamId ?? template.teamId,
+      priority: current.priority || (template.priority as TaskPriority),
+    }));
+    setSteps(template.items.join("\n"));
+    setShowSteps(true);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const result = await postTask({ action: "createTask", title, description, ...fields });
+      const result = await postTask({ action: "createTask", title, description, ...fields, checklist: steps });
       if (result.task) onCreated(result.task);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível criar a demanda.");
@@ -583,8 +620,11 @@ function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defaultClie
     <form className="modal task-modal" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) void submit(event); }}>
       <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Nova demanda</h2><p>Ctrl + Enter cria a demanda.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
       <div className="task-modal-body">
+        {templates.length > 0 && <label className="template-pick"><ListChecks size={14} /><select value={templateId} onChange={(event) => applyTemplate(event.target.value)} aria-label="Usar um modelo"><option value="">Começar do zero</option>{templates.map((template) => <option key={template.id} value={template.id}>Modelo: {template.name} ({template.items.length} passos)</option>)}</select></label>}
         <input className="task-title-input" autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Demanda / atividade" />
         <textarea className="task-description-input" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição (opcional)" rows={3} />
+        {showSteps ? <label className="task-notes"><span>Checklist (um passo por linha)</span><textarea rows={Math.min(10, Math.max(3, steps.split("\n").length + 1))} value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={"Ex.:\nReunião com o cliente\nConfigurar ambiente\nTreinar a equipe"} /></label>
+          : <button type="button" className="link-button template-add-steps" onClick={() => setShowSteps(true)}><ListChecks size={13} /> Adicionar checklist</button>}
         <PropertyFields value={fields} onChange={(changes) => setFields((current) => ({ ...current, ...changes }))} lookups={lookups} compact />
       </div>
       {error && <p className="modal-error">{error}</p>}
@@ -598,14 +638,15 @@ function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, on
   const [description, setDescription] = useState(task.description);
   const [notes, setNotes] = useState(task.notes);
   const [events, setEvents] = useState<TaskEvent[] | null>(null);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
   const loadEvents = useCallback(async () => {
     const response = await fetch(`/api/tasks?taskId=${task.id}`, { cache: "no-store" });
-    const data = await response.json() as { events?: TaskEvent[]; error?: string };
-    if (response.ok && data.events) setEvents(data.events); else setError(data.error || "Não foi possível carregar a atividade.");
+    const data = await response.json() as { events?: TaskEvent[]; checklist?: ChecklistItem[]; error?: string };
+    if (response.ok && data.events) { setEvents(data.events); setChecklist(data.checklist ?? []); } else setError(data.error || "Não foi possível carregar a atividade.");
   }, [task.id]);
 
   // Recarrega a atividade quando a demanda muda (status, responsáveis...).
@@ -686,6 +727,8 @@ function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, on
 
           {error && <p className="modal-error task-drawer-error">{error}</p>}
 
+          <ChecklistPanel taskId={task.id} items={checklist} canEdit={me.canEdit} onChanged={(items) => { setChecklist(items); void onCommented(); }} />
+
           <TimeLog task={task} me={me} lookups={lookups} today={today} onSaveBase={(baseHours) => save({ baseHours })} onChanged={onCommented} />
 
           <h3 className="task-activity-title">Atividade</h3>
@@ -712,6 +755,133 @@ function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, on
       </div>
     </aside>
   </div>;
+}
+
+type Template = { id: number; name: string; title: string; description: string; category: string; teamId: number | null; priority: number; items: string[] };
+
+/** Checklist da demanda: marcar, acrescentar, reordenar e apagar passos. */
+function ChecklistPanel({ taskId, items, canEdit, onChanged }: { taskId: number; items: ChecklistItem[]; canEdit: boolean; onChanged: (items: ChecklistItem[]) => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const progress = checklistProgress(items);
+
+  async function run(payload: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await postTask(payload) as { checklist?: ChecklistItem[] };
+      if (result.checklist) onChanged(result.checklist);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function add(event: React.FormEvent) {
+    event.preventDefault();
+    if (!text.trim()) return;
+    if (await run({ action: "addChecklistItem", taskId, text })) setText("");
+  }
+
+  if (!items.length && !canEdit) return null;
+  return <section className="checklist">
+    <header><h3><ListChecks size={14} /> Checklist</h3>{progress.total > 0 && <span className={progress.complete ? "complete" : ""}>{progress.done} de {progress.total}</span>}</header>
+    {progress.total > 0 && <span className="checklist-bar" aria-hidden="true"><i style={{ width: `${progress.percent}%` }} className={progress.complete ? "complete" : ""} /></span>}
+    <ul>{items.map((item, index) => <li key={item.id} className={item.done ? "done" : ""}>
+      <label><input type="checkbox" checked={item.done} disabled={!canEdit || busy} onChange={(event) => void run({ action: "updateChecklistItem", itemId: item.id, done: event.target.checked })} /><span>{item.text}</span></label>
+      {item.done && item.doneByName && <small title={item.doneAt ? new Date(item.doneAt).toLocaleString("pt-BR") : undefined}>{item.doneByName.split(" ")[0]}</small>}
+      {canEdit && <span className="checklist-tools">
+        <button type="button" disabled={busy || index === 0} onClick={() => void run({ action: "updateChecklistItem", itemId: item.id, move: "up" })} aria-label="Subir passo" title="Subir">↑</button>
+        <button type="button" disabled={busy || index === items.length - 1} onClick={() => void run({ action: "updateChecklistItem", itemId: item.id, move: "down" })} aria-label="Descer passo" title="Descer">↓</button>
+        <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Apagar o passo “${item.text}”?`)) void run({ action: "deleteChecklistItem", itemId: item.id }); }} aria-label="Apagar passo" title="Apagar"><Trash2 size={12} /></button>
+      </span>}
+    </li>)}</ul>
+    {canEdit && <form className="checklist-add" onSubmit={add}><input value={text} maxLength={200} onChange={(event) => setText(event.target.value)} placeholder="Novo passo e Enter" aria-label="Novo passo" /><button className="secondary-button" disabled={busy || !text.trim()}><Plus size={13} /> Adicionar</button></form>}
+    {error && <p className="modal-error">{error}</p>}
+  </section>;
+}
+
+/** Modelos de demanda (administrador): nome, campos padrão e passos do checklist. */
+function TemplatesModal({ lookups, onClose }: { lookups: Lookups; onClose: () => void }) {
+  const [templates, setTemplates] = useState<Template[] | null>(null);
+  const [editing, setEditing] = useState<Template | "new" | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch("/api/templates", { cache: "no-store" });
+      const data = await response.json() as { templates?: Template[]; error?: string };
+      if (!response.ok || !data.templates) throw new Error(data.error || "Não foi possível carregar os modelos.");
+      setTemplates(data.templates);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível carregar os modelos.");
+    }
+  }, []);
+  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
+
+  async function post(payload: Record<string, unknown>) {
+    const response = await fetch("/api/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await response.json() as { error?: string; created?: number };
+    if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
+    return data;
+  }
+
+  async function createExamples() {
+    setError(""); setNotice("");
+    try { const result = await post({ action: "createExamples" }); setNotice(result.created ? `${result.created} modelo${result.created === 1 ? "" : "s"} de exemplo criado${result.created === 1 ? "" : "s"}. Ajuste à vontade.` : "Os modelos de exemplo já existem."); await load(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível criar."); }
+  }
+
+  return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal templates-modal">
+    <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Modelos de demanda</h2><p>Um modelo já traz categoria, time, prioridade e os passos do checklist. Aparece em “Nova demanda”.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="templates-body">
+      {error && <p className="modal-error">{error}</p>}
+      {notice && !error && <p className="jira-notice">{notice}</p>}
+      {!templates ? <div className="loading-list"><span /></div> : templates.length ? <ul className="templates-list">{templates.map((template) => <li key={template.id}>
+        <div><strong>{template.name}</strong><small>{template.items.length} passos{template.category ? ` · ${template.category}` : ""}{template.teamId ? ` · ${lookups.teams.find((team) => team.id === template.teamId)?.name ?? ""}` : ""}</small></div>
+        <button className="person-edit" onClick={() => setEditing(template)} aria-label={`Editar ${template.name}`} title="Editar"><Pencil size={14} /></button>
+        <button className="person-edit" onClick={async () => { if (!window.confirm(`Excluir o modelo “${template.name}”? As demandas já criadas não mudam.`)) return; try { await post({ action: "deleteTemplate", templateId: template.id }); await load(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível excluir."); } }} aria-label={`Excluir ${template.name}`} title="Excluir"><Trash2 size={14} /></button>
+      </li>)}</ul> : <p className="muted">Nenhum modelo ainda. Comece pelos exemplos (implantação de cliente, publicação de versão e novo colaborador) e ajuste ao jeito de vocês.</p>}
+      <div className="templates-actions"><button className="primary-button" onClick={() => setEditing("new")}><Plus size={15} /> Novo modelo</button><button className="secondary-button" onClick={createExamples}><ListChecks size={15} /> Criar modelos de exemplo</button></div>
+    </div>
+    {editing && <TemplateForm value={editing === "new" ? null : editing} lookups={lookups} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} save={post} />}
+  </div></div>;
+}
+
+function TemplateForm({ value, lookups, onClose, onSaved, save }: { value: Template | null; lookups: Lookups; onClose: () => void; onSaved: () => void; save: (payload: Record<string, unknown>) => Promise<unknown> }) {
+  const [form, setForm] = useState({ name: value?.name ?? "", title: value?.title ?? "", description: value?.description ?? "", category: value?.category ?? "", teamId: String(value?.teamId ?? ""), priority: String(value?.priority ?? 0), items: (value?.items ?? []).join("\n") });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await save({ action: "saveTemplate", templateId: value?.id, ...form, teamId: form.teamId ? Number(form.teamId) : null, priority: Number(form.priority) });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar.");
+      setSaving(false);
+    }
+  }
+  return <div className="modal-layer nested"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit}>
+    <div className="modal-head"><div><p className="eyebrow">MODELO</p><h2>{value ? "Editar modelo" : "Novo modelo"}</h2><p>Mudar o modelo não altera as demandas já criadas com ele.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="form-grid">
+      <label className="full"><span>Nome do modelo</span><input autoFocus required maxLength={60} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Implantação de cliente" /></label>
+      <label className="full"><span>Título sugerido (opcional)</span><input maxLength={160} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ex.: Implantação · " /></label>
+      <label><span>Categoria</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option value="">Sem categoria</option>{lookups.categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
+      <label><span>Time</span><select value={form.teamId} onChange={(event) => setForm({ ...form, teamId: event.target.value })}><option value="">Sem time</option>{lookups.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+      <label><span>Prioridade</span><select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>{taskPriorities.map((priority) => <option key={priority} value={priority}>{taskPriorityLabels[priority]}</option>)}</select></label>
+      <label className="full"><span>Descrição (opcional)</span><textarea rows={2} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+      <label className="full"><span>Passos do checklist (um por linha)</span><textarea required rows={8} value={form.items} onChange={(event) => setForm({ ...form, items: event.target.value })} placeholder={"Reunião com o cliente\nReceber acessos\nConfigurar ambiente"} /></label>
+    </div>
+    {error && <p className="modal-error">{error}</p>}
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !form.name.trim() || !form.items.trim()}>{saving ? "Salvando..." : "Salvar modelo"}</button></div>
+  </form></div>;
 }
 
 type LoggedEntry = TimeEntry & { canDelete: boolean };

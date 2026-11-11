@@ -148,6 +148,13 @@
       "when": 1794407372254,
       "tag": "0020_jira",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1794421512005,
+      "tag": "0021_checklists",
+      "breakpoints": true
     }
   ]
 }

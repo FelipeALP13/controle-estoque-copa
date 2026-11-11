@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, min, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { clients, members, notifications, projects, taskEvents, taskLegacyCodes, taskPeople, tasks, teamMembers, teams, timeEntries } from "../../../db/schema";
+import { clients, members, notifications, projects, taskChecklistItems, taskEvents, taskLegacyCodes, taskPeople, tasks, taskTemplates, teamMembers, teams, timeEntries } from "../../../db/schema";
+import { cleanItem, MAX_CHECKLIST_ITEMS, parseItems } from "../../checklists";
 import { totalHours } from "../../time-entries";
 import { commentRecipients, findMentions, snippet, type NotificationKind } from "../../notifications";
 import { getSessionMember, type SessionMember } from "../../auth-session";
@@ -108,6 +109,23 @@ async function followers(db: Db, taskId: number, createdById: number | null) {
   return [...new Set([...rows.map((row) => row.memberId), ...(createdById ? [createdById] : [])])];
 }
 
+/** Passos da demanda; vazio se a migração dos checklists ainda não foi aplicada. */
+async function loadChecklist(db: Db, taskId: number) {
+  try {
+    return await db.select({ id: taskChecklistItems.id, text: taskChecklistItems.text, done: taskChecklistItems.done, doneByName: taskChecklistItems.doneByName, doneAt: taskChecklistItems.doneAt, sortOrder: taskChecklistItems.sortOrder })
+      .from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId)).orderBy(asc(taskChecklistItems.sortOrder), asc(taskChecklistItems.id));
+  } catch (error) {
+    console.error("checklist load failed", error);
+    return [];
+  }
+}
+
+/** Passo do checklist + a demanda dele (para conferir que existe). */
+async function checklistItem(db: Db, itemId: number) {
+  const [item] = await db.select().from(taskChecklistItems).where(eq(taskChecklistItems.id, itemId)).limit(1);
+  return item ?? null;
+}
+
 /** Times e vínculos; vazio se a migração de times ainda não foi aplicada. */
 async function loadTeams(db: Db, memberId: number) {
   try {
@@ -131,9 +149,13 @@ export async function GET(request: Request) {
 
     const taskId = Number(new URL(request.url).searchParams.get("taskId"));
     if (taskId) {
-      const events = await db.select().from(taskEvents).where(eq(taskEvents.taskId, taskId)).orderBy(asc(taskEvents.createdAt), asc(taskEvents.id));
+      const [events, checklist] = await Promise.all([
+        db.select().from(taskEvents).where(eq(taskEvents.taskId, taskId)).orderBy(asc(taskEvents.createdAt), asc(taskEvents.id)),
+        loadChecklist(db, taskId),
+      ]);
       return json({
         events: events.map((event) => ({ id: event.id, kind: event.kind, body: event.body, actorId: event.actorId, actorName: event.actorName, createdAt: event.createdAt, canDelete: event.kind === "comment" && (event.actorId === member.id || isAdmin(member)) })),
+        checklist,
       });
     }
 
@@ -183,8 +205,16 @@ export async function GET(request: Request) {
     for (const row of codeRows) codes.set(row.taskId, [...(codes.get(row.taskId) ?? []), row.code]);
 
     const teamData = await loadTeams(db, member.id);
+    // Progresso do checklist de cada demanda (vazio se a migração ainda não foi aplicada).
+    const progress = new Map<number, { done: number; total: number }>();
+    try {
+      const rows = await db.select({ taskId: taskChecklistItems.taskId, total: sql<number>`count(*)`, done: sql<number>`sum(case when ${taskChecklistItems.done} then 1 else 0 end)` }).from(taskChecklistItems).groupBy(taskChecklistItems.taskId);
+      for (const row of rows) progress.set(row.taskId, { done: Number(row.done), total: Number(row.total) });
+    } catch (error) {
+      console.error("checklist progress failed", error);
+    }
     return json({
-      tasks: taskRows.map((task) => ({ ...task, owners: owners.get(task.id) ?? [], support: support.get(task.id) ?? [], codes: (codes.get(task.id) ?? []).sort() })),
+      tasks: taskRows.map((task) => ({ ...task, owners: owners.get(task.id) ?? [], support: support.get(task.id) ?? [], codes: (codes.get(task.id) ?? []).sort(), checklist: progress.get(task.id) ?? null })),
       members: memberRows,
       teams: teamData.teams,
       clients: clientRows,
@@ -272,6 +302,21 @@ export async function POST(request: Request) {
       }).returning();
       await setPeople(db, task.id, ownersList.map((person) => person.id), supportList.map((person) => person.id));
       await db.insert(taskEvents).values({ taskId: task.id, kind: "created", ...actor, createdAt: now });
+      // Checklist: passos digitados na criação ou os do modelo escolhido.
+      let steps = parseItems(body.checklist);
+      if (!steps.length && Number(body.templateId)) {
+        try {
+          const [template] = await db.select({ items: taskTemplates.items }).from(taskTemplates).where(eq(taskTemplates.id, Number(body.templateId))).limit(1);
+          steps = parseItems(template?.items ?? "[]");
+        } catch (error) {
+          console.error("template load failed", error);
+        }
+      }
+      if (steps.length) {
+        for (let index = 0; index < steps.length; index += 20) {
+          await db.insert(taskChecklistItems).values(steps.slice(index, index + 20).map((text, offset) => ({ taskId: task.id, text, sortOrder: index + offset + 1, createdAt: now })));
+        }
+      }
       await notify(db, member.id, member.name, now, [...ownersList, ...supportList].map((person) => ({ memberId: person.id, kind: "task_assigned" as const, taskId: task.id, body: "" })));
       return json({ task }, 201);
     }
@@ -389,6 +434,57 @@ export async function POST(request: Request) {
       }
       await notify(db, member.id, member.name, now, alerts);
       return json({ task, closed: isClosedStatus(task.status) });
+    }
+
+    if (action === "addChecklistItem") {
+      const taskId = Number(body.taskId);
+      const text = cleanItem(body.text);
+      if (!text) return json({ error: "Escreva o passo." }, 400);
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!task) return json({ error: "Demanda não encontrada." }, 404);
+      const [stats] = await db.select({ count: sql<number>`count(*)`, last: sql<number>`coalesce(max(${taskChecklistItems.sortOrder}), 0)` }).from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
+      if (Number(stats?.count ?? 0) >= MAX_CHECKLIST_ITEMS) return json({ error: `O checklist pode ter até ${MAX_CHECKLIST_ITEMS} passos.` }, 400);
+      await db.insert(taskChecklistItems).values({ taskId, text, sortOrder: Number(stats?.last ?? 0) + 1, createdAt: now });
+      await db.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, taskId));
+      return json({ checklist: await loadChecklist(db, taskId) }, 201);
+    }
+
+    if (action === "updateChecklistItem") {
+      const item = await checklistItem(db, Number(body.itemId));
+      if (!item) return json({ error: "Passo não encontrado." }, 404);
+      const changes: Partial<typeof taskChecklistItems.$inferInsert> = {};
+      if ("done" in body) {
+        const done = body.done === true;
+        changes.done = done;
+        changes.doneByName = done ? member.name : null;
+        changes.doneAt = done ? now : null;
+      }
+      if ("text" in body) {
+        const text = cleanItem(body.text);
+        if (!text) return json({ error: "O passo não pode ficar vazio." }, 400);
+        changes.text = text;
+      }
+      if (Object.keys(changes).length) await db.update(taskChecklistItems).set(changes).where(eq(taskChecklistItems.id, item.id));
+      if (body.move === "up" || body.move === "down") {
+        // Troca com o vizinho e renumera a lista toda (1, 2, 3...) numa só operação.
+        const order = (await loadChecklist(db, item.taskId)).map((entry) => entry.id);
+        const index = order.indexOf(item.id);
+        const target = body.move === "up" ? index - 1 : index + 1;
+        if (index >= 0 && target >= 0 && target < order.length) {
+          [order[index], order[target]] = [order[target], order[index]];
+          await db.batch(order.map((id, position) => db.update(taskChecklistItems).set({ sortOrder: position + 1 }).where(eq(taskChecklistItems.id, id))) as unknown as Parameters<Db["batch"]>[0]);
+        }
+      }
+      await db.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, item.taskId));
+      return json({ checklist: await loadChecklist(db, item.taskId) });
+    }
+
+    if (action === "deleteChecklistItem") {
+      const item = await checklistItem(db, Number(body.itemId));
+      if (!item) return json({ error: "Passo não encontrado." }, 404);
+      await db.delete(taskChecklistItems).where(eq(taskChecklistItems.id, item.id));
+      await db.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, item.taskId));
+      return json({ checklist: await loadChecklist(db, item.taskId) });
     }
 
     if (action === "addComment") {
