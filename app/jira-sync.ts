@@ -4,6 +4,8 @@ import type { getDb } from "../db";
 import { jiraConnections, jiraProjects, clients, members, notifications, teamMembers, teams, ticketEvents, tickets } from "../db/schema";
 import { basicAuth, buildJql, JIRA_FIELDS, jiraErrorMessage, MAX_PAGES_PER_SYNC, minutesSince, needsTransition, nextStatus, PAGE_SIZE, parseIssue, pickTransition, SYNC_INTERVAL_MS, textToAdf, type JiraIssueData, type JiraTransition } from "./jira";
 import { ticketStatusLabels, type TicketStatus } from "./tickets";
+import { isSealed } from "./secret-box";
+import { openSecret, sealSecret } from "./secret-key";
 
 type Db = ReturnType<typeof getDb>;
 type Connection = typeof jiraConnections.$inferSelect;
@@ -15,11 +17,13 @@ const MAX_ISSUES_PER_SYNC = 40;
 
 /** Chamada à API do Jira com a chave da conta. */
 export async function jiraFetch(connection: Pick<Connection, "baseUrl" | "email" | "apiToken">, path: string, init: RequestInit = {}) {
+  // A chave fica criptografada no banco; só é aberta aqui, na hora da chamada.
+  const token = await openSecret(connection.apiToken);
   let response: Response;
   try {
     response = await fetch(`${connection.baseUrl}${path}`, {
       ...init,
-      headers: { Authorization: basicAuth(connection.email, connection.apiToken), Accept: "application/json", "Content-Type": "application/json", ...(init.headers ?? {}) },
+      headers: { Authorization: basicAuth(connection.email, token), Accept: "application/json", "Content-Type": "application/json", ...(init.headers ?? {}) },
       signal: AbortSignal.timeout(20000),
     });
   } catch {
@@ -210,6 +214,18 @@ export async function syncConnection(db: Db, connection: Connection, now = new D
 /** Sincroniza as contas ativas que não buscaram nos últimos 2 minutos (ou todas, se `force`). */
 export async function syncDue(db: Db, force = false, now = new Date()) {
   const rows = await db.select().from(jiraConnections).where(eq(jiraConnections.active, true));
+  // Contas cadastradas antes da criptografia: grava a chave criptografada (uma vez só).
+  for (const row of rows) {
+    if (!isSealed(row.apiToken)) {
+      try {
+        const sealed = await sealSecret(row.apiToken);
+        await db.update(jiraConnections).set({ apiToken: sealed }).where(eq(jiraConnections.id, row.id));
+        row.apiToken = sealed;
+      } catch (error) {
+        console.error("jira token encryption failed", error);
+      }
+    }
+  }
   const due = rows.filter((row) => force || !row.lastSyncAt || now.getTime() - Date.parse(row.lastSyncAt) >= SYNC_INTERVAL_MS);
   const results: SyncResult[] = [];
   for (const connection of due) results.push(await syncConnection(db, connection, now));

@@ -1,4 +1,4 @@
-export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status";
+export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late";
 
 type Person = { id: number; name: string };
 
@@ -72,6 +72,7 @@ export function notificationText(kind: NotificationKind, actorName: string, body
   if (kind === "ticket_new") return `${actorName} abriu um chamado para o seu time`;
   if (kind === "task_mention" || kind === "ticket_mention") return `${actorName} mencionou você`;
   if (kind === "task_status" || kind === "ticket_status") return `${actorName} mudou o status para ${body}`;
+  if (kind === "ticket_late") return `Chamado fora do prazo: ${body}`;
   return `${actorName} comentou`;
 }
 

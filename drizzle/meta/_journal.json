@@ -155,6 +155,13 @@
       "when": 1794421512005,
       "tag": "0021_checklists",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1794488195278,
+      "tag": "0022_automation",
+      "breakpoints": true
     }
   ]
 }

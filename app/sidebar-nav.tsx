@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import ChevronDown from "lucide-react/icons/chevron-down";
 import { TICKETS_CHANGED } from "./use-jira-sync";
 
-export type NavBadge = { count: number; tone?: "info" | "alert"; title: string };
+export type NavBadge = { count: number; tone?: "info" | "danger"; title: string };
 export type NavItem = { key: string; label: string; icon: ReactNode; onClick: () => void; badge?: NavBadge | null; children?: NavItem[]; open?: boolean };
 export type NavSection = { label?: string; items: NavItem[] };
 
@@ -52,7 +52,7 @@ function Badge({ badge }: { badge: NavBadge }) {
  * Menu lateral em seções, com um destaque que desliza até o item ativo.
  * O item ativo é marcado por `activeKey` (ou pelo item pai, quando o submenu está fechado).
  */
-export default function SidebarNav({ sections, activeKey }: { sections: NavSection[]; activeKey: string }) {
+export default function SidebarNav({ sections, activeKey, expanded = true }: { sections: NavSection[]; activeKey: string; expanded?: boolean }) {
   const navRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null);
   let index = 0;
@@ -68,6 +68,15 @@ export default function SidebarNav({ sections, activeKey }: { sections: NavSecti
   }, [activeKey]);
 
   useLayoutEffect(() => { place(); });
+  // Em telas baixas a lista rola: ao trocar de tela, traz o item ativo para a parte visível.
+  useEffect(() => {
+    const nav = navRef.current;
+    const target = nav?.querySelector<HTMLElement>(`button[data-parent-of~="${activeKey}"]`) ?? nav?.querySelector<HTMLElement>(`button[data-key="${activeKey}"]`);
+    if (!nav || !target) return;
+    if (target.offsetTop < nav.scrollTop || target.offsetTop + target.offsetHeight > nav.scrollTop + nav.clientHeight) {
+      nav.scrollTop = Math.max(0, target.offsetTop - nav.clientHeight / 2 + target.offsetHeight / 2);
+    }
+  }, [activeKey]);
   useEffect(() => {
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
@@ -78,7 +87,8 @@ export default function SidebarNav({ sections, activeKey }: { sections: NavSecti
     const active = item.key === activeKey;
     const childKeys = item.children?.map((entry) => entry.key).join(" ");
     const containsActive = Boolean(item.children?.some((entry) => entry.key === activeKey));
-    return <button key={item.key} type="button" data-key={item.key} data-parent-of={!item.open ? childKeys : undefined}
+    // Faixa fechada: o nome vira dica ao passar o mouse e para leitores de tela.
+    return <button key={item.key} type="button" data-key={item.key} data-parent-of={!item.open ? childKeys : undefined} title={!expanded && !child ? item.label : undefined} aria-label={!expanded && !child ? (item.badge?.count ? `${item.label}: ${item.badge.title}` : item.label) : undefined}
       className={`${child ? "nav-child" : "nav-item"} ${active ? "active" : ""} ${containsActive ? "contains-active" : ""}`}
       style={{ "--i": order } as React.CSSProperties} onClick={item.onClick} tabIndex={hidden ? -1 : undefined} aria-hidden={hidden || undefined} aria-current={active ? "page" : undefined} aria-expanded={item.children ? Boolean(item.open) : undefined}>
       {!child && <span className="nav-icon">{item.icon}</span>}
@@ -88,7 +98,7 @@ export default function SidebarNav({ sections, activeKey }: { sections: NavSecti
     </button>;
   };
 
-  return <nav ref={navRef} className="sidebar-nav" aria-label="Menu principal" onTransitionEnd={(event) => { if ((event.target as HTMLElement).classList?.contains("nav-submenu")) place(); }}>
+  return <nav ref={navRef} className={`sidebar-nav ${expanded ? "expanded" : "collapsed"}`} aria-label="Menu principal" onTransitionEnd={(event) => { if ((event.target as HTMLElement).classList?.contains("nav-submenu")) place(); }}>
     {indicator && <span className="nav-indicator" style={{ transform: `translateY(${indicator.top}px)`, height: indicator.height }} aria-hidden="true" />}
     {sections.map((section, sectionIndex) => {
       const items = section.items;

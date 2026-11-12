@@ -353,7 +353,16 @@ export const tickets = sqliteTable("tickets", {
   externalStatus: text("external_status"),
   externalCategory: text("external_category"),
   externalUpdatedAt: text("external_updated_at"),
+  // Quando o líder já foi avisado de que o chamado passou do prazo (para não avisar de novo).
+  lateAlertedAt: text("late_alerted_at"),
 }, (table) => [uniqueIndex("tickets_jira_key_unique").on(table.jiraConnectionId, table.externalKey)]);
+
+/** Configurações do sistema (agendador, Teams, últimos avisos). Valores secretos ficam criptografados. */
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
 
 /** Contas do Jira Cloud de onde os chamados são trazidos. A chave de API nunca volta para a tela. */
 export const jiraConnections = sqliteTable("jira_connections", {
@@ -401,7 +410,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   actorName: text("actor_name").notNull().default("Equipe"),

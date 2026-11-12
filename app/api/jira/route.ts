@@ -6,6 +6,8 @@ import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
 import { normalizeJiraUrl } from "../../jira";
 import { jiraFetch, syncConnection, syncDue } from "../../jira-sync";
+import { sealSecret } from "../../secret-key";
+import { runJobs } from "../../jobs";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -87,6 +89,8 @@ export async function POST(request: Request) {
         if (message.includes("no such table") || message.includes("no such column")) return json({ results: [], changed: false, more: false });
         throw error;
       }
+      // Com o Portal aberto também saem os avisos (estoque baixo e atrasos), caso o agendador não esteja rodando.
+      try { await runJobs(db, { includeJira: false }); } catch (error) { console.error("alerts during sync failed", error); }
       return json({
         // Detalhes de erro do Jira só para administradores.
         results: isAdmin ? results : results.map((result) => ({ ...result, error: result.error ? "erro" : null })),
@@ -109,6 +113,7 @@ export async function POST(request: Request) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Informe o e-mail do usuário do Jira dono da chave." }, 400);
       const [current] = connectionId ? await db.select().from(jiraConnections).where(eq(jiraConnections.id, connectionId)).limit(1) : [];
       if (connectionId && !current) return json({ error: "Conta não encontrada." }, 404);
+      // A chave nova chega em texto; a já guardada está criptografada (jiraFetch abre as duas).
       const apiToken = token || current?.apiToken || "";
       if (!apiToken) return json({ error: "Cole a chave de API (gerada em id.atlassian.com → Segurança → Tokens de API)." }, 400);
       if (teamId && !(await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).limit(1)).length) return json({ error: "Escolha um time válido." }, 400);
@@ -120,7 +125,13 @@ export async function POST(request: Request) {
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "Não foi possível conectar ao Jira." }, 400);
       }
-      const values = { name, baseUrl, email, apiToken, teamId, active: body.active !== false };
+      let sealedToken: string;
+      try {
+        sealedToken = token ? await sealSecret(token) : apiToken;
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "Não foi possível proteger a chave." }, 500);
+      }
+      const values = { name, baseUrl, email, apiToken: sealedToken, teamId, active: body.active !== false };
       // Mudou de endereço: recomeça a busca do zero nessa conta.
       const reset = current && current.baseUrl !== baseUrl ? { cursorAt: null } : {};
       const [saved] = current

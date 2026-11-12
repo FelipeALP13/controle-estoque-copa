@@ -49,7 +49,6 @@ import Archive from "lucide-react/icons/archive";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
 import Box from "lucide-react/icons/box";
 import CalendarClock from "lucide-react/icons/calendar-clock";
-import CircleUserRound from "lucide-react/icons/circle-user-round";
 import Coffee from "lucide-react/icons/coffee";
 import Ellipsis from "lucide-react/icons/ellipsis";
 import FileDown from "lucide-react/icons/file-down";
@@ -334,6 +333,20 @@ export default function Home() {
     setMobileMenu(false);
   }
   const { counts: navCounts } = useNavCounts(Boolean(currentUser?.active));
+  // Menu lateral estilo Instagram: faixa só com ícones que se abre ao passar o mouse (ou com o teclado).
+  // Um pequeno atraso evita abrir sem querer quando o mouse só cruza a faixa.
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const hoverTimer = useRef<number | null>(null);
+  const expandSidebar = useCallback(() => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => setSidebarHover(true), 140);
+  }, []);
+  const collapseSidebar = useCallback(() => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    setSidebarHover(false);
+  }, []);
+
   // Atalhos da visão geral para abrir o formulário de nova demanda / novo chamado.
   const [newTaskRequest, setNewTaskRequest] = useState(0);
   const [newTicketRequest, setNewTicketRequest] = useState(0);
@@ -385,6 +398,8 @@ export default function Home() {
     if (taskId) setTaskToOpen(taskId);
   }
   const [mobileMenu, setMobileMenu] = useState(false);
+  // No celular a gaveta aberta já mostra os nomes.
+  const sidebarOpen = sidebarHover || mobileMenu;
 
   const load = useCallback(async (silent = false) => {
     try {
@@ -501,17 +516,19 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
+      <aside className={`sidebar ${mobileMenu ? "open" : ""} ${sidebarOpen ? "expanded" : ""}`}
+        onMouseEnter={expandSidebar} onMouseLeave={collapseSidebar}
+        onFocus={expandSidebar} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) collapseSidebar(); }}>
         <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>{APP_NAME}</strong><small>{APP_TAGLINE}</small></div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
-        <SidebarNav activeKey={tab} sections={[
+        <SidebarNav activeKey={tab} expanded={sidebarOpen} sections={[
           { items: [
             { key: "hub", label: "Visão geral", icon: <LayoutDashboard />, onClick: () => go("hub") },
             { key: "calendar", label: "Calendário", icon: <CalendarDays />, onClick: () => go("calendar") },
           ] },
           { label: "Trabalho", items: [
-            { key: "tasks", label: "Demandas", icon: <ListTodo />, onClick: () => go("tasks"), badge: navCounts ? { count: navCounts.tasks, tone: navCounts.tasksOverdue ? "alert" : "info", title: navCounts.tasksOverdue ? `${navCounts.tasks} suas em aberto, ${navCounts.tasksOverdue} com prazo vencido` : `${navCounts.tasks} suas em aberto` } : null },
-            { key: "tickets", label: "Chamados", icon: <LifeBuoy />, onClick: () => openTicket(), badge: navCounts ? { count: navCounts.tickets, tone: navCounts.ticketsLate ? "alert" : "info", title: `${navCounts.tickets} na fila do seu time${navCounts.ticketsUnassigned ? `, ${navCounts.ticketsUnassigned} sem dono` : ""}${navCounts.ticketsLate ? `, ${navCounts.ticketsLate} fora do prazo` : ""}` } : null },
+            { key: "tasks", label: "Demandas", icon: <ListTodo />, onClick: () => go("tasks"), badge: navCounts ? { count: navCounts.tasks, tone: navCounts.tasksOverdue ? "danger" : "info", title: navCounts.tasksOverdue ? `${navCounts.tasks} suas em aberto, ${navCounts.tasksOverdue} com prazo vencido` : `${navCounts.tasks} suas em aberto` } : null },
+            { key: "tickets", label: "Chamados", icon: <LifeBuoy />, onClick: () => openTicket(), badge: navCounts ? { count: navCounts.tickets, tone: navCounts.ticketsLate ? "danger" : "info", title: `${navCounts.tickets} na fila do seu time${navCounts.ticketsUnassigned ? `, ${navCounts.ticketsUnassigned} sem dono` : ""}${navCounts.ticketsLate ? `, ${navCounts.ticketsLate} fora do prazo` : ""}` } : null },
             { key: "projects", label: "Projetos", icon: <FolderKanban />, onClick: () => go("projects") },
             { key: "knowledge", label: "Base de conhecimento", icon: <BookOpen />, onClick: () => openKnowledge() },
           ] },
@@ -521,7 +538,7 @@ export default function Home() {
             { key: "panel", label: "Painel", icon: <Gauge />, onClick: () => go("panel") },
           ] },
           { label: "Copa", items: [
-            { key: "stock-module", label: "Estoque", icon: <PackageCheck />, open: stockMenu, onClick: () => setStockMenu((open) => !open), children: [
+            { key: "stock-module", label: "Estoque", icon: <PackageCheck />, open: stockMenu && sidebarOpen, onClick: () => setStockMenu((open) => !open), children: [
               { key: "stock", label: "Itens e saldos", icon: null, onClick: () => go("stock", true) },
               ...(permissions.viewPlanning ? [{ key: "planning", label: "Planejamento", icon: null, onClick: () => go("planning", true) }] : []),
               ...(permissions.viewHistory ? [{ key: "reports", label: "Relatórios", icon: null, onClick: () => go("reports", true) }, { key: "history", label: "Histórico", icon: null, onClick: () => go("history", true) }] : []),
@@ -532,12 +549,14 @@ export default function Home() {
             { key: "admin", label: "Histórico e cópias", icon: <ShieldCheck />, onClick: () => go("admin") },
           ] : [] },
         ]} />
-        {showTip && <div className="sidebar-tip">
+        {showTip && sidebarOpen && <div className="sidebar-tip">
           <span><Sparkles size={15} className="tip-sparkle" /> Dica do dia<button type="button" onClick={hideTip} aria-label="Esconder a dica de hoje" title="Esconder até amanhã"><X size={13} /></button></span>
           <p>{dailyTip}</p>
         </div>}
-        <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div><CircleUserRound size={18} /></button>
-        <button className="signout-link" onClick={logout}><LogOut size={15} /> Sair do sistema</button>
+        <div className="sidebar-user">
+          <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil" title="Meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div></button>
+          <button className="signout-link" onClick={logout} title="Sair do sistema" aria-label="Sair do sistema"><LogOut size={16} /></button>
+        </div>
       </aside>
 
       <main>
@@ -680,7 +699,7 @@ function HubView({ items, movements, schedule, currentUser, counts, onOpen, onOp
     </section>
 
     <div className="hub-summary">
-      {summary.map((tile, index) => <button key={tile.key} className={`hub-stat ${tile.alert ? "alert" : "warn" in tile && tile.warn ? "warn" : ""}`} style={{ "--i": index } as React.CSSProperties} onClick={tile.action}>
+      {summary.map((tile, index) => <button key={tile.key} className={`hub-stat ${tile.alert ? "is-danger" : "warn" in tile && tile.warn ? "is-warn" : ""}`} style={{ "--i": index } as React.CSSProperties} onClick={tile.action}>
         <span className="hub-stat-icon">{tile.icon}</span>
         <span className="hub-stat-body"><small>{tile.label}</small><strong>{tile.value ?? "—"}</strong><em>{tile.detail}</em></span>
         <span className="hub-stat-go" aria-hidden="true">→</span>
