@@ -43,3 +43,10 @@ test("eventos distribuídos e ordenados por dia", () => {
   assert.equal(calendar.has("2026-12-20"), false);
   assert.equal([...calendar.values()].flat().some((event) => event.refId === 2 && event.kind === "due"), false);
 });
+
+test("minha agenda aparece primeiro no dia, pelo horário", () => {
+  const map = buildCalendar({ from: "2026-11-01", to: "2026-11-30", today: "2026-11-12", tasks: [{ id: 1, title: "Boleto", code: "DEM-1", dueDate: "2026-11-12", closed: false, owners: "Ana" }], agenda: [{ id: 2, title: "Reunião", day: "2026-11-12", time: "14:00", meeting: true, done: false }, { id: 3, title: "Ligar", day: "2026-11-12", time: "09:30", meeting: false, done: true }, { id: 4, title: "Fora", day: "2026-12-01", time: "10:00", meeting: false, done: false }] });
+  assert.deepEqual(map.get("2026-11-12")?.map((event) => event.label), ["09:30 Ligar", "14:00 Reunião", "DEM-1 Boleto"]);
+  assert.equal(map.get("2026-11-12")?.[0].detail, "Anotação · feito");
+  assert.equal(map.get("2026-12-01"), undefined);
+});

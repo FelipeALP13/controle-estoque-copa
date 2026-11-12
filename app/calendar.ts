@@ -1,7 +1,7 @@
 // Calendário único: monta o mês e distribui prazos, ausências, escala e projetos pelos dias.
 // Regras puras (sem banco), usadas pela tela e pelos testes.
 
-export type CalendarKind = "due" | "absence" | "schedule" | "project";
+export type CalendarKind = "agenda" | "due" | "absence" | "schedule" | "project";
 export type CalendarEvent = { kind: CalendarKind; id: string; refId: number; label: string; detail: string; tone?: string; late?: boolean };
 
 const DAY = 86400000;
@@ -37,8 +37,9 @@ type DueTask = { id: number; title: string; code: string; dueDate: string | null
 type AbsenceEntry = { id: number; person: string; label: string; startDate: string; endDate: string };
 type ScheduleWeek = { id: number; start: string; end: string; team: string; color: string; members: string };
 type ProjectEntry = { id: number; name: string; code: string; startDate: string | null; endForecast: string | null };
+type AgendaEntry = { id: number; title: string; day: string; time: string; meeting: boolean; done: boolean };
 
-export function buildCalendar(input: { from: string; to: string; today: string; tasks?: DueTask[]; absences?: AbsenceEntry[]; weeks?: ScheduleWeek[]; projects?: ProjectEntry[] }) {
+export function buildCalendar(input: { from: string; to: string; today: string; tasks?: DueTask[]; absences?: AbsenceEntry[]; weeks?: ScheduleWeek[]; projects?: ProjectEntry[]; agenda?: AgendaEntry[] }) {
   const byDay = new Map<string, CalendarEvent[]>();
   const add = (date: string, event: CalendarEvent) => {
     if (date < input.from || date > input.to) return;
@@ -60,8 +61,12 @@ export function buildCalendar(input: { from: string; to: string; today: string; 
     if (!isIsoDay(task.dueDate) || task.closed) continue;
     add(task.dueDate, { kind: "due", id: `t${task.id}`, refId: task.id, label: `${task.code} ${task.title}`, detail: task.owners || "Sem responsável", late: task.dueDate < input.today });
   }
-  // Ordem dentro do dia: prazos vencidos, prazos, ausências, projetos, escala.
-  const rank = (event: CalendarEvent) => (event.kind === "due" ? (event.late ? 0 : 1) : event.kind === "absence" ? 2 : event.kind === "project" ? 3 : 4);
+  for (const entry of input.agenda ?? []) {
+    if (!isIsoDay(entry.day)) continue;
+    add(entry.day, { kind: "agenda", id: `g${entry.id}`, refId: entry.id, label: `${entry.time} ${entry.title}`, detail: `${entry.meeting ? "Reunião" : "Anotação"}${entry.done ? " · feito" : ""}` });
+  }
+  // Ordem dentro do dia: minha agenda (pelo horário), prazos vencidos, prazos, ausências, projetos, escala.
+  const rank = (event: CalendarEvent) => (event.kind === "agenda" ? -1 : event.kind === "due" ? (event.late ? 0 : 1) : event.kind === "absence" ? 2 : event.kind === "project" ? 3 : 4);
   for (const list of byDay.values()) list.sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, "pt-BR"));
   return byDay;
 }

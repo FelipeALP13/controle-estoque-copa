@@ -33,6 +33,11 @@ import KnowledgeView, { type ArticleDraft } from "./knowledge-view";
 import NoticeBoard from "./notice-board";
 import AdminView from "./admin-view";
 import CalendarView from "./calendar-view";
+import AgendaView from "./agenda-view";
+import NotebookPen from "lucide-react/icons/notebook-pen";
+import VideoIcon from "lucide-react/icons/video";
+import { isoToLocal, isTeamsJoinLink } from "./agenda";
+import { useNow, useUpcomingAgenda, type AgendaEvent } from "./use-agenda";
 import CalendarDays from "lucide-react/icons/calendar-days";
 import CommandSearch from "./command-search";
 import SidebarNav, { useNavCounts, type NavCounts } from "./sidebar-nav";
@@ -310,7 +315,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "knowledge" | "admin" | "calendar" | "people" | "planning" | "reports" | "history" | "team">("hub");
+  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "knowledge" | "admin" | "calendar" | "agenda" | "people" | "planning" | "reports" | "history" | "team">("hub");
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
@@ -324,6 +329,8 @@ export default function Home() {
   const clearArticleRequest = useCallback(() => { setArticleToOpen(null); setArticleDraft(null); }, []);
   const [projectToOpen, setProjectToOpen] = useState<number | null>(null);
   const clearProjectToOpen = useCallback(() => setProjectToOpen(null), []);
+  const [eventToOpen, setEventToOpen] = useState<number | null>(null);
+  const clearEventToOpen = useCallback(() => setEventToOpen(null), []);
   const [personSearch, setPersonSearch] = useState("");
 
   // Menu lateral: troca de tela (os itens do estoque mantêm o submenu aberto) e fecha o menu no celular.
@@ -375,6 +382,15 @@ export default function Home() {
 
   // Chamados novos do Jira chegam enquanto alguém da equipe está com o Portal aberto.
   useJiraAutoSync(Boolean(currentUser?.active));
+  // Agenda: avisos na hora exata enquanto o Portal está aberto (o sino toca o som).
+  const { events: upcomingAgenda } = useUpcomingAgenda(Boolean(currentUser?.active));
+
+  function openAgenda(eventId?: number) {
+    setTab("agenda");
+    setStockMenu(false);
+    setMobileMenu(false);
+    if (eventId) setEventToOpen(eventId);
+  }
 
   function openKnowledge(request?: { articleId?: number; draft?: ArticleDraft }) {
     setTab("knowledge");
@@ -524,6 +540,7 @@ export default function Home() {
         <SidebarNav activeKey={tab} expanded={sidebarOpen} sections={[
           { items: [
             { key: "hub", label: "Visão geral", icon: <LayoutDashboard />, onClick: () => go("hub") },
+            { key: "agenda", label: "Minha agenda", icon: <NotebookPen />, onClick: () => openAgenda() },
             { key: "calendar", label: "Calendário", icon: <CalendarDays />, onClick: () => go("calendar") },
           ] },
           { label: "Trabalho", items: [
@@ -562,15 +579,15 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Histórico e cópia de segurança" : tab === "calendar" ? "Calendário" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
-          <div className="topbar-actions"><CommandSearch onPick={openSearchHit} /><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
+          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Histórico e cópia de segurança" : tab === "calendar" ? "Calendário" : tab === "agenda" ? "Minha agenda" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div className="topbar-actions"><CommandSearch onPick={openSearchHit} /><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} onOpenEvent={openAgenda} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 
         <section className="content">
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} counts={navCounts} onOpen={(destination) => go(destination)} onOpenTask={openTask} onOpenTicket={openTicket} onNewTask={() => { openTask(); setNewTaskRequest((value) => value + 1); }} onNewTicket={() => { openTicket(); setNewTicketRequest((value) => value + 1); }} onSearch={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))} /> : tab === "stock" ? (
+          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} counts={navCounts} agenda={upcomingAgenda} onOpenAgenda={openAgenda} onOpen={(destination) => go(destination)} onOpenTask={openTask} onOpenTicket={openTicket} onNewTask={() => { openTask(); setNewTaskRequest((value) => value + 1); }} onNewTicket={() => { openTicket(); setNewTicketRequest((value) => value + 1); }} onSearch={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -640,7 +657,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} createRequest={newTaskRequest} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} createRequest={newTicketRequest} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "calendar" ? <CalendarView schedule={schedule} onOpenTask={openTask} onOpenProject={(id) => { setTab("projects"); setProjectToOpen(id); }} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} createRequest={newTaskRequest} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} createRequest={newTicketRequest} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "agenda" ? <AgendaView openRequest={eventToOpen} onOpenRequestHandled={clearEventToOpen} /> : tab === "calendar" ? <CalendarView schedule={schedule} onOpenTask={openTask} onOpenEvent={openAgenda} onOpenProject={(id) => { setTab("projects"); setProjectToOpen(id); }} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 
@@ -661,7 +678,7 @@ function todayLong() {
   return text.charAt(0).toLocaleUpperCase("pt-BR") + text.slice(1);
 }
 
-function HubView({ items, movements, schedule, currentUser, counts, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket, onSearch }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch: () => void }) {
+function HubView({ items, movements, schedule, currentUser, counts, agenda, onOpenAgenda, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket, onSearch }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; agenda: AgendaEvent[]; onOpenAgenda: (eventId?: number) => void; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch: () => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
@@ -708,6 +725,8 @@ function HubView({ items, movements, schedule, currentUser, counts, onOpen, onOp
 
     <NoticeBoard />
 
+    <HubAgenda events={agenda} today={today} onOpen={onOpenAgenda} />
+
     <h3 className="hub-heading">Meu trabalho</h3>
     <div className="hub-work-grid">
       <MyTasksPanel onOpen={onOpenTask} />
@@ -742,6 +761,23 @@ function HubView({ items, movements, schedule, currentUser, counts, onOpen, onOp
       </article>
     </div>
   </div>;
+}
+
+/** Minha agenda de hoje: o que ainda vai acontecer, com o botão de entrar na reunião. */
+function HubAgenda({ events, today, onOpen }: { events: AgendaEvent[]; today: string; onOpen: (eventId?: number) => void }) {
+  const now = useNow();
+  const list = events.filter((event) => !event.done && isoToLocal(event.startsAt).day === today && Date.parse(event.endsAt ?? event.startsAt) + (event.endsAt ? 0 : 30 * 60000) >= now);
+  if (!list.length) return <div className="hub-agenda empty"><NotebookPen size={15} /><span>Nada mais na sua agenda hoje.</span><button onClick={() => onOpen()}>Anotar compromisso</button></div>;
+  return <article className="hub-card hub-agenda">
+    <div className="hub-panel-title"><div><span><NotebookPen /></span><div><h3>Minha agenda de hoje</h3><p>{list.length} {list.length === 1 ? "compromisso" : "compromissos"} pela frente</p></div></div><button onClick={() => onOpen()}>Ver agenda</button></div>
+    <ul>{list.slice(0, 4).map((event) => {
+      const live = Date.parse(event.startsAt) <= now;
+      return <li key={event.id} className={live ? "live" : ""}>
+        <button onClick={() => onOpen(event.id)}><b>{isoToLocal(event.startsAt).time}</b><span>{event.title}</span>{live && <em>agora</em>}</button>
+        {event.teamsUrl && isTeamsJoinLink(event.teamsUrl) && <a href={event.teamsUrl} target="_blank" rel="noopener noreferrer" title="Entrar na reunião do Teams"><VideoIcon size={14} /> Entrar</a>}
+      </li>;
+    })}{list.length > 4 && <li className="more"><button onClick={() => onOpen()}>e mais {list.length - 4}</button></li>}</ul>
+  </article>;
 }
 
 function isoDateInSaoPaulo(date = new Date()) {

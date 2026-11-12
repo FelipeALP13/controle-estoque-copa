@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         if (message.includes("no such table") || message.includes("no such column")) return json({ results: [], changed: false, more: false });
         throw error;
       }
-      // Com o Portal aberto também saem os avisos (estoque baixo e atrasos), caso o agendador não esteja rodando.
+      // Com o Portal aberto também saem os avisos de chamados atrasados e os lembretes da agenda.
       try { await runJobs(db, { includeJira: false }); } catch (error) { console.error("alerts during sync failed", error); }
       return json({
         // Detalhes de erro do Jira só para administradores.

@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, notInArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { notifications, tasks, tickets } from "../../../db/schema";
+import { agendaEvents, notifications, tasks, tickets } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { addDays } from "../../support-schedule";
@@ -30,11 +30,13 @@ export async function GET() {
         taskTitle: tasks.title,
         ticketId: notifications.ticketId,
         ticketTitle: tickets.title,
+        eventId: notifications.eventId,
+        eventTitle: agendaEvents.title,
         actorName: notifications.actorName,
         body: notifications.body,
         readAt: notifications.readAt,
         createdAt: notifications.createdAt,
-      }).from(notifications).leftJoin(tasks, eq(notifications.taskId, tasks.id)).leftJoin(tickets, eq(notifications.ticketId, tickets.id))
+      }).from(notifications).leftJoin(tasks, eq(notifications.taskId, tasks.id)).leftJoin(tickets, eq(notifications.ticketId, tickets.id)).leftJoin(agendaEvents, eq(notifications.eventId, agendaEvents.id))
         .where(eq(notifications.memberId, member.id))
         .orderBy(desc(notifications.createdAt), desc(notifications.id))
         .limit(30),

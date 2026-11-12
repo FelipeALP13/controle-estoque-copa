@@ -10,6 +10,8 @@ import { projectCode } from "./projects";
 import { taskCode } from "./tasks";
 import { monthLabel, shiftMonth } from "./time-entries";
 import { useAbsences } from "./use-absences";
+import { isoToLocal, localToIso } from "./agenda";
+import type { AgendaEvent } from "./use-agenda";
 
 type Schedule = { teams: { id: number; name: string; color: string; members: string[] }[]; weeks: { id: number; start: string; end: string; teamId: number }[] };
 type TaskRow = { id: number; title: string; status: string; dueDate: string | null; teamId: number | null; owners: number[]; support: number[] };
@@ -17,6 +19,7 @@ type TasksData = { tasks: TaskRow[]; members: { id: number; name: string }[]; me
 type ProjectRow = { id: number; name: string; startDate: string | null; endForecast: string; status: string; phase: string };
 
 const layers: { kind: CalendarKind; label: string }[] = [
+  { kind: "agenda", label: "Minha agenda" },
   { kind: "due", label: "Prazos de demandas" },
   { kind: "absence", label: "Férias e ausências" },
   { kind: "schedule", label: "Escala do Suporte" },
@@ -29,11 +32,11 @@ function todayInSaoPaulo() {
 }
 
 /** Calendário único: prazos, ausências, escala e projetos numa visão de mês. */
-export default function CalendarView({ schedule, onOpenTask, onOpenProject }: { schedule: Schedule; onOpenTask: (taskId: number) => void; onOpenProject: (projectId: number) => void }) {
+export default function CalendarView({ schedule, onOpenTask, onOpenProject, onOpenEvent }: { schedule: Schedule; onOpenTask: (taskId: number) => void; onOpenProject: (projectId: number) => void; onOpenEvent: (eventId: number) => void }) {
   const today = todayInSaoPaulo();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [selected, setSelected] = useState(today);
-  const [visible, setVisible] = useState<Record<CalendarKind, boolean>>({ due: true, absence: true, schedule: true, project: true });
+  const [visible, setVisible] = useState<Record<CalendarKind, boolean>>({ agenda: true, due: true, absence: true, schedule: true, project: true });
   const [scope, setScope] = useState<"mine" | "team" | "all">("mine");
   const [tasksData, setTasksData] = useState<TasksData | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -59,6 +62,19 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject }: { 
   }, []);
 
   const grid = useMemo(() => monthGrid(month), [month]);
+  // Minha agenda do período visível.
+  const [agenda, setAgenda] = useState<AgendaEvent[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const from = localToIso(grid.from, "00:00");
+    const to = localToIso(grid.to, "23:59");
+    if (!from || !to) return;
+    void fetch(`/api/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() as Promise<{ events: AgendaEvent[] }> : { events: [] }))
+      .then((data) => { if (!cancelled) setAgenda(data.events); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [grid]);
   const calendar = useMemo(() => {
     const names = new Map([...(tasksData?.members ?? []), ...people].map((person) => [person.id, person.name]));
     const me = tasksData?.me;
@@ -69,12 +85,13 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject }: { 
     });
     return buildCalendar({
       from: grid.from, to: grid.to, today,
+      agenda: visible.agenda ? agenda.map((event) => ({ id: event.id, title: event.title, ...isoToLocal(event.startsAt), meeting: event.kind === "meeting", done: event.done })) : [],
       tasks: visible.due ? tasks.map((task) => ({ id: task.id, title: task.title, code: taskCode(task.id), dueDate: task.dueDate, closed: task.status === "done" || task.status === "canceled", owners: task.owners.map((id) => names.get(id)).filter(Boolean).join(", ") })) : [],
       absences: visible.absence ? absences.map((absence) => ({ id: absence.id, person: names.get(absence.memberId) ?? "Alguém", label: absenceKindLabels[absence.kind], startDate: absence.startDate, endDate: absence.endDate })) : [],
       weeks: visible.schedule ? schedule.weeks.map((week) => { const team = schedule.teams.find((entry) => entry.id === week.teamId); return { id: week.id, start: week.start, end: week.end, team: team?.name ?? "Equipe", color: team?.color ?? "purple", members: team?.members.join(", ") ?? "" }; }) : [],
       projects: visible.project ? projects.filter((project) => project.status !== "done" && project.status !== "canceled" && project.phase !== "closing").map((project) => ({ id: project.id, name: project.name, code: projectCode(project.id), startDate: project.startDate, endForecast: project.endForecast })) : [],
     });
-  }, [tasksData, projects, absences, people, schedule, grid, today, scope, visible]);
+  }, [tasksData, projects, absences, people, schedule, grid, today, scope, visible, agenda]);
 
   function go(delta: number) {
     const next = shiftMonth(month, delta);
@@ -85,6 +102,7 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject }: { 
   function open(event: CalendarEvent) {
     if (event.kind === "due") onOpenTask(event.refId);
     else if (event.kind === "project") onOpenProject(event.refId);
+    else if (event.kind === "agenda") onOpenEvent(event.refId);
   }
 
   const selectedEvents = calendar.get(selected) ?? [];
@@ -121,7 +139,7 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject }: { 
       <aside className="calendar-side">
         <h3><CalendarDays size={15} /> {new Date(`${selected}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC", weekday: "long", day: "2-digit", month: "long" })}</h3>
         {selectedEvents.length ? <ul>{selectedEvents.map((event) => <li key={event.id} className={`calendar-item ${event.kind} ${event.tone ?? ""} ${event.late ? "late" : ""}`}>
-          {event.kind === "due" || event.kind === "project" ? <button onClick={() => open(event)}><strong>{event.label}</strong><small>{event.late ? `Vencida · ${event.detail}` : event.detail}</small></button>
+          {event.kind === "due" || event.kind === "project" || event.kind === "agenda" ? <button onClick={() => open(event)}><strong>{event.label}</strong><small>{event.late ? `Vencida · ${event.detail}` : event.detail}</small></button>
             : <div><strong>{event.label}</strong><small>{event.detail}</small></div>}
         </li>)}</ul> : <p className="muted">Nada marcado neste dia.</p>}
       </aside>
@@ -131,7 +149,7 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject }: { 
     <div className="calendar-agenda">
       {monthDays.length ? monthDays.map((day) => <section key={day.date}>
         <h4 className={day.date === today ? "today" : ""}>{new Date(`${day.date}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC", weekday: "short", day: "2-digit", month: "2-digit" })}</h4>
-        {(calendar.get(day.date) ?? []).map((event) => <button key={event.id} className={`calendar-item ${event.kind} ${event.tone ?? ""} ${event.late ? "late" : ""}`} onClick={() => open(event)} disabled={event.kind !== "due" && event.kind !== "project"}><strong>{event.label}</strong><small>{event.detail}</small></button>)}
+        {(calendar.get(day.date) ?? []).map((event) => <button key={event.id} className={`calendar-item ${event.kind} ${event.tone ?? ""} ${event.late ? "late" : ""}`} onClick={() => open(event)} disabled={event.kind !== "due" && event.kind !== "project" && event.kind !== "agenda"}><strong>{event.label}</strong><small>{event.detail}</small></button>)}
       </section>) : <p className="muted">Nada marcado neste mês.</p>}
     </div>
   </div>;

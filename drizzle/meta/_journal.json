@@ -162,6 +162,13 @@
       "when": 1794488195278,
       "tag": "0022_automation",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1794492768352,
+      "tag": "0023_agenda",
+      "breakpoints": true
     }
   ]
 }

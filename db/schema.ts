@@ -357,7 +357,48 @@ export const tickets = sqliteTable("tickets", {
   lateAlertedAt: text("late_alerted_at"),
 }, (table) => [uniqueIndex("tickets_jira_key_unique").on(table.jiraConnectionId, table.externalKey)]);
 
-/** Configurações do sistema (agendador, Teams, últimos avisos). Valores secretos ficam criptografados. */
+/** Agenda pessoal: anotações com horário e reuniões (com convidados da equipe). */
+export const agendaEvents = sqliteTable("agenda_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["note", "meeting"] }).notNull().default("note"),
+  title: text("title").notNull(),
+  notes: text("notes").notNull().default(""),
+  // Início e fim em ISO (UTC). Fim é opcional (anotação pontual).
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at"),
+  // Minutos de antecedência do primeiro aviso (0 = só na hora; null = sem aviso).
+  remindBefore: integer("remind_before"),
+  teamsUrl: text("teams_url").notNull().default(""),
+  done: integer("done", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("agenda_events_owner_idx").on(table.ownerId, table.startsAt), index("agenda_events_starts_idx").on(table.startsAt)]);
+
+export const agendaAttendees = sqliteTable("agenda_attendees", {
+  eventId: integer("event_id")
+    .notNull()
+    .references(() => agendaEvents.id, { onDelete: "cascade" }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.eventId, table.memberId] }), index("agenda_attendees_member_idx").on(table.memberId)]);
+
+/** Lembretes já disparados (um por pessoa, compromisso e momento: "antes" ou "na hora"). */
+export const agendaReminders = sqliteTable("agenda_reminders", {
+  eventId: integer("event_id")
+    .notNull()
+    .references(() => agendaEvents.id, { onDelete: "cascade" }),
+  memberId: integer("member_id")
+    .notNull()
+    .references(() => members.id, { onDelete: "cascade" }),
+  stage: text("stage", { enum: ["before", "start"] }).notNull(),
+  sentAt: text("sent_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.eventId, table.memberId, table.stage] })]);
+
+/** Configurações do sistema (chave/valor). Sem uso no momento; mantida porque a tabela já existe no banco. */
 export const appSettings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull().default(""),
@@ -410,9 +451,10 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
+  eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
   actorName: text("actor_name").notNull().default("Equipe"),
   body: text("body").notNull().default(""),
   readAt: text("read_at"),
