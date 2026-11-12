@@ -34,6 +34,7 @@ import NoticeBoard from "./notice-board";
 import AdminView from "./admin-view";
 import CalendarView from "./calendar-view";
 import AgendaView from "./agenda-view";
+import SessionsPanel, { endMemberSessions } from "./sessions-panel";
 import NotebookPen from "lucide-react/icons/notebook-pen";
 import VideoIcon from "lucide-react/icons/video";
 import { isoToLocal, isTeamsJoinLink } from "./agenda";
@@ -971,7 +972,10 @@ function TeamView({ members, currentUser, saving, onAddMember, onEditMember, onD
             <select aria-label={`Permissão de ${member.name}`} disabled={saving || member.userId === currentUser?.userId} value={member.role} onChange={(event) => onUpdateRole(member.userId, event.target.value as MemberRole)}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select>
             <button className={`access-toggle ${member.active ? "active" : "inactive"}`} disabled={saving || member.userId === currentUser?.userId} onClick={() => onUpdateActive(member.userId, !member.active)}>{member.active ? "Ativo" : "Desativado"}</button>
             <span className="member-date">{new Intl.DateTimeFormat("pt-BR").format(new Date(member.createdAt))}</span>
-            <div className="member-actions"><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button><button className="member-delete" disabled={member.userId === currentUser?.userId} onClick={() => onDeleteMember(member)} aria-label={`Excluir ${member.name}`} title="Excluir membro"><Trash2 size={15} /></button></div>
+            <div className="member-actions"><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={async () => {
+              if (!window.confirm(`Desconectar ${member.name} de todos os aparelhos? A pessoa vai precisar entrar de novo com a senha.`)) return;
+              try { const ended = await endMemberSessions(member.id); window.alert(ended ? `${member.name} foi desconectado(a) de ${ended} ${ended === 1 ? "aparelho" : "aparelhos"}.` : `${member.name} não estava conectado(a) em nenhum aparelho.`); } catch (err) { window.alert(err instanceof Error ? err.message : "Não foi possível desconectar."); }
+            }} aria-label={`Desconectar ${member.name} de todos os aparelhos`} title="Desconectar de todos os aparelhos"><LogOut size={15} /></button><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button><button className="member-delete" disabled={member.userId === currentUser?.userId} onClick={() => onDeleteMember(member)} aria-label={`Excluir ${member.name}`} title="Excluir membro"><Trash2 size={15} /></button></div>
           </div>)}
         </div>
         <p className="team-access-note">O usuário e a senha dão acesso ao sistema. As permissões são verificadas novamente pelo servidor em cada operação.</p>
@@ -1274,6 +1278,7 @@ function Modal({ state, items, schedule, currentUser, saving, onClose, onSubmit,
             <div className="profile-teams full"><span>Seus times</span><div>{profileExtra.teams.length ? profileExtra.teams.map((team) => <TeamChip key={team.name} team={team} lead={team.isLead} />) : <small>Você ainda não está em nenhum time. Peça a um administrador para incluir você.</small>}</div></div>
           </>}
           <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : "Mínimo de 8 caracteres, com letras e números."}</small></label></div></div>
+          <SessionsPanel />
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>
           <VisualEditor label="Avatar do usuário" icons={personIcons} mode={avatarMode} setMode={setAvatarMode} icon={avatarIcon} setIcon={setAvatarIcon} imageKey={avatarKey} file={avatarFile} setFile={setAvatarFile} />

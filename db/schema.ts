@@ -94,7 +94,11 @@ export const sessions = sqliteTable("sessions", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+  /** Último uso (renovado no máximo a cada 15 min). Sem uso por 7 dias, a sessão cai. */
+  lastSeenAt: text("last_seen_at"),
+  /** Nome curto do aparelho ("Chrome no Windows"), para a lista de sessões. */
+  device: text("device").notNull().default(""),
+}, (table) => [index("sessions_member_idx").on(table.memberId)]);
 
 export const passwordResetTokens = sqliteTable("password_reset_tokens", {
   id: integer("id").primaryKey({ autoIncrement: true }),

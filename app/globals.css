@@ -1983,3 +1983,26 @@ main { margin-left: 72px; }
 .agenda-picker .agenda-picker-name { display: block !important; flex: 1; min-width: 0; }
 .agenda-people .agenda-search { flex-direction: row !important; align-items: center !important; gap: 8px; padding: 0 10px; }
 .agenda-search input { min-height: 0 !important; height: 100% !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; outline: 0; }
+
+/* Meu perfil: aparelhos conectados */
+.sessions-panel { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fcfcfd; }
+.sessions-panel > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.sessions-panel > div:first-child strong { font-size: 13px; }
+.sessions-panel > div:first-child small { color: #8a93a3; font-size: 11px; line-height: 1.45; }
+.sessions-panel ul { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.sessions-panel li { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 9px; background: white; }
+.sessions-panel li.current { background: #eef4ff; }
+.sessions-panel li > span:last-child { display: flex; flex-direction: column; }
+.sessions-panel li b { font-size: 12.5px; }
+.sessions-panel li small { color: #8a93a3; font-size: 11px; }
+.sessions-panel li.current small { color: #2357bd; font-weight: 700; }
+.sessions-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; color: #475467; background: #f2f4f7; }
+.sessions-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sessions-actions .secondary-button { height: 34px; font-size: 12px; }
+.sessions-actions .link-button.danger { color: #b42318; font-size: 12px; }
+.sessions-actions button:disabled { opacity: .5; cursor: default; }
+.sessions-notice { margin: 0; color: #067647; font-size: 12px; }
+
+/* Usuários: coluna de ações com o botão de desconectar */
+.team-table-head, .team-row { grid-template-columns: minmax(205px,1fr) 155px 95px 82px 70px; }
+@media (max-width: 760px) { .team-row { grid-template-columns: 1fr; } }

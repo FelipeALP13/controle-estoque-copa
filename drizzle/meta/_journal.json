@@ -169,6 +169,13 @@
       "when": 1794492768352,
       "tag": "0023_agenda",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1794505422590,
+      "tag": "0024_sessions",
+      "breakpoints": true
     }
   ]
 }

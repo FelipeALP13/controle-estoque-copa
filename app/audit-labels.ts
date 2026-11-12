@@ -15,6 +15,9 @@ export const auditGroupLabels: Record<AuditGroup, string> = {
 const actions: Record<string, { label: string; group: AuditGroup; sensitive?: boolean }> = {
   login: { label: "Entrou no sistema", group: "access" },
   logout: { label: "Saiu do sistema", group: "access" },
+  other_sessions_ended: { label: "Encerrou as sessões dos outros aparelhos", group: "access", sensitive: true },
+  all_sessions_ended: { label: "Encerrou todas as próprias sessões", group: "access", sensitive: true },
+  sessions_ended_by_admin: { label: "Encerrou as sessões de outra pessoa", group: "access", sensitive: true },
   login_failed: { label: "Tentativa de login com senha errada", group: "access", sensitive: true },
   login_blocked: { label: "Login bloqueado por muitas tentativas", group: "access", sensitive: true },
   initial_admin_configured: { label: "Configurou o administrador inicial", group: "access", sensitive: true },

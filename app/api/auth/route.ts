@@ -10,8 +10,10 @@ import {
   clearRateLimit,
   createSession,
   destroySession,
+  endSessions,
   getSessionMember,
   hashPassword,
+  listSessions,
   normalizeUsername,
   passwordPolicyError,
   rateLimitKey,
@@ -64,6 +66,26 @@ export async function POST(request: Request) {
       await destroySession(db);
       if (member) await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "logout", targetType: "session", targetId: member.id });
       return Response.json({ ok: true });
+    }
+
+    // Sessões abertas (aparelhos onde a pessoa está logada).
+    if (action === "listSessions" || action === "endOtherSessions" || action === "endAllSessions" || action === "endMemberSessions") {
+      const member = await getSessionMember(db);
+      if (!member?.active) return Response.json({ error: "Entre com seu usuário e senha para acessar o sistema." }, { status: 401 });
+      if (action === "listSessions") return Response.json({ sessions: await listSessions(member.id, db) });
+      if (action === "endMemberSessions") {
+        if (member.role !== "admin") return Response.json({ error: "Somente administradores." }, { status: 403 });
+        const memberId = Number(body.memberId);
+        const [target] = Number.isInteger(memberId) && memberId > 0 ? await db.select({ id: members.id, name: members.name }).from(members).where(eq(members.id, memberId)).limit(1) : [];
+        if (!target) return Response.json({ error: "Pessoa não encontrada." }, { status: 404 });
+        const ended = await endSessions(target.id, true, db);
+        await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "sessions_ended_by_admin", targetType: "member", targetId: target.id, details: `${target.name}: ${ended}` }).catch((error) => console.error("audit log failed", error));
+        return Response.json({ ended });
+      }
+      const keepCurrent = action === "endOtherSessions";
+      const ended = await endSessions(member.id, keepCurrent, db);
+      await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: keepCurrent ? "other_sessions_ended" : "all_sessions_ended", targetType: "session", targetId: member.id }).catch((error) => console.error("audit log failed", error));
+      return Response.json({ ended, loggedOut: !keepCurrent });
     }
 
     if (action === "setup") {
