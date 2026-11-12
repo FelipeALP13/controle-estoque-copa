@@ -1,0 +1,40 @@
+# Agendador do Portal da Equipe.
+# A hospedagem do Sites não tem tarefa agendada, então o GitHub chama o Portal a cada 10 minutos.
+# A cada chamada o Portal busca chamados novos no Jira, manda o alerta diário de estoque baixo
+# (no horário escolhido) e avisa os líderes sobre chamados que passaram do prazo.
+#
+# Configure em GitHub → Settings → Secrets and variables → Actions:
+#   PORTAL_URL       endereço do Portal publicado (ex.: https://portal.exemplo.com)
+#   PORTAL_CRON_KEY  chave gerada no Portal em "Histórico e cópias" → Automação
+name: Agendador do Portal
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: agendador-portal
+  cancel-in-progress: false
+
+jobs:
+  chamar-portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Rodar as rotinas do Portal
+        env:
+          PORTAL_URL: ${{ secrets.PORTAL_URL }}
+          PORTAL_CRON_KEY: ${{ secrets.PORTAL_CRON_KEY }}
+        run: |
+          if [ -z "$PORTAL_URL" ] || [ -z "$PORTAL_CRON_KEY" ]; then
+            echo "Segredos PORTAL_URL e PORTAL_CRON_KEY ainda não configurados. Nada a fazer."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -X POST "${PORTAL_URL%/}/api/cron" \
+            -H "Authorization: Bearer ${PORTAL_CRON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | head -c 2000
