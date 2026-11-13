@@ -96,6 +96,16 @@ try {
   await expectStatus("avaliar chamado (somente leitura)", "viewer", "POST", "/api/tickets", { action: "rateTicket", ticketId: 1, rating: 5 }, 403);
   await expectStatus("calendário com link inválido", null, "GET", "/api/agenda/ics?token=1.0000000000000000000000000000000000000000000000000000000000000000", null, 404);
   await expectStatus("calendário sem link", null, "GET", "/api/agenda/ics", null, 404);
+
+  // Respostas prontas, dependências, cronômetro, passagem de plantão e tela da TV.
+  await expectStatus("criar resposta pronta (somente leitura)", "viewer", "POST", "/api/tickets", { action: "saveReply", title: "x", body: "x" }, 403);
+  await expectStatus("ligar dependência (somente leitura)", "viewer", "POST", "/api/tasks", { action: "addDependency", taskId: 1, blockedById: 2 }, 403);
+  await expectStatus("iniciar cronômetro (somente leitura)", "viewer", "POST", "/api/time-entries", { action: "startTimer", taskId: 1 }, 403);
+  await expectStatus("registrar passagem de plantão (somente leitura)", "viewer", "POST", "/api/handoffs", { action: "createHandoff", body: "x" }, 403);
+  await expectStatus("ver passagem de plantão sem login", null, "GET", "/api/handoffs", null, 401);
+  await expectStatus("dados da TV sem login", null, "GET", "/api/tv", null, 401);
+  await expectStatus("tela da TV sem login", null, "GET", "/tv", null, [302, 303, 307, 308]);
+  await expectStatus("ler dados da TV", "viewer", "GET", "/api/tv", null, 200);
 } finally {
   cleanup();
 }

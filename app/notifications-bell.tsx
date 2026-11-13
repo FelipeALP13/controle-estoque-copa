@@ -14,6 +14,9 @@ import Volume2 from "lucide-react/icons/volume-2";
 import VolumeX from "lucide-react/icons/volume-x";
 import X from "lucide-react/icons/x";
 import Star from "lucide-react/icons/star";
+import Unlock from "lucide-react/icons/lock-open";
+import Repeat from "lucide-react/icons/repeat-2";
+import PartyPopper from "lucide-react/icons/party-popper";
 import { notificationText, type NotificationKind } from "./notifications";
 import AlarmClock from "lucide-react/icons/alarm-clock";
 import { dueState, taskCode } from "./tasks";
@@ -27,13 +30,15 @@ type DueTask = { id: number; title: string; dueDate: string };
 type Data = { items: Item[]; unread: number; due: DueTask[] };
 
 
-const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star } as const;
+const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star, task_unblocked: Unlock, handoff: Repeat, celebration: PartyPopper } as const;
 
 function subject(item: Item) {
   if (item.ticketId) return `${ticketCode(item.ticketId)} · ${item.ticketTitle ?? "Chamado"}`;
   if (item.taskId) return `${taskCode(item.taskId)} · ${item.taskTitle ?? "Tarefa"}`;
   if (item.kind === "agenda_invite") return item.eventTitle ? item.body : "Compromisso excluído";
   if (item.kind === "agenda_reminder") return item.eventTitle ? "Agenda" : "Compromisso excluído";
+  if (item.kind === "handoff") return "Escala · passagem de plantão";
+  if (item.kind === "celebration") return "Equipe";
   return "Item excluído";
 }
 
@@ -47,7 +52,7 @@ async function post(payload: Record<string, unknown>) {
   await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 }
 
-export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEvent }: { onOpenTask: (taskId: number) => void; onOpenTicket: (ticketId: number) => void; onOpenEvent: (eventId: number) => void }) {
+export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEvent, onOpenView }: { onOpenTask: (taskId: number) => void; onOpenTicket: (ticketId: number) => void; onOpenEvent: (eventId: number) => void; onOpenView: (view: "schedule" | "hub") => void }) {
   const [data, setData] = useState<Data>({ items: [], unread: 0, due: [] });
   const [open, setOpen] = useState(false);
   const [muted, setMutedState] = useState(false);
@@ -110,6 +115,8 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
     if (item.ticketId) onOpenTicket(item.ticketId);
     else if (item.taskId) onOpenTask(item.taskId);
     else if (item.eventId && item.eventTitle) onOpenEvent(item.eventId);
+    else if (item.kind === "handoff") onOpenView("schedule");
+    else if (item.kind === "celebration") onOpenView("hub");
   }
 
   async function markAll() {

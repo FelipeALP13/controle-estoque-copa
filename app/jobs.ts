@@ -2,7 +2,8 @@
 // Rodam enquanto alguém da equipe está com o Portal aberto (junto com a busca no Jira).
 import { and, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import type { getDb } from "../db";
-import { agendaAttendees, agendaEvents, agendaReminders, members, notifications, teamMembers, tickets } from "../db/schema";
+import { agendaAttendees, agendaEvents, agendaReminders, celebrationAlerts, members, notifications, teamMembers, tickets } from "../db/schema";
+import { celebrationText, upcomingCelebrations } from "./team-tools";
 import { dueStages, isoToLocal, occurrences, reminderKey, reminderText, START_GRACE_MS } from "./agenda";
 import { syncDue } from "./jira-sync";
 import { recurringTasksJob } from "./task-recurrence-job";
@@ -81,10 +82,33 @@ export async function agendaRemindersJob(db: Db, now: Date, onlyMemberId?: numbe
   return { reminded };
 }
 
+/**
+ * Aniversário e tempo de casa de hoje: um aviso no sino para toda a equipe (cada comemoração uma vez por ano).
+ * Só a partir das 7h, para não chegar de madrugada.
+ */
+export async function celebrationsJob(db: Db, now: Date) {
+  const local = isoToLocal(now.toISOString());
+  if (local.time < "07:00") return { sent: 0 };
+  const people = await db.select({ id: members.id, name: members.name, birthday: members.birthday, startedOn: members.startedOn }).from(members).where(eq(members.active, true));
+  const today = upcomingCelebrations(people, local.day, 0);
+  if (!today.length) return { sent: 0 };
+  const stamp = now.toISOString();
+  let sent = 0;
+  for (const entry of today) {
+    // Reserva a comemoração (pessoa + tipo + ano): se outra rodada já reservou, pula.
+    const claimed = await db.insert(celebrationAlerts).values({ key: `${entry.kind}:${entry.memberId}:${entry.date.slice(0, 4)}`, sentAt: stamp }).onConflictDoNothing().returning({ key: celebrationAlerts.key });
+    if (!claimed.length) continue;
+    sent += 1;
+    const everyone = people.map((person) => ({ memberId: person.id, kind: "celebration" as const, actorName: "Portal", createdAt: stamp, body: (person.id === entry.memberId ? (entry.kind === "birthday" ? `Feliz aniversário, ${entry.name.split(/\s+/)[0]}! 🎂 A equipe toda foi avisada.` : `Parabéns pelos ${entry.years} ${entry.years === 1 ? "ano" : "anos"} de casa, ${entry.name.split(/\s+/)[0]}! 🎉`) : celebrationText(entry)).slice(0, 140) }));
+    for (let index = 0; index < everyone.length; index += 20) await db.insert(notifications).values(everyone.slice(index, index + 20));
+  }
+  return { sent };
+}
+
 /** Uma rodada completa. Cada parte é independente: o erro de uma não impede as outras. */
 export async function runJobs(db: Db, options: { now?: Date; includeJira?: boolean } = {}) {
   const now = options.now ?? new Date();
-  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, errors: [] };
+  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, errors: [] };
   if (options.includeJira !== false) {
     try {
       result.jira = (await syncDue(db, false, now)).map((entry) => ({ name: entry.name, created: entry.created, updated: entry.updated, comments: entry.comments, error: entry.error }));
@@ -95,5 +119,6 @@ export async function runJobs(db: Db, options: { now?: Date; includeJira?: boole
   try { result.late = await lateTicketsAlert(db, now); } catch (error) { result.errors.push(`Atrasos: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.agenda = await agendaRemindersJob(db, now); } catch (error) { result.errors.push(`Agenda: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.recurring = await recurringTasksJob(db, isoToLocal(now.toISOString()).day); } catch (error) { result.errors.push(`Repetições: ${error instanceof Error ? error.message : "erro"}`); }
+  try { result.celebrations = await celebrationsJob(db, now); } catch (error) { result.errors.push(`Comemorações: ${error instanceof Error ? error.message : "erro"}`); }
   return result;
 }

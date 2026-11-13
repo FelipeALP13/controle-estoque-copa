@@ -4,6 +4,7 @@ import { MyTasksPanel } from "./tasks-view";
 import { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import NoticeBoard from "./notice-board";
+import CelebrationsCard from "./celebrations-card";
 import { shoppingList } from "./stock-forecast";
 import NotebookPen from "lucide-react/icons/notebook-pen";
 import VideoIcon from "lucide-react/icons/video";
@@ -80,7 +81,7 @@ export function HubView({ items, movements, schedule, currentUser, counts, agend
     </div>
 
     <h3 className="hub-heading">Hoje na equipe</h3>
-    <div className="hub-team-grid">
+    <div className="hub-team-grid three">
       <article className={`hub-card hub-schedule ${featuredTeam?.color ?? "purple"}`}>
         <div className="hub-panel-title"><div><span><CalendarClock /></span><div><h3>{currentWeek ? "Atendimento desta semana" : "Próximo atendimento"}</h3><p>{featuredWeek ? weekLabel(featuredWeek) : "Escala sem semanas cadastradas"}</p></div></div><button onClick={() => onOpen("schedule")}>Ver escala</button></div>
         {featuredTeam ? <div className="hub-schedule-team"><strong>{featuredTeam.name}</strong><div>{featuredTeam.members.map((member) => <span key={member}>{member}</span>)}</div></div> : <p className="muted">Cadastre as semanas da escala para aparecer aqui.</p>}
@@ -92,6 +93,7 @@ export function HubView({ items, movements, schedule, currentUser, counts, agend
           {absenceGroups.upcoming.map((absence) => <li key={`u${absence.id}`}><b>{nameOf(absence.memberId)}</b><span>{describeAbsence(absence, today)}</span></li>)}
         </ul> : <p className="hub-calm">Ninguém fora hoje nem nos próximos dias.</p>}
       </article>
+      <CelebrationsCard today={today} onOpenPeople={() => onOpen("people")} />
     </div>
 
     <h3 className="hub-heading">Copa</h3>

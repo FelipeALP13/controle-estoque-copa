@@ -6,6 +6,7 @@ import { absentInSchedule, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
 import { nextSupportWeek, supportWeekForDate, type SupportTeam, type SupportWeek } from "./support-schedule";
 import CalendarClock from "lucide-react/icons/calendar-clock";
+import HandoffPanel from "./handoff-panel";
 import Pencil from "lucide-react/icons/pencil";
 import Plus from "lucide-react/icons/plus";
 import Sparkles from "lucide-react/icons/sparkles";
@@ -50,6 +51,8 @@ export function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam
         </div>
         <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : nextWeek ? "Próxima semana" : "Último período"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala {highlightedWeek.start.slice(0, 4)}</span></div>
       </section> : <div className="empty-state"><span><CalendarClock /></span><h3>Nenhuma semana cadastrada</h3><p>{canEdit ? (schedule.teams.length ? "Cadastre uma semana ou gere várias de uma vez com o rodízio das equipes." : "Comece criando as equipes de atendimento.") : "A escala ainda não foi preenchida. Fale com um administrador."}</p></div>}
+
+      {weeks.length > 0 && <HandoffPanel />}
 
       {schedule.teams.length > 0 && <div className="schedule-teams">
         {schedule.teams.map((team) => <article key={team.id} className={`schedule-team-card ${team.color}`}>

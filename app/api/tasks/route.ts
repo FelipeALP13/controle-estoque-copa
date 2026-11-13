@@ -10,7 +10,22 @@ import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, cleanTitle, isClosedStatus, isTaskPriority, isTaskStatus, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, parseDueDate, sortOrderBetween, taskCategories, taskCode, taskStatusLabels, type TaskEventKind, type TaskStatus } from "../../tasks";
 import { readJsonBody } from "../../api-input";
 import { removeAttachmentsOf } from "../../attachments-store";
-import { taskRecurrences } from "../../../db/schema";
+import { taskDependencies, taskRecurrences } from "../../../db/schema";
+import { openBlockers, releasedBy, wouldCreateCycle } from "../../team-tools";
+
+/** Do que a demanda depende e o que depende dela (vazio se a migração ainda não foi aplicada). */
+async function loadDependencies(db: Db, taskId: number) {
+  try {
+    const [blockedBy, blocking] = await Promise.all([
+      db.select({ id: tasks.id, title: tasks.title, status: tasks.status }).from(taskDependencies).innerJoin(tasks, eq(taskDependencies.blockedById, tasks.id)).where(eq(taskDependencies.taskId, taskId)).orderBy(asc(tasks.id)),
+      db.select({ id: tasks.id, title: tasks.title, status: tasks.status }).from(taskDependencies).innerJoin(tasks, eq(taskDependencies.taskId, tasks.id)).where(eq(taskDependencies.blockedById, taskId)).orderBy(asc(tasks.id)),
+    ]);
+    return { blockedBy, blocking };
+  } catch (error) {
+    console.error("dependencies load failed", error);
+    return { blockedBy: [], blocking: [] };
+  }
+}
 import { addDays, DUE_OPTIONS, runOnOrAfter, validRecurrence } from "../../task-recurrence";
 
 /** Repetição da demanda (null se não repete; vazio se a migração ainda não foi aplicada). */
@@ -124,6 +139,23 @@ async function followers(db: Db, taskId: number, createdById: number | null) {
   return [...new Set([...rows.map((row) => row.memberId), ...(createdById ? [createdById] : [])])];
 }
 
+/** Demandas que ficaram livres porque `finishedId` foi concluída: avisa quem acompanha cada uma. */
+async function notifyReleased(db: Db, member: SessionMember, finishedId: number, now: string) {
+  try {
+    const edges = await db.select({ taskId: taskDependencies.taskId, blockedById: taskDependencies.blockedById }).from(taskDependencies);
+    const related = [...new Set(edges.flatMap((edge) => [edge.taskId, edge.blockedById]))];
+    if (!related.includes(finishedId)) return;
+    const rows = await db.select({ id: tasks.id, status: tasks.status, createdById: tasks.createdById }).from(tasks).where(inArray(tasks.id, related));
+    const released = releasedBy(edges, finishedId, new Map(rows.map((row) => [row.id, row.status])));
+    for (const taskId of released) {
+      const createdById = rows.find((row) => row.id === taskId)?.createdById ?? null;
+      await notify(db, member.id, member.name, now, (await followers(db, taskId, createdById)).map((memberId) => ({ memberId, kind: "task_unblocked" as const, taskId, body: taskCode(finishedId) })));
+    }
+  } catch (error) {
+    console.error("release notification failed", error);
+  }
+}
+
 /** Passos da demanda; vazio se a migração dos checklists ainda não foi aplicada. */
 async function loadChecklist(db: Db, taskId: number) {
   try {
@@ -164,15 +196,17 @@ export async function GET(request: Request) {
 
     const taskId = Number(new URL(request.url).searchParams.get("taskId"));
     if (taskId) {
-      const [events, checklist, recurrence] = await Promise.all([
+      const [events, checklist, recurrence, dependencies] = await Promise.all([
         db.select().from(taskEvents).where(eq(taskEvents.taskId, taskId)).orderBy(asc(taskEvents.createdAt), asc(taskEvents.id)),
         loadChecklist(db, taskId),
         loadRecurrence(db, taskId),
+        loadDependencies(db, taskId),
       ]);
       return json({
         events: events.map((event) => ({ id: event.id, kind: event.kind, body: event.body, actorId: event.actorId, actorName: event.actorName, createdAt: event.createdAt, canDelete: event.kind === "comment" && (event.actorId === member.id || isAdmin(member)) })),
         checklist,
         recurrence,
+        dependencies,
       });
     }
 
@@ -230,8 +264,15 @@ export async function GET(request: Request) {
     } catch (error) {
       console.error("checklist progress failed", error);
     }
+    // Quantas pendências ainda seguram cada demanda.
+    let blockers = new Map<number, number>();
+    try {
+      blockers = openBlockers(await db.select({ taskId: taskDependencies.taskId, blockedById: taskDependencies.blockedById }).from(taskDependencies), new Map(taskRows.map((task) => [task.id, task.status])));
+    } catch (error) {
+      console.error("dependencies count failed", error);
+    }
     return json({
-      tasks: taskRows.map((task) => ({ ...task, owners: owners.get(task.id) ?? [], support: support.get(task.id) ?? [], codes: (codes.get(task.id) ?? []).sort(), checklist: progress.get(task.id) ?? null })),
+      tasks: taskRows.map((task) => ({ ...task, owners: owners.get(task.id) ?? [], support: support.get(task.id) ?? [], codes: (codes.get(task.id) ?? []).sort(), checklist: progress.get(task.id) ?? null, waitingOn: blockers.get(task.id) ?? 0 })),
       members: memberRows,
       teams: teamData.teams,
       clients: clientRows,
@@ -297,6 +338,28 @@ export async function POST(request: Request) {
         .onConflictDoUpdate({ target: taskRecurrences.sourceTaskId, set: values });
       await db.insert(taskEvents).values({ taskId, kind: "comment", body: "Configurou a repetição desta demanda.", ...actor, createdAt: now });
       return json({ recurrence: await loadRecurrence(db, taskId) });
+    }
+
+    // Dependências: "esta só começa quando aquela terminar".
+    if (action === "addDependency" || action === "removeDependency") {
+      const taskId = Number(body.taskId);
+      const blockedById = Number(body.blockedById);
+      const found = taskId && blockedById ? await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(inArray(tasks.id, [taskId, blockedById])) : [];
+      const task = found.find((row) => row.id === taskId);
+      const blocker = found.find((row) => row.id === blockedById);
+      if (!task || !blocker) return json({ error: "Demanda não encontrada." }, 404);
+      if (action === "removeDependency") {
+        const removed = await db.delete(taskDependencies).where(and(eq(taskDependencies.taskId, taskId), eq(taskDependencies.blockedById, blockedById))).returning({ taskId: taskDependencies.taskId });
+        if (removed.length) await db.insert(taskEvents).values({ taskId, kind: "comment", body: `Deixou de depender de ${taskCode(blockedById)}.`, ...actor, createdAt: now });
+        return json({ dependencies: await loadDependencies(db, taskId) });
+      }
+      const edges = await db.select({ taskId: taskDependencies.taskId, blockedById: taskDependencies.blockedById }).from(taskDependencies);
+      if (taskId === blockedById) return json({ error: "Uma demanda não pode depender dela mesma." }, 400);
+      if (wouldCreateCycle(edges, taskId, blockedById)) return json({ error: `${taskCode(blockedById)} já depende (direta ou indiretamente) de ${taskCode(taskId)}. Isso travaria as duas.` }, 400);
+      if (edges.filter((edge) => edge.taskId === taskId).length >= 20) return json({ error: "Limite de 20 dependências por demanda." }, 400);
+      const inserted = await db.insert(taskDependencies).values({ taskId, blockedById, createdAt: now }).onConflictDoNothing().returning({ taskId: taskDependencies.taskId });
+      if (inserted.length) await db.insert(taskEvents).values({ taskId, kind: "comment", body: `Passou a depender de ${taskCode(blockedById)} · ${blocker.title}.`, ...actor, createdAt: now });
+      return json({ dependencies: await loadDependencies(db, taskId) });
     }
 
     if (action === "createTask") {
@@ -476,6 +539,8 @@ export async function POST(request: Request) {
         for (const id of await followers(db, taskId, current.createdById)) alerts.push({ memberId: id, kind: "task_status", taskId, body: taskStatusLabels[task.status] });
       }
       await notify(db, member.id, member.name, now, alerts);
+      // Concluída: avisa quem esperava por ela (quando não sobra outra pendência).
+      if (changes.status === "done") await notifyReleased(db, member, taskId, now);
       return json({ task, closed: isClosedStatus(task.status) });
     }
 

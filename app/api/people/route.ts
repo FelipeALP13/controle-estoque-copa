@@ -6,6 +6,9 @@ import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanPhone, cleanText, isTeamColor, normalizeMembership } from "../../teams";
 import { readJsonBody } from "../../api-input";
+import { isBirthday, isStartDate } from "../../team-tools";
+
+const todayInSaoPaulo = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -26,7 +29,7 @@ export async function GET() {
     const isAdmin = member.role === "admin";
 
     const [people, teamRows, memberships] = await Promise.all([
-      db.select({ id: members.id, name: members.name, email: members.email, role: members.role, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, jobTitle: members.jobTitle, phone: members.phone })
+      db.select({ id: members.id, name: members.name, email: members.email, role: members.role, active: members.active, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey, jobTitle: members.jobTitle, phone: members.phone, birthday: members.birthday, startedOn: members.startedOn })
         .from(members).orderBy(asc(members.name)),
       db.select().from(teams).orderBy(asc(teams.name)),
       db.select().from(teamMembers),
@@ -60,7 +63,19 @@ export async function POST(request: Request) {
       if (personId !== member.id && !isAdmin) return json({ error: "Você só pode editar o seu próprio perfil." }, 403);
       const [person] = await db.select({ id: members.id }).from(members).where(eq(members.id, personId)).limit(1);
       if (!person) return json({ error: "Pessoa não encontrada." }, 404);
-      await db.update(members).set({ jobTitle: cleanText(body.jobTitle, 60), phone: cleanPhone(body.phone) }).where(eq(members.id, personId));
+      const changes: Partial<typeof members.$inferInsert> = { jobTitle: cleanText(body.jobTitle, 60), phone: cleanPhone(body.phone) };
+      // Aniversário (sem o ano) e data de entrada: opcionais; vazio apaga.
+      if ("birthday" in body) {
+        if (body.birthday === null || body.birthday === "") changes.birthday = null;
+        else if (isBirthday(body.birthday)) changes.birthday = body.birthday;
+        else return json({ error: "Informe o dia e o mês do aniversário." }, 400);
+      }
+      if ("startedOn" in body) {
+        if (body.startedOn === null || body.startedOn === "") changes.startedOn = null;
+        else if (isStartDate(body.startedOn, todayInSaoPaulo())) changes.startedOn = body.startedOn;
+        else return json({ error: "Informe uma data de entrada válida (não pode ser no futuro)." }, 400);
+      }
+      await db.update(members).set(changes).where(eq(members.id, personId));
 
       // Só administradores mudam os times de alguém.
       if (isAdmin && Array.isArray(body.teamIds)) {

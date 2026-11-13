@@ -12,6 +12,7 @@ import Plus from "lucide-react/icons/plus";
 import Search from "lucide-react/icons/search";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
 import X from "lucide-react/icons/x";
+import Lock from "lucide-react/icons/lock";
 import { dueState, isClosedStatus, sortOrderBetween, taskCode, taskPriorities, taskPriorityLabels, taskStatuses, taskStatusLabels, type TaskPriority, type TaskStatus } from "./tasks";
 import ImportModal from "./import-modal";
 import Download from "lucide-react/icons/download";
@@ -24,6 +25,11 @@ type Filters = { scope: "all" | "mine" | "team"; person: string; priority: strin
 
 function readView(): "list" | "board" {
   try { return window.localStorage.getItem("tasks-view") === "board" ? "board" : "list"; } catch { return "list"; }
+}
+
+/** Demanda esperando outras terminarem. */
+function WaitingChip({ count }: { count: number }) {
+  return <span className="task-waiting" title={`Aguardando ${count === 1 ? "1 demanda" : `${count} demandas`} terminar`}><Lock size={11} />{count}</span>;
 }
 
 const involves = (task: Task, memberId: number) => task.owners.includes(memberId) || task.support.includes(memberId);
@@ -293,6 +299,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled, cr
                 </span>
                 <span className="task-row-meta">
                   {task.hoursFlag && <span className="hours-flag" title="Horas importadas fora do normal: revise"><TriangleAlert size={12} /></span>}
+                  {Boolean(task.waitingOn) && !isClosedStatus(task.status) && <WaitingChip count={task.waitingOn!} />}
                   {task.teamId && teamsById.get(task.teamId) && <span className="task-team"><TeamChip team={teamsById.get(task.teamId)!} /></span>}
                   {task.checklist && task.checklist.total > 0 && <span className={`task-checklist ${task.checklist.done === task.checklist.total ? "complete" : ""}`} title={`Checklist: ${task.checklist.done} de ${task.checklist.total} passos`}><ListChecks size={12} />{task.checklist.done}/{task.checklist.total}</span>}
                   {task.commentCount > 0 && <span className="task-comments" title={`${task.commentCount} comentários`}><MessageSquare size={12} />{task.commentCount}</span>}
@@ -309,7 +316,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled, cr
     )}
 
     {creating && data && <NewTaskModal initialStatus={creating} lookups={lookups} meId={data.me.id} defaultTeamId={filters.team && filters.team !== "none" ? Number(filters.team) : data.me.teamIds.length === 1 ? data.me.teamIds[0] : null} defaultClientId={filters.client ? Number(filters.client) : null} onClose={() => setCreating(null)} onCreated={async (task) => { setCreating(null); await load(); setOpenTaskId(task.id); }} />}
-    {openTask && data && <TaskDrawer key={openTask.id} task={openTask} lookups={lookups} me={data.me} today={today} onClose={() => setOpenTaskId(null)} onUpdate={(changes) => update(openTask.id, changes)} onDeleted={async () => { setOpenTaskId(null); await load(); }} onCommented={load} />}
+    {openTask && data && <TaskDrawer key={openTask.id} task={openTask} allTasks={data.tasks} onOpenTask={setOpenTaskId} lookups={lookups} me={data.me} today={today} onClose={() => setOpenTaskId(null)} onUpdate={(changes) => update(openTask.id, changes)} onDeleted={async () => { setOpenTaskId(null); await load(); }} onCommented={load} />}
     {importing && <ImportModal onClose={() => setImporting(false)} onImported={load} />}
     {managingTemplates && <TemplatesModal lookups={lookups} onClose={() => setManagingTemplates(false)} />}
     {managingClients && data && <ClientsModal clients={data.clients} tasks={data.tasks} onClose={() => setManagingClients(false)} onSaved={load} />}
@@ -349,7 +356,7 @@ function Board({ byStatus, lookups, teamsById, canEdit, today, onOpen, onMove, o
                 <span className="board-card-top"><span className="task-code">{taskCode(task.id)}</span><AvatarStack ids={task.owners} membersById={lookups.membersById} size={20} /></span>
                 <span className="board-card-title"><StatusIcon status={task.status} /><span>{task.title}</span></span>
                 {client && <span className="board-card-client">{client.name}{task.category && ` · ${task.category}`}</span>}
-                <span className="board-card-meta"><PriorityIcon priority={task.priority} />{task.teamId && teamsById.get(task.teamId) && <TeamChip team={teamsById.get(task.teamId)!} />}{task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}{task.commentCount > 0 && <span className="task-comments"><MessageSquare size={12} />{task.commentCount}</span>}{task.hoursFlag && <span className="hours-flag" title="Horas importadas fora do normal: revise"><TriangleAlert size={12} /></span>}</span>
+                <span className="board-card-meta"><PriorityIcon priority={task.priority} />{task.teamId && teamsById.get(task.teamId) && <TeamChip team={teamsById.get(task.teamId)!} />}{task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}{task.commentCount > 0 && <span className="task-comments"><MessageSquare size={12} />{task.commentCount}</span>}{task.hoursFlag && <span className="hours-flag" title="Horas importadas fora do normal: revise"><TriangleAlert size={12} /></span>}{Boolean(task.waitingOn) && !isClosedStatus(task.status) && <WaitingChip count={task.waitingOn!} />}</span>
               </button>
             </div>;
           })}

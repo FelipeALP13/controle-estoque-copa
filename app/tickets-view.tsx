@@ -28,6 +28,12 @@ import TicketRatingCard from "./ticket-rating-card";
 import { canRate } from "./ticket-rating";
 import type { ArticleDraft } from "./knowledge-view";
 import { downloadXlsx } from "./xlsx-writer";
+import Columns3 from "lucide-react/icons/columns-3";
+import List from "lucide-react/icons/list";
+import MessageSquareText from "lucide-react/icons/message-square-text";
+import Monitor from "lucide-react/icons/monitor";
+import Pencil from "lucide-react/icons/pencil";
+import { fillReply, onTicketBoard, REPLY_FIELDS, repliesFor, TICKET_BOARD_STATUSES, type TicketBoardStatus } from "./team-tools";
 import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
 
 type Ticket = {
@@ -41,7 +47,13 @@ type Person = { id: number; name: string; avatarIcon: string; avatarKey: string 
 type Team = { id: number; name: string; color: string };
 type Viewer = { id: number; isAdmin: boolean; canEdit: boolean; teamIds: number[] };
 type TicketEvent = { id: number; kind: TicketEventKind; body: string; actorId: number | null; actorName: string; createdAt: string; canDelete: boolean; externalId?: string | null };
-type Data = { tickets: Ticket[]; members: Person[]; teams: Team[]; me: Viewer };
+type Reply = { id: number; title: string; body: string; teamId: number | null; createdByName: string; canEdit: boolean };
+type Data = { tickets: Ticket[]; members: Person[]; teams: Team[]; me: Viewer; replies?: Reply[] };
+type Layout = "list" | "board";
+const LAYOUT_KEY = "portal.tickets.layout";
+function savedLayout(): Layout {
+  try { return typeof window !== "undefined" && window.localStorage.getItem(LAYOUT_KEY) === "board" ? "board" : "list"; } catch { return "list"; }
+}
 type Scope = "queue" | "requested" | "assigned" | "all";
 
 async function post(payload: Record<string, unknown>) {
@@ -84,6 +96,12 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [jiraOpen, setJiraOpen] = useState(false);
+  const [layout, setLayoutState] = useState<Layout>(savedLayout);
+  const [managingReplies, setManagingReplies] = useState(false);
+  function setLayout(next: Layout) {
+    setLayoutState(next);
+    try { window.localStorage.setItem(LAYOUT_KEY, next); } catch { /* só preferência */ }
+  }
   const retried = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -143,14 +161,23 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     });
   }, [data, effectiveScope, teamFilter]);
 
-  const visible = useMemo(() => {
+  const matchesSearch = useCallback((ticket: Ticket) => {
     const query = fold(search.trim());
-    return inScope.filter((ticket) => {
-      if (statusFilter === "active" && !isActiveTicket(ticket.status)) return false;
-      if (statusFilter === "closed" && isActiveTicket(ticket.status)) return false;
-      return !query || fold(`${ticketCode(ticket.id)} ${ticket.externalKey ?? ""} ${ticket.title} ${ticket.client} ${ticket.requesterName}`).includes(query);
-    }).sort(compareTickets);
-  }, [inScope, statusFilter, search]);
+    return !query || fold(`${ticketCode(ticket.id)} ${ticket.externalKey ?? ""} ${ticket.title} ${ticket.client} ${ticket.requesterName}`).includes(query);
+  }, [search]);
+  const visible = useMemo(() => inScope.filter((ticket) => {
+    if (statusFilter === "active" && !isActiveTicket(ticket.status)) return false;
+    if (statusFilter === "closed" && isActiveTicket(ticket.status)) return false;
+    return matchesSearch(ticket);
+  }).sort(compareTickets), [inScope, statusFilter, matchesSearch]);
+  // Quadro: os em aberto e os resolvidos nos últimos 7 dias, por coluna.
+  const [boardNow] = useState(() => Date.now());
+  const board = useMemo(() => {
+    const columns = Object.fromEntries(TICKET_BOARD_STATUSES.map((status) => [status, [] as Ticket[]])) as Record<TicketBoardStatus, Ticket[]>;
+    for (const ticket of inScope) if (onTicketBoard(ticket, data ? boardNow : 0) && matchesSearch(ticket) && ticket.status !== "canceled") columns[ticket.status as TicketBoardStatus].push(ticket);
+    for (const status of TICKET_BOARD_STATUSES) columns[status].sort(status === "resolved" ? (a, b) => (b.resolvedAt ?? "").localeCompare(a.resolvedAt ?? "") : compareTickets);
+    return columns;
+  }, [inScope, matchesSearch, data, boardNow]);
 
   const active = inScope.filter((ticket) => isActiveTicket(ticket.status));
   const stats = {
@@ -225,7 +252,13 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
       </div>
       <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por título, código ou cliente" /></label>
       {(data?.teams.length ?? 0) > 0 && <select aria-label="Filtrar por time" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)}><option value="">Todos os times</option>{data?.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select>}
-      <select aria-label="Situação" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="active">Em aberto</option><option value="closed">Encerrados</option><option value="all">Todos</option></select>
+      {layout === "list" && <select aria-label="Situação" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="active">Em aberto</option><option value="closed">Encerrados</option><option value="all">Todos</option></select>}
+      <div className="tasks-view-toggle" role="group" aria-label="Como mostrar">
+        <button className={layout === "list" ? "active" : ""} aria-pressed={layout === "list"} onClick={() => setLayout("list")} title="Lista"><List size={15} /> Lista</button>
+        <button className={layout === "board" ? "active" : ""} aria-pressed={layout === "board"} onClick={() => setLayout("board")} title="Quadro"><Columns3 size={15} /> Quadro</button>
+      </div>
+      {data?.me.canEdit && <button className="secondary-button" onClick={() => setManagingReplies(true)} title="Textos prontos para responder os chamados"><MessageSquareText size={15} /> Respostas prontas</button>}
+      <a className="secondary-button" href="/tv" target="_blank" rel="noopener" title="Abre a fila em tela cheia, para deixar numa TV da sala"><Monitor size={15} /> Tela para TV</a>
       {data?.me.isAdmin && <button className="secondary-button" onClick={() => setJiraOpen(true)} title="Trazer chamados das contas do Jira"><Plug size={15} /> Jira</button>}
       {data && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os chamados que estão na tela, com os filtros aplicados"><Download size={15} /> Exportar Excel</button>}
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button>}
@@ -241,7 +274,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
         <article className={stats.late ? "late" : ""}><small>Fora do prazo</small><strong>{stats.late}</strong><p>Sem resposta ou sem solução no prazo</p></article>
       </div>
 
-      {visible.length === 0 ? <div className="empty-state"><span><LifeBuoy /></span><h3>{data.tickets.length ? "Nenhum chamado aqui" : "Nenhum chamado ainda"}</h3><p>{data.tickets.length ? "Troque a fila, o filtro de situação ou a busca." : "Quando alguém precisar de outro time, é só abrir um chamado. Ele cai direto na fila do time."}</p>{data.me.canEdit && !data.tickets.length && <div><button className="primary-button" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button></div>}</div> : (
+      {layout === "board" ? <TicketBoard columns={board} me={data.me} teamsById={teamsById} peopleById={peopleById} onOpen={setOpenId} onMove={(ticketId, status) => void update(ticketId, { status })} /> : visible.length === 0 ? <div className="empty-state"><span><LifeBuoy /></span><h3>{data.tickets.length ? "Nenhum chamado aqui" : "Nenhum chamado ainda"}</h3><p>{data.tickets.length ? "Troque a fila, o filtro de situação ou a busca." : "Quando alguém precisar de outro time, é só abrir um chamado. Ele cai direto na fila do time."}</p>{data.me.canEdit && !data.tickets.length && <div><button className="primary-button" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button></div>}</div> : (
         <div className="ticket-list">
           {visible.map((ticket) => {
             const team = ticket.teamId ? teamsById.get(ticket.teamId) : null;
@@ -265,7 +298,8 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
 
     {jiraOpen && <JiraSettings onClose={() => setJiraOpen(false)} onSynced={load} />}
     {creating && data && <NewTicketModal teams={data.teams} defaultTeamId={teamFilter ? Number(teamFilter) : null} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); setStatusFilter("active"); await load(); setOpenId(id); }} />}
-    {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} onOpenArticle={onOpenArticle} onSaveSolution={onSaveSolution} />}
+    {managingReplies && data && <RepliesModal replies={data.replies ?? []} teams={data.teams} me={data.me} onClose={() => setManagingReplies(false)} onChanged={load} />}
+    {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onManageReplies={() => setManagingReplies(true)} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} onOpenArticle={onOpenArticle} onSaveSolution={onSaveSolution} />}
   </div>;
 }
 
@@ -318,7 +352,7 @@ function loadArticles() {
   return promise;
 }
 
-function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, onOpenArticle, onSaveSolution }: { ticket: Ticket; data: Data; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onReload: () => Promise<void>; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
+function TicketDrawer({ ticket, data, onManageReplies, onClose, onUpdate, onReload, onOpenTask, onOpenArticle, onSaveSolution }: { ticket: Ticket; data: Data; onManageReplies: () => void; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onReload: () => Promise<void>; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
   const [related, setRelated] = useState<SearchableArticle[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -338,6 +372,14 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
   const solve = resolutionStatus(ticket);
   const fromJira = ticket.source === "jira";
   const [toClient, setToClient] = useState(false);
+  const [repliesOpen, setRepliesOpen] = useState(false);
+  const usableReplies = repliesFor(data.replies ?? [], ticket.teamId);
+  function insertReply(reply: Reply) {
+    const me = data.members.find((person) => person.id === data.me.id);
+    const text = fillReply(reply.body, { cliente: ticket.client, solicitante: ticket.requesterName, codigo: ticketCode(ticket.id), titulo: ticket.title, eu: me?.name ?? "" });
+    setComment((current) => (current.trim() ? `${current.trimEnd()}\n\n${text}` : text));
+    setRepliesOpen(false);
+  }
 
   const loadEvents = useCallback(async () => {
     const response = await fetch(`/api/tickets?ticketId=${ticket.id}`, { cache: "no-store" });
@@ -443,6 +485,13 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
             ))}
           </ol>}
           {me.canEdit && <form className="task-comment-form" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+            <div className="reply-picker">
+              <button type="button" className="link-button" onClick={() => setRepliesOpen((value) => !value)} aria-expanded={repliesOpen}><MessageSquareText size={13} /> Respostas prontas{usableReplies.length ? ` (${usableReplies.length})` : ""}</button>
+              {repliesOpen && <div className="reply-menu" role="menu">
+                {usableReplies.length ? usableReplies.map((reply) => <button type="button" role="menuitem" key={reply.id} onClick={() => insertReply(reply)}><strong>{reply.title}</strong><small>{reply.teamId ? data.teams.find((team) => team.id === reply.teamId)?.name ?? "Time" : "Todos os times"}</small><span>{reply.body.slice(0, 110)}{reply.body.length > 110 ? "…" : ""}</span></button>) : <p className="muted">Nenhuma resposta pronta ainda.</p>}
+                <button type="button" className="reply-menu-manage" onClick={() => { setRepliesOpen(false); onManageReplies(); }}><Pencil size={12} /> Criar ou editar respostas</button>
+              </div>}
+            </div>
             <MentionTextarea value={comment} onChange={setComment} members={data.members} onSubmit={() => void send()} />
             {fromJira && handler && <label className={`jira-send ${toClient ? "on" : ""}`}><input type="checkbox" checked={toClient} onChange={(event) => setToClient(event.target.checked)} /> Enviar ao cliente no Jira <small>{toClient ? "o cliente vê este comentário no Jira" : "sem marcar, fica só como nota interna da equipe"}</small></label>}
             <button className="primary-button" disabled={busy || !comment.trim()}><Send size={14} /> {fromJira && toClient ? "Enviar ao cliente" : "Comentar"}</button>
@@ -465,6 +514,91 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
       </div>
     </aside>
   </div>;
+}
+
+/** Quadro de chamados: arraste o cartão para mudar o status (só quem atende o time do chamado). */
+function TicketBoard({ columns, me, teamsById, peopleById, onOpen, onMove }: { columns: Record<TicketBoardStatus, Ticket[]>; me: Viewer; teamsById: Map<number, Team>; peopleById: Map<number, Person>; onOpen: (id: number) => void; onMove: (ticketId: number, status: TicketStatus) => void }) {
+  const [drag, setDrag] = useState<Ticket | null>(null);
+  const [over, setOver] = useState<TicketBoardStatus | null>(null);
+  const finish = () => { setDrag(null); setOver(null); };
+  return <div className="task-board ticket-board">
+    {TICKET_BOARD_STATUSES.map((status) => <section key={status} className={`board-column ${over === status ? "drop-target" : ""}`}
+      onDragOver={(event) => { if (!drag || drag.status === status) return; event.preventDefault(); if (over !== status) setOver(status); }}
+      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(null); }}
+      onDrop={(event) => { event.preventDefault(); if (drag && drag.status !== status) onMove(drag.id, status); finish(); }}>
+      <header><StatusPill status={status} /><span>{columns[status].length}</span>{status === "resolved" && <small className="board-hint">últimos 7 dias</small>}</header>
+      <div className="board-cards">
+        {columns[status].map((ticket) => {
+          const team = ticket.teamId ? teamsById.get(ticket.teamId) : null;
+          const movable = canHandleTicket(me, ticket.teamId);
+          return <button key={ticket.id} className={`board-card ticket-card ${drag?.id === ticket.id ? "dragging" : ""} ${isTicketLate(ticket) ? "late" : ""}`} draggable={movable} onClick={() => onOpen(ticket.id)}
+            title={movable ? "Clique para abrir ou arraste para mudar o status" : "Só o time do chamado muda o status"}
+            onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(ticket.id)); setDrag(ticket); }} onDragEnd={finish}>
+            <span className="board-card-top"><span className="task-code">{ticketCode(ticket.id)}</span>{ticket.externalKey && <span className="jira-badge">{ticket.externalKey}</span>}<UrgencyBadge urgency={ticket.urgency} /></span>
+            <span className="board-card-title"><span>{ticket.title}</span></span>
+            {(ticket.client || ticket.requesterName) && <span className="board-card-client">{ticket.client ? `${ticket.client} · ` : ""}por {ticket.requesterName}</span>}
+            <span className="board-card-meta">{team && <TeamChip team={team} />}<SlaBadge ticket={ticket} />{ticket.commentCount > 0 && <span className="task-comments"><MessageSquare size={12} />{ticket.commentCount}</span>}<Avatar member={ticket.assigneeId ? peopleById.get(ticket.assigneeId) : null} size={20} /></span>
+          </button>;
+        })}
+        {!columns[status].length && <p className="board-empty">{status === "resolved" ? "Nada resolvido nos últimos 7 dias" : "Nenhum chamado"}</p>}
+      </div>
+    </section>)}
+  </div>;
+}
+
+/** Respostas prontas: textos com campos ({cliente}, {solicitante}...) inseridos no comentário com um clique. */
+function RepliesModal({ replies, teams, me, onClose, onChanged }: { replies: Reply[]; teams: Team[]; me: Viewer; onClose: () => void; onChanged: () => Promise<void> }) {
+  const [editing, setEditing] = useState<Reply | "new" | null>(replies.length ? null : "new");
+  const [form, setForm] = useState({ title: "", body: "", teamId: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const myTeams = me.isAdmin ? teams : teams.filter((team) => me.teamIds.includes(team.id));
+
+  function start(reply: Reply | "new") {
+    setEditing(reply);
+    setError("");
+    setForm(reply === "new" ? { title: "", body: "", teamId: myTeams.length === 1 ? String(myTeams[0].id) : "" } : { title: reply.title, body: reply.body, teamId: reply.teamId ? String(reply.teamId) : "" });
+  }
+
+  async function run(payload: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await post(payload);
+      await onChanged();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal replies-modal">
+    <div className="modal-head"><div><p className="eyebrow">CHAMADOS</p><h2>Respostas prontas</h2><p>Textos usados com frequência. No chamado, clique em “Respostas prontas” acima do comentário.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="templates-body">
+      {editing ? <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); if (await run({ action: "saveReply", replyId: editing === "new" ? undefined : editing.id, title: form.title, body: form.body, teamId: form.teamId ? Number(form.teamId) : null })) setEditing(null); }}>
+        <label><span>Nome</span><input autoFocus required maxLength={60} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ex.: Pedir print do erro" /></label>
+        <label><span>Quem usa</span><select value={form.teamId} onChange={(event) => setForm({ ...form, teamId: event.target.value })}><option value="">Todos os times</option>{myTeams.map((team) => <option key={team.id} value={team.id}>Só {team.name}</option>)}</select></label>
+        <label className="full"><span>Texto</span><textarea required rows={6} maxLength={2000} value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder={"Olá {solicitante}, tudo bem?\nPode mandar um print da mensagem de erro que aparece para a {cliente}?"} /></label>
+        <p className="full form-hint">Campos que viram o dado do chamado: {REPLY_FIELDS.map((field) => <button type="button" key={field.key} className="reply-field" onClick={() => setForm({ ...form, body: `${form.body}{${field.key}}` })} title={`Inserir ${field.label}`}>{`{${field.key}}`}</button>)}</p>
+        {error && <p className="modal-error full">{error}</p>}
+        <div className="modal-actions full">
+          {editing !== "new" && <button type="button" className="secondary-button modal-delete" disabled={busy} onClick={async () => { if (window.confirm(`Excluir a resposta “${editing.title}”?`) && await run({ action: "deleteReply", replyId: editing.id })) setEditing(null); }}><Trash2 size={15} /> Excluir</button>}
+          <button type="button" className="secondary-button" onClick={() => setEditing(replies.length ? null : "new")}>{replies.length ? "Voltar" : "Limpar"}</button>
+          <button className="primary-button" disabled={busy || !form.title.trim() || !form.body.trim()}>{busy ? "Salvando..." : "Salvar resposta"}</button>
+        </div>
+      </form> : <>
+        {replies.length ? <ul className="templates-list">{replies.map((reply) => <li key={reply.id}>
+          <div><strong>{reply.title}</strong><small>{reply.teamId ? `Só ${teams.find((team) => team.id === reply.teamId)?.name ?? "um time"}` : "Todos os times"} · por {reply.createdByName}</small></div>
+          {reply.canEdit && <button className="person-edit" onClick={() => start(reply)} aria-label={`Editar ${reply.title}`} title="Editar"><Pencil size={14} /></button>}
+        </li>)}</ul> : <p className="muted">Nenhuma resposta pronta ainda.</p>}
+        {error && <p className="modal-error">{error}</p>}
+        <div className="templates-actions"><button className="primary-button" onClick={() => start("new")}><Plus size={15} /> Nova resposta</button></div>
+      </>}
+    </div>
+  </div></div>;
 }
 
 /** Resumo para a visão geral: o que pede atenção na fila do meu time e nos meus chamados. */

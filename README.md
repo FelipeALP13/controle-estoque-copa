@@ -12,12 +12,15 @@ Roda como um Cloudflare Worker publicado pelo **Sites**, com banco D1 (SQLite) e
 | Minha agenda (anotações e reuniões no Teams, lembretes, repetição, link para o Outlook) | `app/agenda-view.tsx`, `app/agenda.ts`, `app/ics.ts`, `app/api/agenda/` |
 | Meu dia (resumo ao abrir o Portal) | `app/my-day.tsx` |
 | Calendário (prazos, ausências, escala, projetos, agenda) | `app/calendar-view.tsx`, `app/calendar.ts` |
-| Demandas (quadro, lista, checklist, horas, modelos, repetição) | `app/tasks-view.tsx`, `app/task-drawer.tsx`, `app/task-shared.tsx`, `app/task-recurrence*.ts`, `app/api/tasks/` |
-| Chamados (SLA, Jira, atribuição pela escala, avaliação) | `app/tickets-view.tsx`, `app/jira*.ts`, `app/ticket-assign.ts`, `app/ticket-routing.ts`, `app/ticket-rating*.ts(x)`, `app/api/tickets/` |
+| Demandas (quadro, lista, checklist, horas, cronômetro, dependências, modelos, repetição) | `app/tasks-view.tsx`, `app/task-drawer.tsx`, `app/task-shared.tsx`, `app/task-recurrence*.ts`, `app/task-timer.tsx`, `app/api/tasks/` |
+| Chamados (lista e quadro, SLA, Jira, atribuição pela escala, respostas prontas, avaliação) | `app/tickets-view.tsx`, `app/jira*.ts`, `app/ticket-assign.ts`, `app/ticket-routing.ts`, `app/ticket-rating*.ts(x)`, `app/api/tickets/` |
 | Anexos de demandas e chamados | `app/attachments*.ts(x)`, `app/api/attachments/` |
 | Projetos (lista e linha do tempo) | `app/projects-view.tsx`, `app/project-timeline.ts`, `app/api/projects/` |
 | Base de conhecimento e mural | `app/knowledge-view.tsx`, `app/notice-board.tsx` |
-| Escala de atendimento | `app/schedule-view.tsx`, `app/support-schedule.ts` |
+| Escala de atendimento e passagem de plantão | `app/schedule-view.tsx`, `app/support-schedule.ts`, `app/handoff-panel.tsx`, `app/api/handoffs/` |
+| Tela para TV (fila em tela cheia, atualiza sozinha) | `app/tv/`, `app/tv-board.tsx`, `app/api/tv/` |
+| Aniversários e tempo de casa | `app/celebrations-card.tsx`, aviso em `app/jobs.ts` |
+| Regras dos recursos acima (puras, testadas) | `app/team-tools.ts` |
 | Pessoas, times e ausências | `app/people-view.tsx`, `app/absences*.ts(x)` |
 | Painel da liderança, relatório do mês e qualidade | `app/leadership-*.tsx`, `app/monthly-report*.ts(x)`, `app/support-quality*.ts(x)` |
 | Modo escuro | `app/theme*.ts(x)`, `app/dark-theme.css` (gerado) |
@@ -54,12 +57,12 @@ O GitHub roda typecheck, lint, testes e build a cada envio (`.github/workflows/c
 
 ## Banco de dados e migrações
 
-- O esquema fica em `db/schema.ts`. As migrações ficam em `drizzle/` (`0000` a `0025`), com o registro em `drizzle/meta/_journal.json`.
+- O esquema fica em `db/schema.ts`. As migrações ficam em `drizzle/` (`0000` a `0026`), com o registro em `drizzle/meta/_journal.json`.
 - **No site publicado, o Sites aplica as migrações novas a cada publicação.**
 - No computador, aplique cada migração nova uma vez:
 
 ```bash
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0025_extras.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0026_team_tools.sql
 ```
 
 ## Segurança
@@ -82,7 +85,7 @@ node scripts/build-dark-theme.mjs
 ## Observações
 
 - O nome do pacote (`site-creator-vinext-starter` no `package.json`) é usado como nome do Worker na hospedagem. Ele não foi trocado de propósito, para não mudar a identidade do site publicado.
-- As rotinas automáticas (busca no Jira, aviso de chamados atrasados, lembretes da agenda, demandas que se repetem) rodam enquanto alguém da equipe está com o Portal aberto.
+- As rotinas automáticas (busca no Jira, aviso de chamados atrasados, lembretes da agenda, demandas que se repetem, aniversários e tempo de casa) rodam enquanto alguém da equipe está com o Portal aberto.
 - Chamados novos do time "Suporte" vão sozinhos para quem está na escala da semana (quem tem menos chamados abertos; ausentes ficam de fora). Os nomes da escala são ligados às pessoas do Portal pelo nome; nomes ambíguos são ignorados.
 - O link da agenda para o Outlook é pessoal e secreto; o banco guarda só o resumo (hash). Desligar ou gerar outro link na Agenda invalida o anterior.
 - Detalhes técnicos do ambiente Sites (perfis de execução, pré-visualização, publicação) estão em `docs/ambiente-sites.md`.

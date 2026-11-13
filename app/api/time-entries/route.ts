@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { members, tasks, timeEntries } from "../../../db/schema";
+import { members, tasks, taskTimers, timeEntries } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, taskCode } from "../../tasks";
@@ -36,6 +36,35 @@ function recomputeTask(db: Db, taskId: number) {
   }).where(eq(tasks.id, taskId));
 }
 
+/** Grava um lançamento (respeitando o limite do dia) e recalcula o total da demanda. Devolve o erro ou o resultado. */
+async function logHours(db: Db, input: { taskId: number; personId: number; workDate: string; hours: number; note: string; createdById: number }, stopTimer = false) {
+  const [task] = await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(eq(tasks.id, input.taskId)).limit(1);
+  if (!task) return { error: "Demanda não encontrada.", status: 404 } as const;
+  const [person] = await db.select({ id: members.id, name: members.name, active: members.active }).from(members).where(eq(members.id, input.personId)).limit(1);
+  if (!person || !person.active) return { error: "Escolha uma pessoa ativa.", status: 400 } as const;
+  const [day] = await db.select({ total: sql<number>`coalesce(sum(${timeEntries.hours}), 0)` }).from(timeEntries).where(and(eq(timeEntries.memberId, person.id), eq(timeEntries.workDate, input.workDate)));
+  const already = Number(day?.total ?? 0);
+  if (already + input.hours > MAX_HOURS_PER_DAY) return { error: `${person.name} já tem ${formatHours(already)} lançadas neste dia. O limite é ${MAX_HOURS_PER_DAY} h por dia.`, status: 400 } as const;
+  // Lançamento, novo total (e, no cronômetro, a parada) na mesma transação.
+  const insert = db.insert(timeEntries).values({ taskId: input.taskId, memberId: person.id, memberName: person.name, workDate: input.workDate, hours: input.hours, note: input.note, createdById: input.createdById, createdAt: new Date().toISOString() }).returning();
+  const [inserted] = stopTimer
+    ? await db.batch([insert, recomputeTask(db, input.taskId), db.delete(taskTimers).where(eq(taskTimers.memberId, input.personId))])
+    : await db.batch([insert, recomputeTask(db, input.taskId)]);
+  const [updated] = await db.select({ workedHours: tasks.workedHours, baseHours: tasks.baseHours }).from(tasks).where(eq(tasks.id, input.taskId)).limit(1);
+  return { entry: inserted[0], task: updated, message: `${formatHours(input.hours)} lançadas em ${taskCode(input.taskId)}.` } as const;
+}
+
+/** Cronômetro rodando da pessoa (null se nenhum; null também se a migração ainda não foi aplicada). */
+async function myTimer(db: Db, memberId: number) {
+  try {
+    const [row] = await db.select({ taskId: taskTimers.taskId, startedAt: taskTimers.startedAt, title: tasks.title }).from(taskTimers).innerJoin(tasks, eq(taskTimers.taskId, tasks.id)).where(eq(taskTimers.memberId, memberId)).limit(1);
+    return row ?? null;
+  } catch (error) {
+    console.error("timer load failed", error);
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const db = getDb();
@@ -44,6 +73,7 @@ export async function GET(request: Request) {
     if (!member.active) return json({ error: "Seu acesso ao sistema está desativado." }, 403);
 
     const params = new URL(request.url).searchParams;
+    if (params.has("timer")) return json({ timer: await myTimer(db, member.id) });
     const taskId = Number(params.get("taskId"));
     const from = isoDate(params.get("from"));
     const to = isoDate(params.get("to"));
@@ -90,24 +120,36 @@ export async function POST(request: Request) {
       const dateError = entryDateError(workDate, todayInSaoPaulo());
       if (dateError) return json({ error: dateError }, 400);
       if (personId !== member.id && !isAdmin) return json({ error: "Você só pode lançar as suas próprias horas." }, 403);
+      const result = await logHours(db, { taskId, personId, workDate, hours, note, createdById: member.id });
+      if ("error" in result) return json({ error: result.error }, result.status);
+      return json({ entry: { ...result.entry, canDelete: true }, task: result.task, message: result.message }, 201);
+    }
 
-      const [task] = await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    // Cronômetro: um por pessoa. Ao parar, vira um lançamento de hoje (horas conferidas pela pessoa).
+    if (action === "startTimer") {
+      const taskId = Number(body.taskId);
+      const [task] = taskId ? await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(eq(tasks.id, taskId)).limit(1) : [];
       if (!task) return json({ error: "Demanda não encontrada." }, 404);
-      const [person] = await db.select({ id: members.id, name: members.name, active: members.active }).from(members).where(eq(members.id, personId)).limit(1);
-      if (!person || !person.active) return json({ error: "Escolha uma pessoa ativa." }, 400);
+      const running = await myTimer(db, member.id);
+      if (running && running.taskId !== taskId) return json({ error: `Você já tem um cronômetro rodando em ${taskCode(running.taskId)}. Pare ele antes de começar outro.`, timer: running }, 409);
+      if (running) return json({ timer: running });
+      await db.insert(taskTimers).values({ memberId: member.id, taskId, startedAt: new Date().toISOString() }).onConflictDoNothing();
+      return json({ timer: await myTimer(db, member.id) }, 201);
+    }
 
-      const [day] = await db.select({ total: sql<number>`coalesce(sum(${timeEntries.hours}), 0)` }).from(timeEntries).where(and(eq(timeEntries.memberId, person.id), eq(timeEntries.workDate, workDate)));
-      const already = Number(day?.total ?? 0);
-      if (already + hours > MAX_HOURS_PER_DAY) return json({ error: `${person.name} já tem ${formatHours(already)} lançadas neste dia. O limite é ${MAX_HOURS_PER_DAY} h por dia.` }, 400);
+    if (action === "stopTimer") {
+      const running = await myTimer(db, member.id);
+      if (!running) return json({ error: "Nenhum cronômetro rodando." }, 404);
+      const hours = parseEntryHours(body.hours);
+      if (hours === null) return json({ error: `Confira as horas: por exemplo 1,5 ou 1:30 (até ${MAX_HOURS_PER_DAY} h).` }, 400);
+      const result = await logHours(db, { taskId: running.taskId, personId: member.id, workDate: todayInSaoPaulo(), hours, note: cleanMultiline(body.note, MAX_ENTRY_NOTE), createdById: member.id }, true);
+      if ("error" in result) return json({ error: result.error }, result.status);
+      return json({ entry: { ...result.entry, canDelete: true }, task: result.task, message: result.message, timer: null });
+    }
 
-      // Lançamento e novo total na mesma transação.
-      const [inserted] = await db.batch([
-        db.insert(timeEntries).values({ taskId, memberId: person.id, memberName: person.name, workDate, hours, note, createdById: member.id, createdAt: new Date().toISOString() }).returning(),
-        recomputeTask(db, taskId),
-      ]);
-      const entry = inserted[0];
-      const [updated] = await db.select({ workedHours: tasks.workedHours, baseHours: tasks.baseHours }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
-      return json({ entry: { ...entry, canDelete: true }, task: updated, message: `${formatHours(hours)} lançadas em ${taskCode(taskId)}.` }, 201);
+    if (action === "discardTimer") {
+      await db.delete(taskTimers).where(eq(taskTimers.memberId, member.id));
+      return json({ timer: null });
     }
 
     if (action === "deleteEntry") {

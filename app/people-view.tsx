@@ -8,6 +8,8 @@ import Plus from "lucide-react/icons/plus";
 import Search from "lucide-react/icons/search";
 import Trash2 from "lucide-react/icons/trash-2";
 import Users from "lucide-react/icons/users";
+import Cake from "lucide-react/icons/cake";
+import BriefcaseBusiness from "lucide-react/icons/briefcase-business";
 import X from "lucide-react/icons/x";
 import { Avatar, TeamChip } from "./tasks-view";
 import { teamColorLabels, teamColors, type TeamColor } from "./teams";
@@ -15,7 +17,15 @@ import AbsencesView from "./absences-view";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
 
-export type Person = { id: number; name: string; email: string; role: "admin" | "member" | "viewer"; active: boolean; avatarIcon: string; avatarKey: string | null; jobTitle: string; phone: string };
+export type Person = { id: number; name: string; email: string; role: "admin" | "member" | "viewer"; active: boolean; avatarIcon: string; avatarKey: string | null; jobTitle: string; phone: string; birthday?: string | null; startedOn?: string | null };
+
+const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const birthdayLabel = (value: string) => `${Number(value.slice(3))} de ${MONTHS[Number(value.slice(0, 2)) - 1]}`;
+function yearsSince(startedOn: string, today: string) {
+  let years = Number(today.slice(0, 4)) - Number(startedOn.slice(0, 4));
+  if (today.slice(5) < startedOn.slice(5)) years -= 1;
+  return years;
+}
 export type Team = { id: number; name: string; color: TeamColor; description: string; members: { memberId: number; isLead: boolean }[] };
 type PeopleData = { people: Person[]; teams: Team[]; me: { id: number; isAdmin: boolean } };
 
@@ -103,6 +113,7 @@ export default function PeopleView({ initialSearch = "" }: { initialSearch?: str
               <a href={`mailto:${person.email}`}><Mail size={13} />{person.email}</a>
               {person.phone && <a href={`tel:${person.phone.replace(/[^\d+]/g, "")}`}><Phone size={13} />{person.phone}</a>}
             </div>
+            {(person.birthday || person.startedOn) && <p className="person-dates">{person.birthday && <span><Cake size={12} /> {birthdayLabel(person.birthday)}</span>}{person.startedOn && <span><BriefcaseBusiness size={12} /> {(() => { const years = yearsSince(person.startedOn, today); return years >= 1 ? `${years} ${years === 1 ? "ano" : "anos"} de casa` : "Chegou este ano"; })()}</span>}</p>}
           </article>;
         })}
       </div> : <div className="empty-state compact"><Search /><h3>Ninguém encontrado</h3><p>Ajuste a busca ou o filtro de time.</p></div>
@@ -130,6 +141,9 @@ function PersonModal({ person, teams, isAdmin, currentTeamIds, onClose, onSaved 
   const [jobTitle, setJobTitle] = useState(person.jobTitle);
   const [phone, setPhone] = useState(person.phone);
   const [teamIds, setTeamIds] = useState<number[]>(currentTeamIds);
+  const [birthDay, setBirthDay] = useState(person.birthday ? String(Number(person.birthday.slice(3))) : "");
+  const [birthMonth, setBirthMonth] = useState(person.birthday ? String(Number(person.birthday.slice(0, 2))) : "");
+  const [startedOn, setStartedOn] = useState(person.startedOn ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -138,7 +152,9 @@ function PersonModal({ person, teams, isAdmin, currentTeamIds, onClose, onSaved 
     setSaving(true);
     setError("");
     try {
-      await post({ action: "updatePerson", memberId: person.id, jobTitle, phone, ...(isAdmin ? { teamIds } : {}) });
+      if (Boolean(birthDay) !== Boolean(birthMonth)) throw new Error("Escolha o dia e o mês do aniversário (ou deixe os dois vazios).");
+      const birthday = birthDay && birthMonth ? `${birthMonth.padStart(2, "0")}-${birthDay.padStart(2, "0")}` : null;
+      await post({ action: "updatePerson", memberId: person.id, jobTitle, phone, birthday, startedOn: startedOn || null, ...(isAdmin ? { teamIds } : {}) });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar.");
@@ -151,6 +167,9 @@ function PersonModal({ person, teams, isAdmin, currentTeamIds, onClose, onSaved 
     <div className="form-grid">
       <label><span>Cargo</span><input autoFocus maxLength={60} value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="Ex.: Analista de Suporte" /></label>
       <label><span>Telefone ou ramal</span><input maxLength={30} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Ex.: (11) 98765-4321" inputMode="tel" /></label>
+      <label><span>Aniversário <em>opcional, sem o ano</em></span><span className="birthday-pick"><select aria-label="Dia" value={birthDay} onChange={(event) => setBirthDay(event.target.value)}><option value="">Dia</option>{Array.from({ length: 31 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select><select aria-label="Mês" value={birthMonth} onChange={(event) => setBirthMonth(event.target.value)}><option value="">Mês</option>{MONTHS.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}</select></span></label>
+      <label><span>Na empresa desde <em>opcional</em></span><input type="date" max={new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())} value={startedOn} onChange={(event) => setStartedOn(event.target.value)} /></label>
+      <p className="full form-hint">A equipe recebe um aviso no sino no dia do aniversário e quando você completa mais um ano de casa.</p>
       {isAdmin && <div className="full generate-teams"><span className="field-label">Times</span><div>{teams.map((team) => <label key={team.id} className={`generate-team ${team.color}`}><input type="checkbox" checked={teamIds.includes(team.id)} onChange={(event) => setTeamIds((current) => event.target.checked ? [...current, team.id] : current.filter((id) => id !== team.id))} /><i />{team.name}</label>)}</div><small className="form-hint">Para definir quem lidera, edite o time na aba Times.</small></div>}
     </div>
     {error && <p className="modal-error">{error}</p>}

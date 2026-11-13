@@ -40,6 +40,8 @@ export type Task = {
   support: number[];
   codes: string[];
   checklist: { done: number; total: number } | null;
+  /** Quantas demandas das quais esta depende ainda não terminaram. */
+  waitingOn?: number;
 };
 
 type TaskMember = { id: number; name: string; avatarIcon: string; avatarKey: string | null };

@@ -18,6 +18,9 @@ import Pencil from "lucide-react/icons/pencil";
 import { checklistProgress, type ChecklistItem } from "./checklists";
 import Clock from "lucide-react/icons/clock";
 import { formatHours, parseEntryHours, type TimeEntry } from "./time-entries";
+import { TimerControl } from "./task-timer";
+import Link2 from "lucide-react/icons/link-2";
+import Lock from "lucide-react/icons/lock";
 import { type Task, type TaskClient, type Me, type TaskEvent, type Lookups, relativeTime, fullDate, postTask, StatusIcon, PriorityIcon, Avatar, DueChip, PeoplePicker, MentionTextarea } from "./task-shared";
 
 type Fields = Pick<Task, "status" | "priority" | "owners" | "support" | "teamId" | "clientId" | "projectId" | "category" | "startDate" | "dueDate" | "completedOn" | "estimatedHours" | "origin">;
@@ -122,21 +125,25 @@ export function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defa
   </div>;
 }
 
-export function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDeleted, onCommented }: { task: Task; lookups: Lookups; me: Me; today: string; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onDeleted: () => void; onCommented: () => Promise<void> }) {
+type DepTask = { id: number; title: string; status: TaskStatus };
+type Dependencies = { blockedBy: DepTask[]; blocking: DepTask[] };
+
+export function TaskDrawer({ task, allTasks = [], onOpenTask, lookups, me, today, onClose, onUpdate, onDeleted, onCommented }: { task: Task; allTasks?: Pick<Task, "id" | "title" | "status">[]; onOpenTask?: (taskId: number) => void; lookups: Lookups; me: Me; today: string; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onDeleted: () => void; onCommented: () => Promise<void> }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [notes, setNotes] = useState(task.notes);
   const [events, setEvents] = useState<TaskEvent[] | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [recurrence, setRecurrence] = useState<Recurrence | null | undefined>(undefined);
+  const [dependencies, setDependencies] = useState<Dependencies | null>(null);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
   const loadEvents = useCallback(async () => {
     const response = await fetch(`/api/tasks?taskId=${task.id}`, { cache: "no-store" });
-    const data = await response.json() as { events?: TaskEvent[]; checklist?: ChecklistItem[]; recurrence?: Recurrence | null; error?: string };
-    if (response.ok && data.events) { setEvents(data.events); setChecklist(data.checklist ?? []); setRecurrence(data.recurrence ?? null); } else setError(data.error || "Não foi possível carregar a atividade.");
+    const data = await response.json() as { events?: TaskEvent[]; checklist?: ChecklistItem[]; recurrence?: Recurrence | null; dependencies?: Dependencies; error?: string };
+    if (response.ok && data.events) { setEvents(data.events); setChecklist(data.checklist ?? []); setRecurrence(data.recurrence ?? null); setDependencies(data.dependencies ?? { blockedBy: [], blocking: [] }); } else setError(data.error || "Não foi possível carregar a atividade.");
   }, [task.id]);
 
   // Recarrega a atividade quando a demanda muda (status, responsáveis...).
@@ -221,6 +228,8 @@ export function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDele
 
           {recurrence !== undefined && <RecurrencePanel key={`${task.id}-${recurrence?.nextOn ?? "none"}`} taskId={task.id} recurrence={recurrence} canEdit={me.canEdit} onChanged={(value) => { setRecurrence(value); void loadEvents(); }} />}
 
+          {dependencies && <DependenciesPanel task={task} dependencies={dependencies} allTasks={allTasks} canEdit={me.canEdit} onOpenTask={onOpenTask} onChanged={(value) => { setDependencies(value); void loadEvents(); void onCommented(); }} />}
+
           <TimeLog task={task} me={me} lookups={lookups} today={today} onSaveBase={(baseHours) => save({ baseHours })} onChanged={onCommented} />
 
           <AttachmentsPanel ownerType="task" ownerId={task.id} />
@@ -249,6 +258,56 @@ export function TaskDrawer({ task, lookups, me, today, onClose, onUpdate, onDele
       </div>
     </aside>
   </div>;
+}
+
+const finishedStatus = (status: TaskStatus) => status === "done" || status === "canceled";
+const fold = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+
+/** "Esta só começa quando aquela terminar": do que a demanda depende e quem espera por ela. */
+function DependenciesPanel({ task, dependencies, allTasks, canEdit, onOpenTask, onChanged }: { task: Task; dependencies: Dependencies; allTasks: Pick<Task, "id" | "title" | "status">[]; canEdit: boolean; onOpenTask?: (taskId: number) => void; onChanged: (value: Dependencies) => void }) {
+  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const open = dependencies.blockedBy.filter((dep) => !finishedStatus(dep.status));
+  const taken = new Set([task.id, ...dependencies.blockedBy.map((dep) => dep.id)]);
+  const needle = fold(query.trim()).replace(/^dem-?0*/, "");
+  const options = needle ? allTasks.filter((entry) => !taken.has(entry.id) && !finishedStatus(entry.status) && (fold(entry.title).includes(needle) || String(entry.id) === needle)).slice(0, 8) : [];
+
+  async function run(payload: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await postTask(payload) as { dependencies?: Dependencies };
+      if (result.dependencies) onChanged(result.dependencies);
+      setQuery("");
+      setAdding(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const item = (dep: DepTask, remove: boolean) => <li key={dep.id} className={finishedStatus(dep.status) ? "done" : ""}>
+    <button type="button" className="dep-link" onClick={() => onOpenTask?.(dep.id)} disabled={!onOpenTask}><span className="task-code">{taskCode(dep.id)}</span><span>{dep.title}</span></button>
+    <em className={`dep-status ${dep.status}`}>{taskStatusLabels[dep.status]}</em>
+    {remove && canEdit && <button type="button" className="dep-remove" disabled={busy} onClick={() => void run({ action: "removeDependency", taskId: task.id, blockedById: dep.id })} aria-label={`Remover dependência de ${taskCode(dep.id)}`} title="Remover"><X size={12} /></button>}
+  </li>;
+
+  if (!dependencies.blockedBy.length && !dependencies.blocking.length && !canEdit) return null;
+  return <section className="dependencies">
+    <header><h3><Link2 size={14} /> Dependências</h3>{open.length > 0 && !finishedStatus(task.status) && <span className="dep-waiting"><Lock size={12} /> Aguardando {open.length === 1 ? "1 demanda" : `${open.length} demandas`}</span>}</header>
+    {dependencies.blockedBy.length > 0 && <><p className="dep-label">Só começa depois de</p><ul>{dependencies.blockedBy.map((dep) => item(dep, true))}</ul></>}
+    {dependencies.blocking.length > 0 && <><p className="dep-label">Quem espera por esta</p><ul>{dependencies.blocking.map((dep) => item(dep, false))}</ul></>}
+    {canEdit && (adding ? <div className="dep-add">
+      <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Código (DEM-0012) ou parte do título" aria-label="Buscar demanda" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setAdding(false); } }} />
+      {options.length > 0 && <ul className="dep-options">{options.map((option) => <li key={option.id}><button type="button" disabled={busy} onClick={() => void run({ action: "addDependency", taskId: task.id, blockedById: option.id })}><span className="task-code">{taskCode(option.id)}</span><span>{option.title}</span></button></li>)}</ul>}
+      {needle && !options.length && <p className="muted">Nenhuma demanda em aberto com esse código ou título.</p>}
+      <button type="button" className="link-button" onClick={() => { setAdding(false); setQuery(""); }}>Cancelar</button>
+    </div> : <button type="button" className="link-button" onClick={() => setAdding(true)}><Plus size={13} /> Depende de outra demanda</button>)}
+    {error && <p className="modal-error">{error}</p>}
+  </section>;
 }
 
 type Template = { id: number; name: string; title: string; description: string; category: string; teamId: number | null; priority: number; items: string[] };
@@ -454,6 +513,7 @@ function TimeLog({ task, me, lookups, today, onSaveBase, onChanged }: { task: Ta
       {task.baseHours !== null || me.isAdmin ? <label>Horas anteriores <input disabled={!canLog} inputMode="decimal" value={base} onChange={(event) => setBase(event.target.value)} onBlur={commitBase} placeholder="0" /> h</label> : null}
       <span>{formatHours(logged)} lançadas{entries && entries.length ? ` em ${entries.length} registro${entries.length > 1 ? "s" : ""}` : ""}</span>
     </p>
+    <TimerControl taskId={task.id} canEdit={canLog} onLogged={async (message) => { setError(""); setNotice(message); await Promise.all([load(), onChanged()]); }} />
     {canLog && people.length > 0 && <form className="time-log-form" onSubmit={add}>
       {me.isAdmin && <select aria-label="Pessoa" value={form.memberId} onChange={(event) => setForm({ ...form, memberId: event.target.value })}>{people.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select>}
       <input aria-label="Dia trabalhado" type="date" max={today} value={form.workDate} onChange={(event) => setForm({ ...form, workDate: event.target.value })} required />

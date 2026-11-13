@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, min, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { clients, members, notifications, taskEvents, taskPeople, tasks, teamMembers, teams, ticketEvents, tickets } from "../../../db/schema";
+import { clients, members, notifications, taskEvents, taskPeople, tasks, teamMembers, teams, ticketEvents, ticketReplies, tickets } from "../../../db/schema";
 import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { asTicketKind, commentRecipients, findMentions, snippet, type NotificationKind } from "../../notifications";
@@ -12,6 +12,7 @@ import { readJsonBody } from "../../api-input";
 import { removeAttachmentsOf } from "../../attachments-store";
 import { autoAssignTicket } from "../../ticket-assign";
 import { canRate, isRating, MAX_RATING_COMMENT, RATING_LABELS, stars } from "../../ticket-rating";
+import { MAX_REPLY_BODY, MAX_REPLY_TITLE } from "../../team-tools";
 
 type Db = ReturnType<typeof getDb>;
 type EventKind = (typeof ticketEvents.$inferInsert)["kind"];
@@ -32,6 +33,12 @@ function failure(error: unknown) {
 async function viewerOf(db: Db, member: SessionMember) {
   const rows = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.memberId, member.id));
   return { id: member.id, isAdmin: member.role === "admin", canEdit: member.active && member.role !== "viewer", teamIds: rows.map((row) => row.teamId) };
+}
+
+/** Quem altera uma resposta pronta: quem criou, administradores e, se for de um time, quem é do time. */
+function canManageReply(viewer: { id: number; isAdmin: boolean; canEdit: boolean; teamIds: number[] }, reply: { createdById: number | null; teamId: number | null }) {
+  if (!viewer.canEdit) return false;
+  return viewer.isAdmin || reply.createdById === viewer.id || (reply.teamId !== null && viewer.teamIds.includes(reply.teamId));
 }
 
 async function teamRecipients(db: Db, teamId: number | null) {
@@ -73,8 +80,16 @@ export async function GET(request: Request) {
     ]);
     const commentCount = new Map<number, number>();
     for (const row of commentRows) commentCount.set(row.ticketId, (commentCount.get(row.ticketId) ?? 0) + 1);
+    // Respostas prontas (vazio se a migração ainda não foi aplicada).
+    let replies: { id: number; title: string; body: string; teamId: number | null; createdByName: string; canEdit: boolean }[] = [];
+    try {
+      const rows = await db.select().from(ticketReplies).orderBy(asc(ticketReplies.title));
+      replies = rows.map((reply) => ({ id: reply.id, title: reply.title, body: reply.body, teamId: reply.teamId, createdByName: reply.createdByName, canEdit: canManageReply(viewer, reply) }));
+    } catch (error) {
+      console.error("ticket replies load failed", error);
+    }
 
-    return json({ tickets: ticketRows.map((ticket) => ({ ...ticket, commentCount: commentCount.get(ticket.id) ?? 0 })), members: memberRows, teams: teamRows, me: viewer });
+    return json({ tickets: ticketRows.map((ticket) => ({ ...ticket, commentCount: commentCount.get(ticket.id) ?? 0 })), members: memberRows, teams: teamRows, me: viewer, replies });
   } catch (error) {
     return failure(error);
   }
@@ -123,6 +138,37 @@ export async function POST(request: Request) {
       // Suporte: vai para quem está de plantão na semana (com menos chamados abertos).
       const assigned = await autoAssignTicket(db, ticket.id);
       return json({ ticket: assigned ? { ...ticket, assigneeId: assigned } : ticket }, 201);
+    }
+
+    // Respostas prontas: do time (só quem é do time usa e edita) ou de todos.
+    if (action === "saveReply") {
+      const replyId = Number(body.replyId) || 0;
+      const title = cleanTitle(body.title).slice(0, MAX_REPLY_TITLE);
+      const text = cleanMultiline(body.body, MAX_REPLY_BODY);
+      const teamId = Number(body.teamId) || null;
+      if (!title || !text) return json({ error: "Dê um nome e escreva o texto da resposta." }, 400);
+      if (teamId) {
+        const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).limit(1);
+        if (!team) return json({ error: "Escolha um time válido." }, 400);
+        if (!viewer.isAdmin && !viewer.teamIds.includes(teamId)) return json({ error: "Você só cria respostas para os seus times (ou para todos)." }, 403);
+      }
+      if (replyId) {
+        const [existing] = await db.select().from(ticketReplies).where(eq(ticketReplies.id, replyId)).limit(1);
+        if (!existing) return json({ error: "Resposta não encontrada." }, 404);
+        if (!canManageReply(viewer, existing)) return json({ error: "Só quem criou, o time da resposta ou um administrador pode alterar." }, 403);
+        const [reply] = await db.update(ticketReplies).set({ title, body: text, teamId, updatedAt: now }).where(eq(ticketReplies.id, replyId)).returning();
+        return json({ reply });
+      }
+      const [reply] = await db.insert(ticketReplies).values({ title, body: text, teamId, createdById: member.id, createdByName: member.name, createdAt: now, updatedAt: now }).returning();
+      return json({ reply }, 201);
+    }
+
+    if (action === "deleteReply") {
+      const [existing] = await db.select().from(ticketReplies).where(eq(ticketReplies.id, Number(body.replyId))).limit(1);
+      if (!existing) return json({ error: "Resposta não encontrada." }, 404);
+      if (!canManageReply(viewer, existing)) return json({ error: "Só quem criou, o time da resposta ou um administrador pode excluir." }, 403);
+      await db.delete(ticketReplies).where(eq(ticketReplies.id, existing.id));
+      return json({ ok: true });
     }
 
     const ticketId = Number(body.ticketId);

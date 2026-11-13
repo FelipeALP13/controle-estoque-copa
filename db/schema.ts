@@ -67,6 +67,10 @@ export const members = sqliteTable("members", {
   phone: text("phone").notNull().default(""),
   /** Resumo (hash) do link secreto da agenda para o Outlook; o link em si não fica guardado. */
   calendarTokenHash: text("calendar_token_hash"),
+  /** Aniversário sem o ano ("MM-DD"), opcional. */
+  birthday: text("birthday"),
+  /** Data de entrada na empresa (AAAA-MM-DD), para o tempo de casa. */
+  startedOn: text("started_on"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -465,7 +469,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
@@ -516,3 +520,52 @@ export const taskRecurrences = sqliteTable("task_recurrences", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [uniqueIndex("task_recurrences_source_unique").on(table.sourceTaskId), index("task_recurrences_next_idx").on(table.active, table.nextOn)]);
+
+/** Respostas prontas dos chamados (do time ou de todos), inseridas no comentário com um clique. */
+export const ticketReplies = sqliteTable("ticket_replies", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/** Cronômetro de horas: no máximo um rodando por pessoa. Ao parar, vira um lançamento de horas. */
+export const taskTimers = sqliteTable("task_timers", {
+  memberId: integer("member_id").primaryKey().references(() => members.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  startedAt: text("started_at").notNull(),
+});
+
+/** Dependências: a demanda (taskId) só começa quando a outra (blockedById) terminar. */
+export const taskDependencies = sqliteTable("task_dependencies", {
+  taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  blockedById: integer("blocked_by_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [primaryKey({ columns: [table.taskId, table.blockedById] }), index("task_dependencies_blocker_idx").on(table.blockedById)]);
+
+/** Passagem de plantão: o que a equipe que sai deixa para a que entra. */
+export const handoffs = sqliteTable("handoffs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  weekId: integer("week_id").references(() => supportWeeks.id, { onDelete: "set null" }),
+  teamName: text("team_name").notNull().default(""),
+  body: text("body").notNull(),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const handoffReads = sqliteTable("handoff_reads", {
+  handoffId: integer("handoff_id").notNull().references(() => handoffs.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  readAt: text("read_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.handoffId, table.memberId] })]);
+
+/** Avisos de aniversário e tempo de casa já enviados (um por pessoa e ano). */
+export const celebrationAlerts = sqliteTable("celebration_alerts", {
+  key: text("key").primaryKey(),
+  sentAt: text("sent_at").notNull(),
+});
