@@ -13,6 +13,7 @@ import UserPlus from "lucide-react/icons/user-plus";
 import Volume2 from "lucide-react/icons/volume-2";
 import VolumeX from "lucide-react/icons/volume-x";
 import X from "lucide-react/icons/x";
+import Star from "lucide-react/icons/star";
 import { notificationText, type NotificationKind } from "./notifications";
 import AlarmClock from "lucide-react/icons/alarm-clock";
 import { dueState, taskCode } from "./tasks";
@@ -26,7 +27,7 @@ type DueTask = { id: number; title: string; dueDate: string };
 type Data = { items: Item[]; unread: number; due: DueTask[] };
 
 
-const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus } as const;
+const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star } as const;
 
 function subject(item: Item) {
   if (item.ticketId) return `${ticketCode(item.ticketId)} · ${item.ticketTitle ?? "Chamado"}`;

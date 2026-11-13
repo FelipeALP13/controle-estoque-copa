@@ -8,6 +8,7 @@ import { normalizeJiraUrl } from "../../jira";
 import { jiraFetch, syncConnection, syncDue } from "../../jira-sync";
 import { sealSecret } from "../../secret-key";
 import { runJobs } from "../../jobs";
+import { readJsonBody } from "../../api-input";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -74,7 +75,8 @@ export async function POST(request: Request) {
     const db = getDb();
     const member = await getSessionMember(db);
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const isAdmin = member.role === "admin";
 

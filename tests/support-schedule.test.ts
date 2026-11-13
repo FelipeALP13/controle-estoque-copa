@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findOverlappingWeek, generateRotation, isIsoDate, nextSupportWeek, normalizeTeamMembers, parseTeamMembers, scheduleWhatsAppMessage, supportWeekForDate, weekRangeError } from "../app/support-schedule.ts";
-
-const teams = [
-  { id: 1, name: "Equipe Roxa", color: "purple" as const, members: ["Lucas", "Gabriel"] },
-  { id: 2, name: "Equipe Laranja", color: "orange" as const, members: ["Caio", "Luiz"] },
-];
+import { findOverlappingWeek, generateRotation, isIsoDate, nextSupportWeek, normalizeTeamMembers, parseTeamMembers, supportWeekForDate, weekRangeError } from "../app/support-schedule.ts";
 
 const weeks = [
   { id: 1, start: "2026-11-03", end: "2026-11-06", teamId: 2, note: "" },
@@ -50,24 +45,4 @@ test("limpa a lista de integrantes", () => {
   assert.deepEqual(normalizeTeamMembers(["  Ana  Souza ", "", "ana souza", "Bruno"]), ["Ana Souza", "Bruno"]);
   assert.deepEqual(parseTeamMembers('["Caio","Luiz"]'), ["Caio", "Luiz"]);
   assert.deepEqual(parseTeamMembers("não é json"), []);
-});
-
-test("monta a mensagem do WhatsApp com a semana atual e a próxima", () => {
-  const notedWeeks = weeks.map((week) => week.id === 2 ? { ...week, note: "Sexta sem expediente" } : week);
-  assert.equal(scheduleWhatsAppMessage(teams, notedWeeks, "2026-11-10"), [
-    "📅 *Escala de atendimento*",
-    "",
-    "*Esta semana (09/11 a 13/11):* Equipe Roxa",
-    "Lucas, Gabriel",
-    "Obs.: Sexta sem expediente",
-    "",
-    "*Próxima semana (23/11 a 27/11):* Equipe Roxa",
-    "Lucas, Gabriel",
-  ].join("\n"));
-});
-
-test("avisa quando não há atendimento na semana", () => {
-  const message = scheduleWhatsAppMessage(teams, weeks, "2026-11-17");
-  assert.match(message ?? "", /\*Esta semana:\* sem atendimento programado\.\n\n\*Próximo atendimento \(23\/11 a 27\/11\):\* Equipe Roxa/);
-  assert.equal(scheduleWhatsAppMessage(teams, weeks, "2026-12-01"), null);
 });

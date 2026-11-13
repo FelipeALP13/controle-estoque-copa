@@ -5,6 +5,7 @@ import { getSessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanPhone, cleanText, isTeamColor, normalizeMembership } from "../../teams";
+import { readJsonBody } from "../../api-input";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -49,7 +50,8 @@ export async function POST(request: Request) {
     const member = await getSessionMember(db);
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
     const isAdmin = member.role === "admin";
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const audit = (action: string, targetId: number, details: string) => writeAudit(db, { actorUserId: member.userId, actorName: member.name, action, targetType: "team", targetId, details }).catch((error) => console.error("audit log failed", error));
 

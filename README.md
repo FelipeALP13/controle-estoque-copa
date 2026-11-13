@@ -1,133 +1,88 @@
-# vinext-starter
+# Portal da Equipe
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+Sistema interno da equipe (Suporte, Desenvolvimento e Liderança): demandas, chamados entre os times, agenda, escala de atendimento, projetos, base de conhecimento, estoque da copa e diretório de pessoas.
 
-## Prerequisites
+Roda como um Cloudflare Worker publicado pelo **Sites**, com banco D1 (SQLite) e armazenamento R2. Cada pessoa entra com o próprio usuário e senha.
 
-- Node.js `>=22.13.0`
-- Portable: Windows, macOS, or Linux; no Bash required
-- Managed Linux: managed Linux runtime with Bash, `flock`, `curl`, `sha256sum`, and GNU `timeout`
-- Git and `tar` (including Windows `tar.exe`) are required for publishing; portable publication does not require Bash
+## O que tem
 
-## Sites Lifecycle
+| Área | Onde fica |
+| --- | --- |
+| Visão geral (resumo do dia, mural, minha agenda de hoje) | `app/hub-view.tsx` |
+| Minha agenda (anotações e reuniões no Teams, lembretes, repetição, link para o Outlook) | `app/agenda-view.tsx`, `app/agenda.ts`, `app/ics.ts`, `app/api/agenda/` |
+| Meu dia (resumo ao abrir o Portal) | `app/my-day.tsx` |
+| Calendário (prazos, ausências, escala, projetos, agenda) | `app/calendar-view.tsx`, `app/calendar.ts` |
+| Demandas (quadro, lista, checklist, horas, modelos, repetição) | `app/tasks-view.tsx`, `app/task-drawer.tsx`, `app/task-shared.tsx`, `app/task-recurrence*.ts`, `app/api/tasks/` |
+| Chamados (SLA, Jira, atribuição pela escala, avaliação) | `app/tickets-view.tsx`, `app/jira*.ts`, `app/ticket-assign.ts`, `app/ticket-routing.ts`, `app/ticket-rating*.ts(x)`, `app/api/tickets/` |
+| Anexos de demandas e chamados | `app/attachments*.ts(x)`, `app/api/attachments/` |
+| Projetos (lista e linha do tempo) | `app/projects-view.tsx`, `app/project-timeline.ts`, `app/api/projects/` |
+| Base de conhecimento e mural | `app/knowledge-view.tsx`, `app/notice-board.tsx` |
+| Escala de atendimento | `app/schedule-view.tsx`, `app/support-schedule.ts` |
+| Pessoas, times e ausências | `app/people-view.tsx`, `app/absences*.ts(x)` |
+| Painel da liderança, relatório do mês e qualidade | `app/leadership-*.tsx`, `app/monthly-report*.ts(x)`, `app/support-quality*.ts(x)` |
+| Modo escuro | `app/theme*.ts(x)`, `app/dark-theme.css` (gerado) |
+| Estoque da copa (saldos, lista de compras automática, previsão de consumo) | `app/stock-views.tsx`, `app/stock-forecast.ts`, `app/shopping-list.tsx`, `app/api/inventory/` |
+| Usuários, permissões, histórico e cópia de segurança | `app/team-view.tsx`, `app/admin-view.tsx`, `app/api/admin/` |
+| Sino de avisos (som, aviso na tela e no sistema) | `app/notifications-bell.tsx`, `app/notify-sound.ts` |
+| Login e sessões (renovação, 7 dias sem uso, encerrar aparelhos) | `app/auth-session.ts`, `app/session-policy.ts`, `app/sessions-panel.tsx` |
+| Instalar como app (PWA) | `public/manifest.webmanifest`, `public/sw.js`, `app/pwa-register.tsx` |
 
-The Sites initializer copies the shared starter and selects managed-linux only when `SITES_MANAGED_LINUX_CONTAINER=1`; otherwise it selects portable. It saves the selection only in ignored `.sites-runtime/execution-profile.json`. Both profiles copy/configure first, then use the plugin's separate `install-dependencies.mjs` step to measure installation independently. Edit source under `app/` and follow the Sites skill for installation, preview, builds, and publishing.
+A tela principal (`app/dashboard-client.tsx`) monta o menu e troca entre essas áreas. Tipos e utilidades comuns ficam em `app/dashboard-shared.tsx`.
 
-Run `node <plugin-root>/scripts/configure-execution-profile.mjs` only when the profile is unknown for the current checkout and environment. Profile changes do not alter tracked source or require reinstalling otherwise-valid dependencies; restart an existing preview to use the new selection. Do not commit or upload `.sites-runtime/`.
+## Rodar no computador
 
-This starter does not use `wrangler.jsonc`.
+Requisito: Node.js 22.13 ou mais novo.
 
-Publish archives outside the source checkout or under its ignored `outputs/` directory. Local `.env*`, `.dev.vars*`, TypeScript build state, and tool runtime directories are ignored; keep the hosting manifest, migrations, and authored scripts in source control.
-
-`install:ci` runs `npm ci` once against the shared lockfile, disables parent-workspace discovery, and includes required dev/optional dependencies despite production/omit settings. Sharp defaults to prebuilt binaries unless explicitly configured otherwise. Do not overlap installers.
-
-- **Portable:** Preserve host HOME, npm cache, registry, proxy, temporary paths, retry/concurrency settings, and lifecycle-script policy. Use `--prefer-offline --no-audit --no-fund`.
-- **Managed Linux:** Use the existing project-local HOME/cache/tmp setup and Linux install lock, tarball preflight, and timeout. Restore the image-seeded npm cache only when its lockfile hash matches; retain network fallback. Builds keep their existing timeout. These helpers are not invoked by the portable profile.
-
-`scripts/sites-env.mjs` preserves the caller's HOME, npm cache, proxy, XDG, and temporary-directory configuration while defaulting Wrangler and Miniflare state to the checkout. If npm reports an unwritable cache, select a writable path with `npm_config_cache` for that install. The `dev` and `start` scripts also keep Wrangler logs inside the checkout. Generated `.sites-runtime/` and `.wrangler/` directories are disposable and ignored by Git.
-
-On portable, `npm run dev` uses `vinext dev` with HMR, starting at port 5173. Vinext records the running server in ignored `.vinext/` state, rejects an ordinary duplicate launch, and recovers stale state after a stopped process; exactly simultaneous starts can race. Pass `--port <port>` or `--hostname <host>` after `npm run dev --` when needed; keep portable previews on loopback.
-
-For managed Linux browser QA, follow the Sites skill's managed preview reference. The daemon runs the project's Vite dev script with `--host 0.0.0.0 --port 4173 --strictPort`; use the CLI's returned URL. The ignored local profile survives the daemon's cleared environment.
-
-The portable profile simulates ChatGPT sign-in only for loopback development requests. Visit `/signin-with-chatgpt?return_to=/` to sign in as `local_seedy` (`seedy@sites.test`, display name `Seedy`) and `/signout-with-chatgpt?return_to=/` to sign out. The development cookie preserves that identity across server restarts. Mock auth is disabled in the managed-linux profile and is not included in production builds; hosted authentication remains dispatch-owned.
-
-The Worker uses `vinext/server/fetch-handler`, including Vinext's config-aware image handling. After building, `npm start` runs that Worker locally through Wrangler on `127.0.0.1`, sharing `.wrangler/state` with dev preview and local D1 migrations; it does not deploy the site or simulate sign-in. Use the URL printed by the server. Pass `npm start -- --port <port>` to select a different built-preview port.
-
-Local previews use Miniflare's placeholder `Request.cf` metadata without a network lookup. Set `CLOUDFLARE_CF_FETCH_ENABLED=true` to opt into fetching preview metadata; this setting does not change hosted request metadata.
-
-Local tool usage metrics are disabled by default. Set `WRANGLER_SEND_METRICS=true` to opt in.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `worker/index.ts` is the production Worker entrypoint and preserves request-scoped connector bindings
-- `scripts/vite/` contains the maintained Vite integrations and the vendored Sites plugin license
-- `scripts/connector-preview/` contains the local connector preview Worker and session helpers
-- the remaining `scripts/` files select execution profiles and run installation, development, and builds; the plugin's helpers orchestrate the Sites lifecycle
-- `dist/` contains generated deployment output; `.vinext/`, `.wrangler/`, and `.sites-runtime/` contain ignored local tool state
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `@cloudflare/workers-types` provides Worker types; `cloudflare-env.d.ts` declares optional `DB`/`BUCKET` bindings—update these declarations if binding names change
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Use it as the durable user key; use email and name for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty `name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by `oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run install:ci   # instala as dependências (uma vez)
+npm run dev          # abre em http://127.0.0.1:5173
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+O banco local fica em `.wrangler/state` (ignorado pelo Git). Para criar as tabelas, rode o build uma vez e aplique as migrações em ordem (veja abaixo).
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs optional or required ChatGPT sign-in:
+## Verificar antes de enviar
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use the returned `userId` as the stable user key for user-owned records; do not use email as a durable identifier.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send anonymous visitors through Sign in with ChatGPT.
-- In a Server Component, start sign-in with `<a href={chatGPTSignInPath(returnTo)} target="_top">`. The auth helper module is server-only; do not import it into a Client Component.
-- Do not use `fetch`, XHR, a client-side router, or a framework link that can prefetch the sign-in route. SIWC must start as a top-level navigation.
-- Never request the AuthAPI authorization endpoint directly. The dispatch-owned `/signin-with-chatgpt` route must start the SIWC flow.
-- Use `chatGPTSignOutPath(returnTo)` for browser sign-out links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the OAuth cookies, and identity header injection. Do not implement app routes for those reserved paths. Routes that do not import and call the helper remain anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the Sites hosting platform's access policy controls for workspace-wide restrictions, or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Local D1 migrations
-
-For a D1-backed local preview, generate SQL with `npm run db:generate`. Build once through the Sites skill's build entrypoint (or `npm run build` for standalone use) to generate `dist/server/wrangler.json`, rebuilding if bindings change. From the project root, apply each pending migration in order:
-
-```sh
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_example.sql
+```bash
+npm run typecheck          # tipos (TypeScript)
+npm run lint               # padrões de código
+npm test                   # testes das regras (rodam sem servidor)
+npm run build              # gera o pacote para publicar
+npm run test:permissions   # permissões das APIs (precisa do npm run dev rodando)
 ```
 
-Replace the filename with the pending migration and `DB` with your D1 binding name if different. Use `.wrangler/state`, not `.wrangler/state/v3`; Wrangler adds the versioned directories. Do not replay migrations already applied locally. This updates only the preview database; publishing applies production migrations separately.
+O GitHub roda typecheck, lint, testes e build a cada envio (`.github/workflows/ci.yml`). O teste de permissões cria dois usuários temporários **só no banco local**, confere que "Somente leitura" e "Membro" não fazem o que não podem, e apaga tudo no final.
 
-## Diagnostic Commands
+## Banco de dados e migrações
 
-- `npm run install:ci`: perform the one locked dependency install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: preview the built Worker locally with D1/R2 support
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- O esquema fica em `db/schema.ts`. As migrações ficam em `drizzle/` (`0000` a `0025`), com o registro em `drizzle/meta/_journal.json`.
+- **No site publicado, o Sites aplica as migrações novas a cada publicação.**
+- No computador, aplique cada migração nova uma vez:
 
-When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
+```bash
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0025_extras.sql
+```
 
-The portable build runs Vinext directly without a host `timeout` command. The managed-linux build uses `scripts/build-verified.sh` and its existing `SITES_BUILD_TIMEOUT` setting.
+## Segurança
 
-## Learn More
+- Senhas guardadas como PBKDF2 (210 mil iterações); sessões guardadas só como hash do token.
+- Sessão renova enquanto está em uso, cai após 7 dias parada e dura no máximo 90 dias.
+- Tokens do Jira ficam criptografados (AES-GCM); a chave fica no R2, fora do banco.
+- Toda API confere login, perfil e a origem do pedido. O corpo dos pedidos passa por `app/api-input.ts` (objeto JSON, tamanho máximo, ação válida).
+- A cópia de segurança em Excel não leva senhas, sessões nem chaves.
+- Planilhas com dados de clientes (`*.xlsx` na pasta de cima) **nunca** vão para o Git.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Modo escuro
+
+`app/dark-theme.css` é gerado a partir de `app/globals.css`. Depois de mudar cores no `globals.css`, rode:
+
+```bash
+node scripts/build-dark-theme.mjs
+```
+
+## Observações
+
+- O nome do pacote (`site-creator-vinext-starter` no `package.json`) é usado como nome do Worker na hospedagem. Ele não foi trocado de propósito, para não mudar a identidade do site publicado.
+- As rotinas automáticas (busca no Jira, aviso de chamados atrasados, lembretes da agenda, demandas que se repetem) rodam enquanto alguém da equipe está com o Portal aberto.
+- Chamados novos do time "Suporte" vão sozinhos para quem está na escala da semana (quem tem menos chamados abertos; ausentes ficam de fora). Os nomes da escala são ligados às pessoas do Portal pelo nome; nomes ambíguos são ignorados.
+- O link da agenda para o Outlook é pessoal e secreto; o banco guarda só o resumo (hash). Desligar ou gerar outro link na Agenda invalida o anterior.
+- Detalhes técnicos do ambiente Sites (perfis de execução, pré-visualização, publicação) estão em `docs/ambiente-sites.md`.

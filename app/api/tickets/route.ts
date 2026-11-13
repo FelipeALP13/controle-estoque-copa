@@ -8,6 +8,10 @@ import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, cleanTitle, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, sortOrderBetween, taskCode } from "../../tasks";
 import { sendJiraComment, transitionJira } from "../../jira-sync";
 import { canHandleTicket, isTicketStatus, isTicketType, isTicketUrgency, requesterCanSetStatus, ticketCode, ticketStatusLabels, type TicketUrgency } from "../../tickets";
+import { readJsonBody } from "../../api-input";
+import { removeAttachmentsOf } from "../../attachments-store";
+import { autoAssignTicket } from "../../ticket-assign";
+import { canRate, isRating, MAX_RATING_COMMENT, RATING_LABELS, stars } from "../../ticket-rating";
 
 type Db = ReturnType<typeof getDb>;
 type EventKind = (typeof ticketEvents.$inferInsert)["kind"];
@@ -85,7 +89,9 @@ export async function POST(request: Request) {
     const viewer = await viewerOf(db, member);
     if (!viewer.canEdit) return json({ error: "Seu perfil pode apenas visualizar os chamados." }, 403);
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const actor = { actorId: member.id, actorName: member.name };
     const now = new Date().toISOString();
@@ -114,11 +120,25 @@ export async function POST(request: Request) {
       }).returning();
       await db.insert(ticketEvents).values({ ticketId: ticket.id, kind: "created", ...actor, createdAt: now });
       await notify(db, member.name, now, ticket.id, (await teamRecipients(db, teamId)).map((memberId) => ({ memberId, kind: "ticket_new", body: ticket.title })), member.id);
-      return json({ ticket }, 201);
+      // Suporte: vai para quem está de plantão na semana (com menos chamados abertos).
+      const assigned = await autoAssignTicket(db, ticket.id);
+      return json({ ticket: assigned ? { ...ticket, assigneeId: assigned } : ticket }, 201);
     }
 
     const ticketId = Number(body.ticketId);
     const [current] = ticketId ? await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1) : [];
+
+    // Avaliação do atendimento por quem abriu (uma vez, depois de resolvido).
+    if (action === "rateTicket") {
+      if (!current) return json({ error: "Chamado não encontrado." }, 404);
+      if (!isRating(body.rating)) return json({ error: "Escolha uma nota de 1 a 5." }, 400);
+      if (!canRate(current, member.id)) return json({ error: current.requesterId !== member.id ? "Só quem abriu o chamado pode avaliar." : current.rating !== null ? "Este chamado já foi avaliado." : "Só dá para avaliar chamados resolvidos." }, 400);
+      const comment = cleanMultiline(body.comment, MAX_RATING_COMMENT);
+      await db.update(tickets).set({ rating: Number(body.rating), ratingComment: comment, ratedAt: now }).where(eq(tickets.id, current.id));
+      await db.insert(ticketEvents).values({ ticketId: current.id, kind: "comment", body: `Avaliou o atendimento: ${stars(Number(body.rating))} (${RATING_LABELS[Number(body.rating)]})${comment ? ` · “${comment}”` : ""}`, ...actor, createdAt: now });
+      if (current.assigneeId && current.assigneeId !== member.id) await notify(db, member.name, now, current.id, [{ memberId: current.assigneeId, kind: "ticket_comment", body: `Avaliação: ${stars(Number(body.rating))}` }], member.id);
+      return json({ ok: true });
+    }
 
     if (action === "updateTicket") {
       if (!current) return json({ error: "Chamado não encontrado." }, 404);
@@ -136,7 +156,11 @@ export async function POST(request: Request) {
           changes.resolvedAt = body.status === "resolved" ? now : null;
           events.push({ kind: "status", body: body.status });
           const label = ticketStatusLabels[body.status];
-          if (current.requesterId) alerts.push({ memberId: current.requesterId, kind: "ticket_status", body: label });
+          // Resolvido pelo time: quem abriu recebe o pedido de avaliação (no lugar do aviso de status).
+          const askRating = body.status === "resolved" && current.source === "portal" && current.requesterId && current.requesterId !== member.id;
+          if (current.requesterId) alerts.push({ memberId: current.requesterId, kind: askRating ? "ticket_rate" : "ticket_status", body: askRating ? current.title.slice(0, 140) : label });
+          // Reaberto: a avaliação anterior deixa de valer (avalia de novo quando resolver).
+          if (current.status === "resolved" && body.status !== "resolved") Object.assign(changes, { rating: null, ratingComment: "", ratedAt: null });
           if (current.assigneeId) alerts.push({ memberId: current.assigneeId, kind: "ticket_status", body: label });
         }
       }
@@ -294,6 +318,7 @@ export async function POST(request: Request) {
       if (!viewer.isAdmin) return json({ error: "Somente administradores podem excluir chamados." }, 403);
       if (!current) return json({ error: "Chamado não encontrado." }, 404);
       await db.delete(tickets).where(eq(tickets.id, ticketId));
+      await removeAttachmentsOf(db, "ticket", current.id);
       await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "ticket_deleted", targetType: "ticket", targetId: current.id, details: `${ticketCode(current.id)} ${current.title}` }).catch((error) => console.error("audit log failed", error));
       return json({ ok: true });
     }

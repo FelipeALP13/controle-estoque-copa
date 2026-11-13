@@ -4,6 +4,7 @@ import { agendaEvents, notifications, tasks, tickets } from "../../../db/schema"
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { addDays } from "../../support-schedule";
+import { readJsonBody } from "../../api-input";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -62,7 +63,9 @@ export async function POST(request: Request) {
     const member = await getSessionMember(db);
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+
+    if (body instanceof Response) return body;
     const now = new Date().toISOString();
     const mine = and(eq(notifications.memberId, member.id), isNull(notifications.readAt));
 

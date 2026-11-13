@@ -12,6 +12,9 @@ import X from "lucide-react/icons/x";
 import { isClosedProject, projectCode, projectFarolEmoji, projectFarolLabels, projectFarois, projectPhaseLabels, projectPhases, projectProgress, type ProjectFarol, type ProjectPhase } from "./projects";
 import { AvatarStack, PeoplePicker, StatusIcon } from "./tasks-view";
 import { taskCode, taskStatuses, taskStatusLabels, type TaskStatus } from "./tasks";
+import { barFor, timelineRange } from "./project-timeline";
+import GanttChart from "lucide-react/icons/gantt-chart";
+import LayoutList from "lucide-react/icons/layout-list";
 
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
 type Client = { id: number; name: string; active: boolean };
@@ -58,6 +61,7 @@ export default function ProjectsView({ onOpenTask, openRequest = null, onOpenReq
   const [farol, setFarol] = useState("");
   const [phase, setPhase] = useState("");
   const [openId, setOpenId] = useState<number | "new" | null>(null);
+  const [view, setView] = useState<"list" | "timeline">("list");
 
   const load = useCallback(async () => {
     try {
@@ -154,13 +158,17 @@ export default function ProjectsView({ onOpenTask, openRequest = null, onOpenReq
       </div>
       <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar projeto, cliente ou escopo" /></label>
       <select aria-label="Filtrar por fase" value={phase} onChange={(event) => setPhase(event.target.value)}><option value="">Todas as fases</option>{projectPhases.map((value) => <option key={value} value={value}>{projectPhaseLabels[value]}</option>)}</select>
+      <div className="tasks-view-toggle" role="group" aria-label="Como mostrar">
+        <button className={view === "list" ? "active" : ""} aria-pressed={view === "list"} onClick={() => setView("list")}><LayoutList size={15} /><span>Lista</span></button>
+        <button className={view === "timeline" ? "active" : ""} aria-pressed={view === "timeline"} onClick={() => setView("timeline")}><GanttChart size={15} /><span>Linha do tempo</span></button>
+      </div>
       <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os projetos que estão na tela, com as demandas de cada um"><Download size={15} /> Exportar Excel</button>
       {data.me.canEdit && <button className="primary-button tasks-new" onClick={() => setOpenId("new")}><Plus size={16} /> Novo projeto</button>}
     </div>
 
     {error && <div className="alert error"><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16} /></button></div>}
 
-    {visible.length === 0 ? <div className="empty-state"><span><FolderKanban /></span><h3>{data.projects.length ? "Nenhum projeto com esses filtros" : "Nenhum projeto ainda"}</h3><p>{data.projects.length ? "Troque os filtros ou a busca." : "Importe a planilha da Liderança em Demandas → Importar planilhas, ou crie o primeiro projeto."}</p></div> : (
+    {visible.length > 0 && view === "timeline" ? <ProjectTimeline projects={visible} clientName={(id) => (id ? clientsById.get(id)?.name ?? "" : "")} onOpen={setOpenId} /> : visible.length === 0 ? <div className="empty-state"><span><FolderKanban /></span><h3>{data.projects.length ? "Nenhum projeto com esses filtros" : "Nenhum projeto ainda"}</h3><p>{data.projects.length ? "Troque os filtros ou a busca." : "Importe a planilha da Liderança em Demandas → Importar planilhas, ou crie o primeiro projeto."}</p></div> : (
       <div className="project-table">
         <div className="project-head"><span>Projeto</span><span>Fase</span><span>Status</span><span>Prazo</span><span>Demandas</span><span>Responsáveis</span></div>
         {visible.map((project) => {
@@ -178,6 +186,32 @@ export default function ProjectsView({ onOpenTask, openRequest = null, onOpenReq
     )}
 
     {openId !== null && <ProjectDrawer key={openId} project={open} data={data} onClose={() => setOpenId(null)} onSaved={async (id) => { await load(); setOpenId(id); }} onDeleted={async () => { setOpenId(null); await load(); }} onOpenTask={onOpenTask} />}
+  </div>;
+}
+
+const monthName = (day: string) => { const name = new Date(`${day}T12:00:00Z`).toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" }).replace(".", ""); return name.charAt(0).toLocaleUpperCase("pt-BR") + name.slice(1); };
+
+/** Linha do tempo: uma barra por projeto, do início à previsão de término, com a linha de hoje. */
+function ProjectTimeline({ projects, clientName, onOpen }: { projects: Project[]; clientName: (id: number | null) => string; onOpen: (id: number) => void }) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const items = projects.map((project) => ({ project, timeline: { id: project.id, startDate: project.startDate, endForecast: project.endForecast, closed: isClosedProject(project) } }));
+  const range = timelineRange(items.map((item) => item.timeline), today);
+  const dated = items.map((item) => ({ ...item, bar: barFor(item.timeline, range, today) })).filter((item) => item.bar).sort((a, b) => a.project.endForecast.localeCompare(b.project.endForecast));
+  const undated = items.filter((item) => !barFor(item.timeline, range, today));
+  return <div className="timeline">
+    <div className="timeline-grid">
+      <div className="timeline-head"><span /><div className="timeline-months">{range.months.map((month) => <span key={month.day} style={{ left: `${month.left}%` }}>{monthName(month.day)}{month.day.slice(5, 7) === "01" || month === range.months[0] ? ` ${month.day.slice(2, 4)}` : ""}</span>)}</div></div>
+      {dated.map(({ project, bar }) => <button key={project.id} className="timeline-row" onClick={() => onOpen(project.id)} title={`${project.name}: ${project.startDate ? fullDate(project.startDate) : "início não informado"} a ${fullDate(project.endForecast)}`}>
+        <span className="timeline-name"><FarolDot farol={project.farol} /><span><strong>{project.name}</strong><small>{projectCode(project.id)}{clientName(project.clientId) ? ` · ${clientName(project.clientId)}` : ""}</small></span></span>
+        <span className="timeline-track">
+          {range.months.map((month) => <i key={month.day} className="timeline-tick" style={{ left: `${month.left}%` }} />)}
+          <i className="timeline-today" style={{ left: `${range.todayLeft}%` }} />
+          {bar && !bar.outside && <b className={`timeline-bar ${project.farol} ${bar.assumed ? "assumed" : ""} ${bar.late ? "late" : ""}`} style={{ left: `${bar.left}%`, width: `${bar.width}%` }}><em>{fullDate(project.endForecast).slice(0, 5)}</em></b>}
+        </span>
+      </button>)}
+    </div>
+    <p className="timeline-legend"><span><i className="timeline-today" /> hoje</span><span><b className="timeline-bar blue assumed" /> início não informado (30 dias antes da previsão)</span><span><b className="timeline-bar blue late" /> previsão vencida</span></p>
+    {undated.length > 0 && <p className="timeline-undated">Sem previsão em data ({undated.length}): {undated.map((item) => item.project.name).join(", ")}. Informe a previsão de término no projeto para aparecer aqui.</p>}
   </div>;
 }
 

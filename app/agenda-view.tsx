@@ -13,12 +13,15 @@ import StickyNote from "lucide-react/icons/sticky-note";
 import Trash2 from "lucide-react/icons/trash-2";
 import Video from "lucide-react/icons/video";
 import X from "lucide-react/icons/x";
-import { dayLabel, DEFAULT_REMIND, isoToLocal, isTeamsJoinLink, localToIso, REMIND_OPTIONS, teamsMeetingLink } from "./agenda";
+import { dayLabel, DEFAULT_REMIND, isoToLocal, isTeamsJoinLink, localToIso, REMIND_OPTIONS, REPEAT_OPTIONS, repeatLabel, teamsMeetingLink, type Repeat } from "./agenda";
+import RepeatIcon from "lucide-react/icons/repeat";
+import Share2 from "lucide-react/icons/share-2";
+import CalendarLinkModal from "./calendar-link";
 import { Avatar } from "./tasks-view";
-import { agendaChanged, useNow, type AgendaEvent } from "./use-agenda";
+import { agendaChanged, expandAgenda, useNow, type AgendaEvent } from "./use-agenda";
 
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null; email: string | null };
-type Data = { events: AgendaEvent[]; members: Person[]; me: { id: number } };
+type Data = { events: AgendaEvent[]; members: Person[]; me: { id: number; hasCalendarLink?: boolean } };
 
 const todayInSaoPaulo = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 
@@ -44,6 +47,7 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
   const [editing, setEditing] = useState<AgendaEvent | "new" | null>(null);
   const [showPast, setShowPast] = useState(false);
   const [highlight, setHighlight] = useState<number | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
   const today = todayInSaoPaulo();
   const now = useNow();
 
@@ -84,11 +88,18 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
       return [...map.entries()];
     };
     const events = data?.events ?? [];
+    const single = events.filter((event) => !event.repeat);
+    // Quem se repete aparece nos próximos 14 dias (cada dia com a sua ocorrência).
+    const todayStart = Date.parse(`${today}T00:00:00-03:00`);
+    const repeating = expandAgenda(events.filter((event) => event.repeat), todayStart, todayStart + 15 * 86400000 - 1);
+    const future = [...single.filter((event) => isoToLocal(event.startsAt).day >= today), ...repeating].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
     return {
-      upcoming: groups(events.filter((event) => isoToLocal(event.startsAt).day >= today)),
-      past: groups(events.filter((event) => isoToLocal(event.startsAt).day < today)).reverse(),
+      upcoming: groups(future),
+      past: groups(single.filter((event) => isoToLocal(event.startsAt).day < today)).reverse(),
     };
   }, [data, today]);
+  const series = (event: AgendaEvent) => data?.events.find((entry) => entry.id === event.id) ?? event;
+  const anchored = new Set<number>();
 
   async function act(payload: Record<string, unknown>, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -108,8 +119,11 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
     const owner = byId.get(event.ownerId);
     const guests = event.attendees.map((id) => byId.get(id)).filter((person): person is Person => Boolean(person));
     const started = Date.parse(event.startsAt) <= now;
-    return <li key={event.id} id={`agenda-${event.id}`} className={`agenda-row ${event.kind} ${event.done ? "done" : ""} ${highlight === event.id ? "highlight" : ""}`}>
-      {event.isOwner ? <button className="agenda-check" onClick={() => act({ action: "toggleDone", eventId: event.id, done: !event.done })} aria-label={event.done ? "Desmarcar como feito" : "Marcar como feito"} title={event.done ? "Feito. Clique para desmarcar" : "Marcar como feito (para de avisar)"}>{event.done && <Check size={13} />}</button> : <span className="agenda-check guest" aria-hidden="true" />}
+    // A primeira ocorrência de cada compromisso recebe a âncora (para o sino rolar até ela).
+    const anchor = !anchored.has(event.id);
+    anchored.add(event.id);
+    return <li key={`${event.id}-${event.startsAt}`} id={anchor ? `agenda-${event.id}` : undefined} className={`agenda-row ${event.kind} ${event.done ? "done" : ""} ${highlight === event.id && anchor ? "highlight" : ""}`}>
+      {event.repeat ? <span className="agenda-check repeat" title={repeatLabel(event.repeat, event.repeatUntil)}><RepeatIcon size={12} /></span> : event.isOwner ? <button className="agenda-check" onClick={() => act({ action: "toggleDone", eventId: event.id, done: !event.done })} aria-label={event.done ? "Desmarcar como feito" : "Marcar como feito"} title={event.done ? "Feito. Clique para desmarcar" : "Marcar como feito (para de avisar)"}>{event.done && <Check size={13} />}</button> : <span className="agenda-check guest" aria-hidden="true" />}
       <span className="agenda-time"><b>{time}</b>{end && <small>até {end}</small>}</span>
       <span className={`agenda-kind ${event.kind}`} title={event.kind === "meeting" ? "Reunião" : "Anotação"}>{event.kind === "meeting" ? <Video size={14} /> : <StickyNote size={14} />}</span>
       <div className="agenda-main">
@@ -117,6 +131,7 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
         {event.notes && <p>{event.notes}</p>}
         <span className="agenda-meta">
           {event.remindBefore === null ? <span><BellOff size={12} /> Sem aviso</span> : <span><BellRing size={12} /> {remindLabel(event.remindBefore)}</span>}
+          {event.repeat && <span><RepeatIcon size={12} /> {repeatLabel(event.repeat, event.repeatUntil)}</span>}
           {!event.isOwner && <span>Convite de {owner?.name ?? "alguém da equipe"}</span>}
           {guests.length > 0 && <span className="agenda-guests" title={guests.map((person) => person.name).join(", ")}>{guests.slice(0, 5).map((person) => <Avatar key={person.id} member={person} size={20} />)}{guests.length > 5 && <i>+{guests.length - 5}</i>}</span>}
         </span>
@@ -125,8 +140,8 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
         {event.teamsUrl && isTeamsJoinLink(event.teamsUrl) && <a className={`secondary-button agenda-join ${started && !event.done ? "now" : ""}`} href={event.teamsUrl} target="_blank" rel="noopener noreferrer"><Video size={14} /> Entrar no Teams</a>}
         {event.kind === "meeting" && !event.teamsUrl && event.isOwner && !event.done && <button className="secondary-button" onClick={() => openTeamsMeeting(event, people)} title="Abre o Teams com assunto, horário e convidados preenchidos"><CalendarPlus size={14} /> Criar no Teams</button>}
         {event.isOwner ? <>
-          <button className="icon-button" onClick={() => setEditing(event)} aria-label="Editar" title="Editar"><Pencil size={14} /></button>
-          <button className="icon-button" onClick={() => act({ action: "deleteEvent", eventId: event.id }, `Excluir “${event.title}”?${event.attendees.length ? " Os convidados também deixam de ver." : ""}`)} aria-label="Excluir" title="Excluir"><Trash2 size={14} /></button>
+          <button className="icon-button" onClick={() => setEditing(series(event))} aria-label="Editar" title={event.repeat ? "Editar (vale para todas as repetições)" : "Editar"}><Pencil size={14} /></button>
+          <button className="icon-button" onClick={() => act({ action: "deleteEvent", eventId: event.id }, `Excluir “${event.title}”${event.repeat ? " e todas as repetições" : ""}?${event.attendees.length ? " Os convidados também deixam de ver." : ""}`)} aria-label="Excluir" title="Excluir"><Trash2 size={14} /></button>
         </> : <button className="icon-button" onClick={() => act({ action: "leaveEvent", eventId: event.id }, `Sair de “${event.title}”? Você para de receber os avisos.`)} aria-label="Sair do compromisso" title="Sair do compromisso"><LogOut size={14} /></button>}
       </div>
     </li>;
@@ -140,7 +155,10 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
   return <div className="agenda-page">
     <div className="agenda-head">
       <p>Anote compromissos e reuniões com horário: o sino toca <b>antes</b> e <b>na hora</b>. Reuniões podem ser criadas no Teams já preenchidas.</p>
-      <button className="primary-button" onClick={() => setEditing("new")}><Plus size={16} /> Novo compromisso</button>
+      <div className="agenda-head-actions">
+        <button className="secondary-button" onClick={() => setLinkOpen(true)} title="Mostra seus compromissos do Portal no calendário do Outlook/Teams"><Share2 size={15} /> Ver no Outlook</button>
+        <button className="primary-button" onClick={() => setEditing("new")}><Plus size={16} /> Novo compromisso</button>
+      </div>
     </div>
     {error && <div className="alert error"><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16} /></button></div>}
     {!data ? (error ? null : <div className="loading-list"><span /><span /></div>) : <>
@@ -150,6 +168,7 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
         {showPast && past.map(section)}
       </div>}
     </>}
+    {linkOpen && data && <CalendarLinkModal hasLink={Boolean(data.me.hasCalendarLink)} onClose={() => setLinkOpen(false)} onChanged={(hasLink) => setData({ ...data, me: { ...data.me, hasCalendarLink: hasLink } })} />}
     {editing && data && <AgendaModal event={editing === "new" ? null : editing} people={people.filter((person) => person.id !== data.me.id)} today={today} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); agendaChanged(); await load(); }} />}
   </div>;
 }
@@ -179,6 +198,8 @@ function AgendaModal({ event, people, today, onClose, onSaved }: { event: Agenda
     notes: event?.notes ?? "",
     teamsUrl: event?.teamsUrl ?? "",
     attendees: event?.attendees ?? [] as number[],
+    repeat: (event?.repeat ?? "") as Repeat,
+    repeatUntil: event?.repeatUntil ?? "",
   });
   const [query, setQuery] = useState("");
   const now = useNow();
@@ -227,7 +248,9 @@ function AgendaModal({ event, people, today, onClose, onSaved }: { event: Agenda
         <label><span>Fim {meeting ? "" : "(opcional)"}</span><input type="time" value={form.endTime} min={form.time} onChange={(change) => setForm({ ...form, endTime: change.target.value })} /></label>
       </div>
       <label className="full"><span>Avisar</span><select value={form.remindBefore} onChange={(change) => setForm({ ...form, remindBefore: change.target.value })}>{REMIND_OPTIONS.map((option) => <option key={String(option.value)} value={option.value === null ? "" : String(option.value)}>{option.label}</option>)}</select></label>
-      {past && <p className="full form-hint warn">Este horário já passou: não haverá aviso.</p>}
+      <label className={form.repeat ? "" : "full"}><span>Repetir</span><select value={form.repeat} onChange={(change) => setForm({ ...form, repeat: change.target.value as Repeat })}>{REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      {form.repeat && <label><span>Até (opcional)</span><input type="date" min={form.day} value={form.repeatUntil} onChange={(change) => setForm({ ...form, repeatUntil: change.target.value })} /></label>}
+      {past && !form.repeat && <p className="full form-hint warn">Este horário já passou: não haverá aviso.</p>}
 
       <div className="full agenda-people">
         <span className="field-label">Convidados {chosen.length > 0 && <b>{chosen.length}</b>}</span>

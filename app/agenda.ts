@@ -100,3 +100,75 @@ export function dayLabel(day: string, today: string) {
   const date = new Date(`${day}T12:00:00Z`);
   return `${weekdays[date.getUTCDay()]}, ${day.slice(8, 10)}/${day.slice(5, 7)}${day.slice(0, 4) === today.slice(0, 4) ? "" : `/${day.slice(0, 4)}`}`;
 }
+
+// ---------- Compromissos que se repetem ----------
+
+export type Repeat = "" | "daily" | "weekdays" | "weekly" | "monthly";
+export const REPEAT_OPTIONS: { value: Repeat; label: string }[] = [
+  { value: "", label: "Não repete" },
+  { value: "daily", label: "Todo dia" },
+  { value: "weekdays", label: "Dias úteis (seg. a sex.)" },
+  { value: "weekly", label: "Toda semana" },
+  { value: "monthly", label: "Todo mês" },
+];
+export const isRepeat = (value: unknown): value is Repeat => REPEAT_OPTIONS.some((option) => option.value === value);
+
+export type RepeatingEvent = { startsAt: string; endsAt?: string | null; repeat?: string | null; repeatUntil?: string | null };
+
+const DAY_MS = 86400000;
+/** Dia da semana em Brasília (0 = domingo). */
+const localWeekday = (ms: number) => new Date(ms - 3 * 3600000).getUTCDay();
+
+/**
+ * Inícios (ISO) das ocorrências entre `fromMs` e `toMs` (inclusive), no máximo `limit`.
+ * Sem repetição: só o próprio horário, se estiver no intervalo. O horário do dia é sempre o mesmo do primeiro.
+ * "Todo mês" no dia 31 pula os meses que não têm esse dia.
+ */
+export function occurrences(event: RepeatingEvent, fromMs: number, toMs: number, limit = 400) {
+  const first = Date.parse(event.startsAt);
+  const repeat = (event.repeat ?? "") as Repeat;
+  const untilMs = event.repeatUntil ? Date.parse(`${event.repeatUntil}T23:59:59-03:00`) : Infinity;
+  const end = Math.min(toMs, untilMs);
+  const result: string[] = [];
+  if (!repeat) return first >= fromMs && first <= toMs ? [event.startsAt] : [];
+  if (repeat === "monthly") {
+    const { day, time } = isoToLocal(event.startsAt);
+    const [year, month, dayOfMonth] = day.split("-").map(Number);
+    for (let index = 0; result.length < limit; index += 1) {
+      const date = new Date(Date.UTC(year, month - 1 + index, 1));
+      const candidate = localToIso(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`, time);
+      if (!candidate) { if (Date.UTC(year, month - 1 + index, 1) > end) break; continue; }
+      const ms = Date.parse(candidate);
+      if (ms > end) break;
+      if (ms >= fromMs) result.push(candidate);
+    }
+    return result;
+  }
+  const step = repeat === "weekly" ? 7 * DAY_MS : DAY_MS;
+  // Pula direto para perto do início do intervalo.
+  let ms = first;
+  if (fromMs > first) ms = first + Math.floor((fromMs - first) / step) * step;
+  for (; ms <= end && result.length < limit; ms += step) {
+    if (ms < fromMs || ms < first) continue;
+    if (repeat === "weekdays" && [0, 6].includes(localWeekday(ms))) continue;
+    result.push(new Date(ms).toISOString());
+  }
+  return result;
+}
+
+/** Copia o compromisso para uma ocorrência (mesma duração). */
+export function atOccurrence<T extends RepeatingEvent>(event: T, start: string): T & { occurrenceStart: string } {
+  const duration = event.endsAt ? Date.parse(event.endsAt) - Date.parse(event.startsAt) : null;
+  return { ...event, startsAt: start, endsAt: duration === null ? null : new Date(Date.parse(start) + duration).toISOString(), occurrenceStart: start };
+}
+
+/** Texto curto da repetição: "Toda semana até 20/12". */
+export function repeatLabel(repeat: string | null | undefined, until: string | null | undefined) {
+  const option = REPEAT_OPTIONS.find((entry) => entry.value === (repeat ?? ""));
+  if (!option || !option.value) return "";
+  const base = option.value === "weekdays" ? "Dias úteis" : option.label;
+  return until ? `${base} até ${until.split("-").reverse().slice(0, 2).join("/")}` : base;
+}
+
+/** Chave do lembrete já enviado: "before" ou, para quem repete, "before@<início da ocorrência>". */
+export const reminderKey = (stage: ReminderStage, occurrenceStart: string | null) => (occurrenceStart ? `${stage}@${occurrenceStart}` : stage);

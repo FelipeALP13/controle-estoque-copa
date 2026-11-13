@@ -35,6 +35,7 @@ const actions: Record<string, { label: string; group: AuditGroup; sensitive?: bo
   team_deleted: { label: "Excluiu time", group: "people", sensitive: true },
   task_deleted: { label: "Excluiu demanda", group: "work", sensitive: true },
   ticket_deleted: { label: "Excluiu chamado", group: "work", sensitive: true },
+  attachment_deleted: { label: "Excluiu um anexo", group: "work" },
   project_deleted: { label: "Excluiu projeto", group: "work", sensitive: true },
   kb_article_deleted: { label: "Excluiu artigo da base", group: "work" },
   announcement_created: { label: "Publicou aviso no mural", group: "work" },

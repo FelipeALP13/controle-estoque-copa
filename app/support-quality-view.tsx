@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Download from "lucide-react/icons/download";
 import { MonthPicker } from "./leadership-reports";
 import { formatDuration, monthlyTrend, qualityReport, type QualityTicket } from "./support-quality";
-import { firstResponseHours, resolutionHours, ticketUrgencyLabels, type TicketUrgency } from "./tickets";
+import { firstResponseHours, resolutionHours, ticketCode, ticketUrgencyLabels, type TicketUrgency } from "./tickets";
+import { satisfactionSummary, stars, type RatedTicket } from "./ticket-rating";
 import { monthLabel, monthRange } from "./time-entries";
 import { downloadXlsx } from "./xlsx-writer";
 
@@ -15,7 +16,7 @@ const deadlines = { response: firstResponseHours, resolution: resolutionHours };
 /** Painel de qualidade do Suporte: prazos cumpridos e tempos, por cliente, pessoa, urgência e mês. */
 export default function SupportQualityView({ teamId, teamLabel, today }: { teamId: number | null; teamLabel: string; today: string }) {
   const [month, setMonth] = useState<string | null>(today.slice(0, 7));
-  const [tickets, setTickets] = useState<QualityTicket[] | null>(null);
+  const [tickets, setTickets] = useState<(QualityTicket & RatedTicket)[] | null>(null);
   const [people, setPeople] = useState<Map<number, string>>(new Map());
   const [error, setError] = useState("");
   const [now] = useState(() => Date.now());
@@ -25,7 +26,7 @@ export default function SupportQualityView({ teamId, teamLabel, today }: { teamI
     void (async () => {
       try {
         const response = await fetch("/api/tickets", { cache: "no-store" });
-        const data = await response.json() as { tickets?: QualityTicket[]; members?: { id: number; name: string }[]; error?: string };
+        const data = await response.json() as { tickets?: (QualityTicket & RatedTicket)[]; members?: { id: number; name: string }[]; error?: string };
         if (!response.ok || !data.tickets) throw new Error(data.error || "Não foi possível carregar os chamados.");
         if (cancelled) return;
         setTickets(data.tickets);
@@ -41,6 +42,7 @@ export default function SupportQualityView({ teamId, teamLabel, today }: { teamI
   const range = useMemo(() => (month ? monthRange(month) : { from: "2000-01-01", to: today }), [month, today]);
   const report = useMemo(() => qualityReport(scoped, { ...range, now, deadlines }), [scoped, range, now]);
   const trend = useMemo(() => monthlyTrend(scoped, (month ?? today).slice(0, 7), 6, now, deadlines), [scoped, month, today, now]);
+  const satisfaction = useMemo(() => satisfactionSummary(scoped, range.from, range.to), [scoped, range]);
   const maxTrend = Math.max(...trend.map((row) => Math.max(row.opened, row.resolved)), 1);
   const period = month ? monthLabel(month) : "todo o período";
   const personName = (id: number | null) => (id === null ? "Sem responsável" : people.get(id) ?? "Pessoa removida");
@@ -65,6 +67,10 @@ export default function SupportQualityView({ teamId, teamLabel, today }: { teamI
       { name: "Por cliente", columns: [{ header: "Cliente", width: 24 }, ...ratesColumns], rows: rowsOf(report.byClient, (key: string) => key) },
       { name: "Por responsável", columns: [{ header: "Responsável", width: 24 }, ...ratesColumns], rows: rowsOf(report.byPerson, (key: number | null) => personName(key)) },
       { name: "Por urgência", columns: [{ header: "Urgência", width: 14 }, ...ratesColumns], rows: rowsOf(report.byUrgency, (key: string) => ticketUrgencyLabels[key as TicketUrgency] ?? key) },
+      { name: "Satisfação", columns: [{ header: "Responsável", width: 24 }, { header: "Avaliações", type: "number", width: 12 }, { header: "Nota média", type: "number", width: 12 }], rows: [
+        ...satisfaction.byPerson.map((row) => [personName(row.assigneeId), row.count, Math.round(row.average * 10) / 10]),
+        [], ["Total", satisfaction.total, satisfaction.average === null ? null : Math.round(satisfaction.average * 10) / 10], ["Satisfeitos (4 e 5 estrelas)", pct(satisfaction.satisfied)],
+      ] },
       { name: "Mês a mês", columns: [{ header: "Mês", width: 20 }, { header: "Abertos", type: "number", width: 9 }, { header: "Resolvidos", type: "number", width: 11 }, { header: "1ª resposta no prazo", type: "percent", width: 20 }, { header: "Solução no prazo", type: "percent", width: 16 }], rows: trend.map((row) => [monthLabel(row.month), row.opened, row.resolved, row.responseRate, row.resolutionRate]) },
     ]);
   }
@@ -93,7 +99,17 @@ export default function SupportQualityView({ teamId, teamLabel, today }: { teamI
       <article className={report.resolutionRate !== null && report.resolutionRate < 0.8 ? "warn" : ""}><small>Solução no prazo</small><strong>{pct(report.resolutionRate)}</strong><p>mediana {formatDuration(report.medianResolutionMinutes)}</p></article>
       <article><small>Em aberto agora</small><strong>{report.backlog}</strong><p>{teamLabel}</p></article>
       <article className={report.lateNow ? "late" : ""}><small>Fora do prazo agora</small><strong>{report.lateNow}</strong><p>sem resposta ou solução no prazo</p></article>
+      <article className={satisfaction.satisfied !== null && satisfaction.satisfied < 0.7 ? "warn" : ""}><small>Satisfação</small><strong>{satisfaction.average === null ? "—" : `${satisfaction.average.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ★`}</strong><p>{satisfaction.total ? `${pct(satisfaction.satisfied)} satisfeitos · ${satisfaction.total} ${satisfaction.total === 1 ? "avaliação" : "avaliações"}` : "sem avaliações"}</p></article>
     </div>
+
+    {satisfaction.total > 0 && <section className="report-card satisfaction-card">
+      <div className="report-card-head"><div><h3>Avaliação do atendimento</h3><p>Notas de quem abriu os chamados resolvidos no período (chamados do Jira não entram).</p></div></div>
+      <div className="satisfaction-grid">
+        <div className="satisfaction-bars">{[5, 4, 3, 2, 1].map((value) => <div key={value}><span>{value} ★</span><i><b style={{ width: `${(satisfaction.distribution[value - 1] / satisfaction.total) * 100}%` }} /></i><em>{satisfaction.distribution[value - 1]}</em></div>)}</div>
+        <ul className="satisfaction-people">{satisfaction.byPerson.map((row) => <li key={String(row.assigneeId)}><span>{personName(row.assigneeId)}</span><b>{row.average.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ★</b><small>{row.count}</small></li>)}</ul>
+      </div>
+      {satisfaction.comments.length > 0 && <ul className="satisfaction-comments">{satisfaction.comments.map((entry) => <li key={entry.id}><span>{stars(entry.rating)}</span><p>“{entry.comment}”</p><small>{ticketCode(entry.id)} · {entry.title}</small></li>)}</ul>}
+    </section>}
 
     <section className="report-card">
       <div className="report-card-head"><div><h3>Mês a mês</h3><p>Chamados abertos e resolvidos nos últimos 6 meses, e o percentual de solução no prazo.</p></div>

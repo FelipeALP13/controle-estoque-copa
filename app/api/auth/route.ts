@@ -21,6 +21,7 @@ import {
   verifyPassword,
 } from "../../auth-session";
 import { clientIp, hasTrustedOrigin } from "../../request-security";
+import { readJsonBody } from "../../api-input";
 
 function publicMember(member: typeof members.$inferSelect) {
   return {
@@ -56,7 +57,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     if (!hasTrustedOrigin(request)) return Response.json({ error: "Origem da solicitação não autorizada." }, { status: 403 });
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "login");
     const db = getDb();
     await cleanupAuthData(db);

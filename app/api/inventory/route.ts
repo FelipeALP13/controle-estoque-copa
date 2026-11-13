@@ -8,6 +8,7 @@ import { movementOccursBeforeOpening, parseMovementDate } from "../../movement-p
 import { hasTrustedOrigin } from "../../request-security";
 import { hasPermission, resolvePermissions, type MemberPermissions, type MemberRole } from "../../member-permissions";
 import { findOverlappingWeek, generateRotation, isIsoDate, isSupportTeamColor, normalizeTeamMembers, parseTeamMembers, weekRangeError } from "../../support-schedule";
+import { readJsonBody } from "../../api-input";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 
@@ -111,11 +112,12 @@ function suggestedIcon(name: string, current: string) {
 }
 
 /** Registro da pessoa sem o hash e o sal da senha: nunca devem sair do servidor. */
-function safeMember<T extends { passwordHash?: string | null; passwordSalt?: string | null }>(member: T) {
+function safeMember<T extends { passwordHash?: string | null; passwordSalt?: string | null; calendarTokenHash?: string | null }>(member: T) {
   const rest: Partial<T> = { ...member };
   delete rest.passwordHash;
   delete rest.passwordSalt;
-  return rest as Omit<T, "passwordHash" | "passwordSalt">;
+  delete rest.calendarTokenHash;
+  return rest as Omit<T, "passwordHash" | "passwordSalt" | "calendarTokenHash">;
 }
 
 export async function GET() {
@@ -202,7 +204,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     if (!hasTrustedOrigin(request)) return Response.json({ error: "Origem da solicitação não autorizada." }, { status: 403 });
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const db = getDb();
     const currentMember = await requireMember(db);
@@ -468,7 +471,8 @@ export async function POST(request: Request) {
       if (!itemId || !name) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [previous] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
       if (!previous) return Response.json({ error: "Item não encontrado." }, { status: 404 });
-      const [item] = await db.update(items).set({ name, category, unit, minimumQty, scanCode, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
+      // O campo de código saiu da tela: sem ele no pedido, o código já salvo continua guardado.
+      const [item] = await db.update(items).set({ name, category, unit, minimumQty, scanCode: body.scanCode === undefined ? previous.scanCode : scanCode, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
       if (previous.imageKey && previous.imageKey !== imageKey) await removeMedia(previous.imageKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_updated", targetType: "item", targetId: item.id, details: item.name });
       return Response.json({ item });

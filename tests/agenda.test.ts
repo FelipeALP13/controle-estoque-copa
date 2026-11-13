@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dayLabel, dueStages, isoToLocal, isRealEmail, isTeamsJoinLink, localToIso, reminderText, reminderTimes, teamsMeetingLink } from "../app/agenda.ts";
+import { atOccurrence, dayLabel, dueStages, isoToLocal, isRealEmail, isTeamsJoinLink, localToIso, occurrences, reminderKey, reminderText, reminderTimes, repeatLabel, teamsMeetingLink } from "../app/agenda.ts";
 
 test("horário de Brasília ↔ UTC", () => {
   assert.equal(localToIso("2026-11-12", "14:00"), "2026-11-12T17:00:00.000Z");
@@ -61,4 +61,32 @@ test("nome do dia", () => {
   assert.equal(dayLabel("2026-11-11", "2026-11-12"), "Ontem");
   assert.equal(dayLabel("2026-11-19", "2026-11-12"), "qui., 19/11");
   assert.equal(dayLabel("2027-01-05", "2026-11-12"), "ter., 05/01/2027");
+});
+
+test("ocorrências de quem se repete", () => {
+  const at = (iso: string) => Date.parse(iso);
+  // Quinta 12/11/2026 às 9h (Brasília) = 12h UTC.
+  const base = { startsAt: "2026-11-12T12:00:00.000Z", endsAt: "2026-11-12T12:30:00.000Z" };
+  assert.deepEqual(occurrences({ ...base, repeat: "" }, at("2026-11-01T00:00:00Z"), at("2026-11-30T00:00:00Z")), ["2026-11-12T12:00:00.000Z"]);
+  assert.deepEqual(occurrences({ ...base, repeat: "daily" }, at("2026-11-13T00:00:00Z"), at("2026-11-15T23:00:00Z")), ["2026-11-13T12:00:00.000Z", "2026-11-14T12:00:00.000Z", "2026-11-15T12:00:00.000Z"]);
+  // Dias úteis: sexta e segunda (pula sábado e domingo).
+  assert.deepEqual(occurrences({ ...base, repeat: "weekdays" }, at("2026-11-13T00:00:00Z"), at("2026-11-16T23:00:00Z")), ["2026-11-13T12:00:00.000Z", "2026-11-16T12:00:00.000Z"]);
+  assert.deepEqual(occurrences({ ...base, repeat: "weekly" }, at("2026-11-01T00:00:00Z"), at("2026-11-30T00:00:00Z")), ["2026-11-12T12:00:00.000Z", "2026-11-19T12:00:00.000Z", "2026-11-26T12:00:00.000Z"]);
+  // Até (inclusive).
+  assert.deepEqual(occurrences({ ...base, repeat: "daily", repeatUntil: "2026-11-13" }, at("2026-11-01T00:00:00Z"), at("2026-11-30T00:00:00Z")), ["2026-11-12T12:00:00.000Z", "2026-11-13T12:00:00.000Z"]);
+  // Antes do primeiro, nada.
+  assert.deepEqual(occurrences({ ...base, repeat: "daily" }, at("2026-11-01T00:00:00Z"), at("2026-11-10T00:00:00Z")), []);
+  // Todo mês no dia 31: pula fevereiro, abril...
+  const day31 = { startsAt: "2027-01-31T13:00:00.000Z", repeat: "monthly" };
+  assert.deepEqual(occurrences(day31, at("2027-01-01T00:00:00Z"), at("2027-05-31T23:00:00Z")), ["2027-01-31T13:00:00.000Z", "2027-03-31T13:00:00.000Z", "2027-05-31T13:00:00.000Z"]);
+});
+
+test("ocorrência mantém a duração e textos", () => {
+  const event = { startsAt: "2026-11-12T12:00:00.000Z", endsAt: "2026-11-12T12:30:00.000Z", repeat: "weekly", title: "Daily" };
+  assert.deepEqual(atOccurrence(event, "2026-11-19T12:00:00.000Z"), { ...event, startsAt: "2026-11-19T12:00:00.000Z", endsAt: "2026-11-19T12:30:00.000Z", occurrenceStart: "2026-11-19T12:00:00.000Z" });
+  assert.equal(repeatLabel("weekly", "2026-12-20"), "Toda semana até 20/12");
+  assert.equal(repeatLabel("weekdays", null), "Dias úteis");
+  assert.equal(repeatLabel("", null), "");
+  assert.equal(reminderKey("before", null), "before");
+  assert.equal(reminderKey("start", "2026-11-19T12:00:00.000Z"), "start@2026-11-19T12:00:00.000Z");
 });

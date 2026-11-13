@@ -48,7 +48,7 @@ export function buildCalendar(input: { from: string; to: string; today: string; 
     byDay.set(date, list);
   };
   for (const week of input.weeks ?? []) {
-    for (const date of spanDays(week.start, week.end, input.from, input.to)) add(date, { kind: "schedule", id: `w${week.id}`, refId: week.id, label: `Escala: ${week.team}`, detail: week.members, tone: week.color });
+    for (const date of spanDays(week.start, week.end, input.from, input.to)) add(date, { kind: "schedule", id: `w${week.id}`, refId: week.id, label: week.team, detail: `Escala do Suporte${week.members ? ` · ${week.members}` : ""}`, tone: week.color });
   }
   for (const absence of input.absences ?? []) {
     for (const date of spanDays(absence.startDate, absence.endDate, input.from, input.to)) add(date, { kind: "absence", id: `a${absence.id}`, refId: absence.id, label: `${absence.person}: ${absence.label.toLowerCase()}`, detail: absence.label });

@@ -62,11 +62,17 @@ export function playChime(strong = false, force = false) {
 
 /** Aviso do sistema (fora do navegador), só se a pessoa permitiu e a aba não está à vista. */
 export function desktopNotify(title: string, body: string) {
-  try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted" || document.visibilityState === "visible") return;
-    const note = new Notification(title, { body, tag: `portal-${title}-${body}`.slice(0, 120), icon: "/favicon.svg" });
-    note.onclick = () => { window.focus(); note.close(); };
-  } catch { /* alguns navegadores não deixam criar fora de um service worker */ }
+  if (typeof Notification === "undefined" || Notification.permission !== "granted" || document.visibilityState === "visible") return;
+  const options = { body, tag: `portal-${title}-${body}`.slice(0, 120), icon: "/icon-192.png", badge: "/icon-192.png" };
+  // No celular (e no app instalado) o aviso precisa sair pelo service worker.
+  const viaWorker = "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().then((registration) => (registration ? registration.showNotification(title, options).then(() => true) : false)).catch(() => false) : Promise.resolve(false);
+  void viaWorker.then((shown) => {
+    if (shown) return;
+    try {
+      const note = new Notification(title, options);
+      note.onclick = () => { window.focus(); note.close(); };
+    } catch { /* navegador sem suporte a avisos fora da página */ }
+  });
 }
 
 export const canAskDesktop = () => typeof Notification !== "undefined" && Notification.permission === "default";

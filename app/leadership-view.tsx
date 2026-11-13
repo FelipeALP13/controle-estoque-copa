@@ -6,6 +6,7 @@ import TriangleAlert from "lucide-react/icons/triangle-alert";
 import { downloadXlsx } from "./xlsx-writer";
 import { ClientsReport } from "./leadership-reports";
 import SupportQualityView from "./support-quality-view";
+import MonthlyReportView from "./monthly-report-view";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
 import MessageCircle from "lucide-react/icons/message-circle";
@@ -42,7 +43,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
   const [error, setError] = useState("");
   const [period, setPeriod] = useState<"all" | "30" | "90" | "year">("all");
   const [team, setTeam] = useState("");
-  const [tab, setTab] = useState<"overview" | "clients" | "quality">("overview");
+  const [tab, setTab] = useState<"overview" | "month" | "clients" | "quality">("overview");
   const [clients, setClients] = useState<Person[]>([]);
   const { absences } = useAbsences();
 
@@ -166,7 +167,7 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
 
   return <div className="leadership-page">
     <div className="report-filters">
-      <div><h2>Painel de demandas</h2><p>{tab === "overview" ? "Substitui o Dashboard da planilha da Liderança. Demanda compartilhada conta uma vez para cada responsável na carga por pessoa." : tab === "clients" ? "Demandas e horas de cada cliente, para prestar contas ou faturar." : "Prazos de resposta e solução dos chamados, por cliente, pessoa e mês."}</p></div>
+      <div><h2>Painel de demandas</h2><p>{tab === "overview" ? "Substitui o Dashboard da planilha da Liderança. Demanda compartilhada conta uma vez para cada responsável na carga por pessoa." : tab === "month" ? "Resumo pronto do mês, com Excel completo para o fechamento ou a reunião." : tab === "clients" ? "Demandas e horas de cada cliente, para prestar contas ou faturar." : "Prazos de resposta e solução dos chamados, por cliente, pessoa e mês."}</p></div>
       <div className="leadership-filters">
         <select aria-label="Time" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todos os times</option>{teams.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select>
         {tab === "overview" && <div className="report-period" role="group" aria-label="Período de abertura">{([["all", "Tudo"], ["30", "30 dias"], ["90", "90 dias"], ["year", "Este ano"]] as const).map(([value, label]) => <button key={value} className={period === value ? "active" : ""} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>)}</div>}
@@ -175,9 +176,10 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
       </div>
     </div>
     <div className="panel-tabs" role="tablist" aria-label="Relatórios do painel">
-      {([["overview", "Visão geral"], ["clients", "Por cliente"], ["quality", "Qualidade do Suporte"]] as const).map(([value, label]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}
+      {([["overview", "Visão geral"], ["month", "Relatório do mês"], ["clients", "Por cliente"], ["quality", "Qualidade do Suporte"]] as const).map(([value, label]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}
     </div>
 
+    {tab === "month" && <MonthlyReportView tasks={teamTasks} clients={clients} people={people} teamId={team ? Number(team) : null} teamLabel={teamLabel} today={today} />}
     {tab === "quality" && <SupportQualityView teamId={team ? Number(team) : null} teamLabel={teamLabel} today={today} />}
     {tab === "clients" && <ClientsReport tasks={teamTasks} clients={clients} today={today} teamLabel={teamLabel} />}
     {tab === "overview" && <>

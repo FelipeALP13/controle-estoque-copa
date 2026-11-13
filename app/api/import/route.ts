@@ -6,6 +6,7 @@ import { writeAudit } from "../../audit";
 import { fold, mergeDemands, parseWorkbook, personKey, suspiciousHours, type Issue, type MergedDemand, type RawSheet, type WorkbookKind } from "../../demand-import";
 import { hasTrustedOrigin } from "../../request-security";
 import { taskCategories, type TaskStatus } from "../../tasks";
+import { readJsonBody } from "../../api-input";
 
 type Db = ReturnType<typeof getDb>;
 type Upload = { kind: WorkbookKind; fileName: string; sheets: RawSheet[] };
@@ -258,7 +259,9 @@ export async function POST(request: Request) {
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
     if (member.role !== "admin") return json({ error: "Somente administradores podem importar planilhas." }, 403);
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request, 8 * 1024 * 1024);
+
+    if (body instanceof Response) return body;
     const uploads = validUploads(body.workbooks);
     if (!uploads) return json({ error: "Envie de 1 a 3 planilhas (Suporte, Desenvolvimento e/ou Liderança), uma de cada." }, 400);
 

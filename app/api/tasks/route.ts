@@ -8,6 +8,21 @@ import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, cleanTitle, isClosedStatus, isTaskPriority, isTaskStatus, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, parseDueDate, sortOrderBetween, taskCategories, taskCode, taskStatusLabels, type TaskEventKind, type TaskStatus } from "../../tasks";
+import { readJsonBody } from "../../api-input";
+import { removeAttachmentsOf } from "../../attachments-store";
+import { taskRecurrences } from "../../../db/schema";
+import { addDays, DUE_OPTIONS, runOnOrAfter, validRecurrence } from "../../task-recurrence";
+
+/** Repetição da demanda (null se não repete; vazio se a migração ainda não foi aplicada). */
+async function loadRecurrence(db: Db, taskId: number) {
+  try {
+    const [row] = await db.select().from(taskRecurrences).where(eq(taskRecurrences.sourceTaskId, taskId)).limit(1);
+    return row ? { frequency: row.frequency, day: row.day, dueDays: row.dueDays, nextOn: row.nextOn, active: row.active, lastTaskId: row.lastTaskId } : null;
+  } catch (error) {
+    console.error("recurrence load failed", error);
+    return null;
+  }
+}
 
 type Db = ReturnType<typeof getDb>;
 
@@ -149,13 +164,15 @@ export async function GET(request: Request) {
 
     const taskId = Number(new URL(request.url).searchParams.get("taskId"));
     if (taskId) {
-      const [events, checklist] = await Promise.all([
+      const [events, checklist, recurrence] = await Promise.all([
         db.select().from(taskEvents).where(eq(taskEvents.taskId, taskId)).orderBy(asc(taskEvents.createdAt), asc(taskEvents.id)),
         loadChecklist(db, taskId),
+        loadRecurrence(db, taskId),
       ]);
       return json({
         events: events.map((event) => ({ id: event.id, kind: event.kind, body: event.body, actorId: event.actorId, actorName: event.actorName, createdAt: event.createdAt, canDelete: event.kind === "comment" && (event.actorId === member.id || isAdmin(member)) })),
         checklist,
+        recurrence,
       });
     }
 
@@ -235,7 +252,9 @@ export async function POST(request: Request) {
     if (!member) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
     if (!canEdit(member)) return json({ error: "Seu perfil pode apenas visualizar as demandas." }, 403);
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const actor = { actorId: member.id, actorName: member.name };
     const now = new Date().toISOString();
@@ -254,6 +273,30 @@ export async function POST(request: Request) {
         : await db.insert(clients).values(values).returning();
       if (!client) return json({ error: "Cliente/projeto não encontrado." }, 404);
       return json({ client }, clientId ? 200 : 201);
+    }
+
+    // Repetir a demanda: semanal ou mensal, com prazo opcional.
+    if (action === "saveRecurrence" || action === "removeRecurrence") {
+      const taskId = Number(body.taskId);
+      const [source] = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!source) return json({ error: "Demanda não encontrada." }, 404);
+      if (action === "removeRecurrence") {
+        await db.delete(taskRecurrences).where(eq(taskRecurrences.sourceTaskId, taskId));
+        await db.insert(taskEvents).values({ taskId, kind: "comment", body: "Parou de repetir esta demanda.", ...actor, createdAt: now });
+        return json({ recurrence: null });
+      }
+      if (!validRecurrence(body.frequency, body.day)) return json({ error: "Escolha a frequência e o dia." }, 400);
+      const frequency = body.frequency;
+      const day = Number(body.day);
+      const dueDays = body.dueDays === null || body.dueDays === undefined || body.dueDays === "" ? null : Number(body.dueDays);
+      if (!DUE_OPTIONS.some((option) => option.value === dueDays)) return json({ error: "Escolha o prazo das cópias." }, 400);
+      // A primeira cópia sai na próxima data (a partir de amanhã: a demanda de hoje é a própria origem).
+      const nextOn = runOnOrAfter(frequency, day, addDays(today, 1));
+      const values = { frequency, day, dueDays, nextOn, active: true, updatedAt: now };
+      await db.insert(taskRecurrences).values({ ...values, sourceTaskId: taskId, createdById: member.id, createdAt: now })
+        .onConflictDoUpdate({ target: taskRecurrences.sourceTaskId, set: values });
+      await db.insert(taskEvents).values({ taskId, kind: "comment", body: "Configurou a repetição desta demanda.", ...actor, createdAt: now });
+      return json({ recurrence: await loadRecurrence(db, taskId) });
     }
 
     if (action === "createTask") {
@@ -526,6 +569,7 @@ export async function POST(request: Request) {
       const taskId = Number(body.taskId);
       const [deleted] = await db.delete(tasks).where(eq(tasks.id, taskId)).returning();
       if (!deleted) return json({ error: "Demanda não encontrada." }, 404);
+      await removeAttachmentsOf(db, "task", deleted.id);
       try {
         await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "task_deleted", targetType: "task", targetId: deleted.id, details: `${taskCode(deleted.id)} ${deleted.title}` });
       } catch (error) {

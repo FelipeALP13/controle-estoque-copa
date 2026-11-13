@@ -1,0 +1,46 @@
+# Checagem automática: a cada envio para o GitHub (e em pull requests), confere se o Portal
+# continua compilando e se os testes passam. Não publica nada e não acessa o site publicado.
+name: Checagem
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checagem-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Tipos (TypeScript)
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Testes
+        run: pnpm test
+
+      - name: Build
+        run: pnpm run build

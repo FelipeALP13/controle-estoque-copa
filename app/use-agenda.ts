@@ -1,13 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { reminderTimes } from "./agenda";
+import { atOccurrence, occurrences, reminderTimes } from "./agenda";
 import { NOTIFY_REFRESH_EVENT } from "./notify-sound";
 
 export type AgendaEvent = {
   id: number; ownerId: number; kind: "note" | "meeting"; title: string; notes: string; startsAt: string; endsAt: string | null;
   remindBefore: number | null; teamsUrl: string; done: boolean; createdAt: string; updatedAt: string; attendees: number[]; isOwner: boolean;
+  repeat: string; repeatUntil: string | null;
 };
+
+/** Cada ocorrência no intervalo (compromissos que se repetem viram várias), em ordem de horário. */
+export function expandAgenda<T extends AgendaEvent>(events: readonly T[], fromMs: number, toMs: number) {
+  return events
+    .flatMap((event) => occurrences(event, fromMs, toMs).map((start) => atOccurrence(event, start)))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
 
 /** Avisa as outras partes da tela (visão geral, aviso na hora) que a agenda mudou. */
 const CHANGED = "portal:agenda-changed";
@@ -56,7 +64,7 @@ export function useUpcomingAgenda(enabled: boolean) {
     const now = Date.now();
     const timers: number[] = [];
     let nearest = Infinity;
-    for (const event of events) {
+    for (const event of expandAgenda(events, now - 2 * 3600000, now + 24 * 3600000)) {
       for (const reminder of reminderTimes(event)) {
         // Só os que ainda vão acontecer (os que já passaram, o servidor entrega na próxima rodada).
         if (reminder.at > now) nearest = Math.min(nearest, reminder.at);

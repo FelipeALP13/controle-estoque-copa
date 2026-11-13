@@ -6,6 +6,7 @@ import { writeAudit } from "../../audit";
 import { isProjectFarol, isProjectPhase, projectCode } from "../../projects";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, cleanTitle, isTaskStatus, MAX_DESCRIPTION_LENGTH, parseDueDate } from "../../tasks";
+import { readJsonBody } from "../../api-input";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -65,7 +66,8 @@ export async function POST(request: Request) {
     const member = await getSessionMember(db);
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
     if (member.role === "viewer") return json({ error: "Seu perfil pode apenas visualizar os projetos." }, 403);
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const now = new Date().toISOString();
 

@@ -11,7 +11,7 @@ import { taskCode } from "./tasks";
 import { monthLabel, shiftMonth } from "./time-entries";
 import { useAbsences } from "./use-absences";
 import { isoToLocal, localToIso } from "./agenda";
-import type { AgendaEvent } from "./use-agenda";
+import { expandAgenda, type AgendaEvent } from "./use-agenda";
 
 type Schedule = { teams: { id: number; name: string; color: string; members: string[] }[]; weeks: { id: number; start: string; end: string; teamId: number }[] };
 type TaskRow = { id: number; title: string; status: string; dueDate: string | null; teamId: number | null; owners: number[]; support: number[] };
@@ -85,7 +85,7 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject, onOp
     });
     return buildCalendar({
       from: grid.from, to: grid.to, today,
-      agenda: visible.agenda ? agenda.map((event) => ({ id: event.id, title: event.title, ...isoToLocal(event.startsAt), meeting: event.kind === "meeting", done: event.done })) : [],
+      agenda: visible.agenda ? expandAgenda(agenda, Date.parse(`${grid.from}T00:00:00-03:00`), Date.parse(`${grid.to}T23:59:59-03:00`)).map((event) => ({ id: event.id, title: event.title, ...isoToLocal(event.startsAt), meeting: event.kind === "meeting", done: event.done })) : [],
       tasks: visible.due ? tasks.map((task) => ({ id: task.id, title: task.title, code: taskCode(task.id), dueDate: task.dueDate, closed: task.status === "done" || task.status === "canceled", owners: task.owners.map((id) => names.get(id)).filter(Boolean).join(", ") })) : [],
       absences: visible.absence ? absences.map((absence) => ({ id: absence.id, person: names.get(absence.memberId) ?? "Alguém", label: absenceKindLabels[absence.kind], startDate: absence.startDate, endDate: absence.endDate })) : [],
       weeks: visible.schedule ? schedule.weeks.map((week) => { const team = schedule.teams.find((entry) => entry.id === week.teamId); return { id: week.id, start: week.start, end: week.end, team: team?.name ?? "Equipe", color: team?.color ?? "purple", members: team?.members.join(", ") ?? "" }; }) : [],
@@ -126,9 +126,9 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject, onOp
     <div className="calendar-layout">
       <div className="calendar-grid" role="grid" aria-label={monthLabel(month)}>
         {weekdays.map((day) => <span key={day} className="calendar-weekday">{day}</span>)}
-        {grid.days.map((day) => {
+        {grid.days.map((day, index) => {
           const events = calendar.get(day.date) ?? [];
-          return <button key={day.date} role="gridcell" className={`calendar-day ${day.inMonth ? "" : "outside"} ${day.date === today ? "today" : ""} ${day.date === selected ? "selected" : ""}`} onClick={() => setSelected(day.date)} aria-label={`${Number(day.date.slice(8))}: ${events.length} ${events.length === 1 ? "item" : "itens"}`}>
+          return <button key={day.date} role="gridcell" className={`calendar-day ${day.inMonth ? "" : "outside"} ${index % 7 >= 5 ? "weekend" : ""} ${day.date === today ? "today" : ""} ${day.date === selected ? "selected" : ""}`} onClick={() => setSelected(day.date)} aria-label={`${Number(day.date.slice(8))}: ${events.length} ${events.length === 1 ? "item" : "itens"}`}>
             <span className="calendar-number">{Number(day.date.slice(8))}</span>
             {events.slice(0, 3).map((event) => <span key={event.id} className={`calendar-chip ${event.kind} ${event.tone ?? ""} ${event.late ? "late" : ""}`}>{event.label}</span>)}
             {events.length > 3 && <span className="calendar-more">+{events.length - 3} mais</span>}

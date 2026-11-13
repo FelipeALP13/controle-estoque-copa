@@ -1,10 +1,11 @@
 // Rotinas automáticas: busca no Jira, aviso de chamados atrasados e lembretes da agenda.
 // Rodam enquanto alguém da equipe está com o Portal aberto (junto com a busca no Jira).
-import { and, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import type { getDb } from "../db";
 import { agendaAttendees, agendaEvents, agendaReminders, members, notifications, teamMembers, tickets } from "../db/schema";
-import { dueStages, reminderText, START_GRACE_MS } from "./agenda";
+import { dueStages, isoToLocal, occurrences, reminderKey, reminderText, START_GRACE_MS } from "./agenda";
 import { syncDue } from "./jira-sync";
+import { recurringTasksJob } from "./task-recurrence-job";
 import { isTicketLate, ticketCode } from "./tickets";
 
 type Db = ReturnType<typeof getDb>;
@@ -50,21 +51,27 @@ export async function agendaRemindersJob(db: Db, now: Date, onlyMemberId?: numbe
   // Compromissos de até 2 h atrás até 1 dia à frente (cobre o maior aviso antecipado).
   const from = new Date(nowMs - START_GRACE_MS).toISOString();
   const to = new Date(nowMs + 24 * 3600000).toISOString();
+  // Os que começam no intervalo e os que se repetem (já começaram e ainda não terminaram a série).
   const events = await db.select().from(agendaEvents)
-    .where(and(gte(agendaEvents.startsAt, from), lte(agendaEvents.startsAt, to), eq(agendaEvents.done, false), isNotNull(agendaEvents.remindBefore)))
+    .where(and(eq(agendaEvents.done, false), isNotNull(agendaEvents.remindBefore), or(
+      and(gte(agendaEvents.startsAt, from), lte(agendaEvents.startsAt, to)),
+      and(ne(agendaEvents.repeat, ""), lte(agendaEvents.startsAt, to), or(isNull(agendaEvents.repeatUntil), gte(agendaEvents.repeatUntil, isoToLocal(from).day))),
+    )))
     .limit(500);
-  const due = events.map((event) => ({ event, stages: dueStages(event, nowMs) })).filter((entry) => entry.stages.length);
+  const due = events.flatMap((event) => occurrences(event, Date.parse(from), Date.parse(to))
+    .map((start) => ({ event, occurrence: event.repeat ? start : null, stages: dueStages({ startsAt: start, remindBefore: event.remindBefore }, nowMs) })))
+    .filter((entry) => entry.stages.length);
   if (!due.length) return { reminded: 0 };
   const attendees = await db.select().from(agendaAttendees).where(inArray(agendaAttendees.eventId, due.map((entry) => entry.event.id)));
   const stamp = now.toISOString();
   let reminded = 0;
-  for (const { event, stages } of due) {
+  for (const { event, occurrence, stages } of due) {
     const people = [...new Set([event.ownerId, ...attendees.filter((row) => row.eventId === event.id).map((row) => row.memberId)])]
       .filter((memberId) => onlyMemberId === undefined || memberId === onlyMemberId);
     for (const memberId of people) {
       for (const stage of stages) {
         // Reserva o aviso (pessoa + compromisso + momento): se já saiu, não repete.
-        const claimed = await db.insert(agendaReminders).values({ eventId: event.id, memberId, stage, sentAt: stamp }).onConflictDoNothing().returning({ eventId: agendaReminders.eventId });
+        const claimed = await db.insert(agendaReminders).values({ eventId: event.id, memberId, stage: reminderKey(stage, occurrence), sentAt: stamp }).onConflictDoNothing().returning({ eventId: agendaReminders.eventId });
         if (!claimed.length) continue;
         reminded += 1;
         await db.insert(notifications).values({ memberId, kind: "agenda_reminder", eventId: event.id, body: reminderText(event.title, stage, event.remindBefore).slice(0, 140), actorName: "Agenda", createdAt: stamp });
@@ -77,7 +84,7 @@ export async function agendaRemindersJob(db: Db, now: Date, onlyMemberId?: numbe
 /** Uma rodada completa. Cada parte é independente: o erro de uma não impede as outras. */
 export async function runJobs(db: Db, options: { now?: Date; includeJira?: boolean } = {}) {
   const now = options.now ?? new Date();
-  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; errors: string[] } = { jira: [], late: null, agenda: null, errors: [] };
+  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, errors: [] };
   if (options.includeJira !== false) {
     try {
       result.jira = (await syncDue(db, false, now)).map((entry) => ({ name: entry.name, created: entry.created, updated: entry.updated, comments: entry.comments, error: entry.error }));
@@ -87,5 +94,6 @@ export async function runJobs(db: Db, options: { now?: Date; includeJira?: boole
   }
   try { result.late = await lateTicketsAlert(db, now); } catch (error) { result.errors.push(`Atrasos: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.agenda = await agendaRemindersJob(db, now); } catch (error) { result.errors.push(`Agenda: ${error instanceof Error ? error.message : "erro"}`); }
+  try { result.recurring = await recurringTasksJob(db, isoToLocal(now.toISOString()).day); } catch (error) { result.errors.push(`Repetições: ${error instanceof Error ? error.message : "erro"}`); }
   return result;
 }

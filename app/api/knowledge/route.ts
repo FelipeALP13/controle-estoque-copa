@@ -5,6 +5,7 @@ import { getSessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
 import { MAX_KB_BODY, MAX_KB_TITLE, parseTags } from "../../knowledge";
+import { readJsonBody } from "../../api-input";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -60,7 +61,8 @@ export async function POST(request: Request) {
     const member = await getSessionMember(db);
     if (!member) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
     if (!member.active || member.role === "viewer") return json({ error: "Seu perfil pode apenas consultar a base." }, 403);
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
     const now = new Date().toISOString();
 

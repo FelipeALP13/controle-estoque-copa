@@ -65,6 +65,8 @@ export const members = sqliteTable("members", {
   passwordSalt: text("password_salt"),
   jobTitle: text("job_title").notNull().default(""),
   phone: text("phone").notNull().default(""),
+  /** Resumo (hash) do link secreto da agenda para o Outlook; o link em si não fica guardado. */
+  calendarTokenHash: text("calendar_token_hash"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -359,6 +361,10 @@ export const tickets = sqliteTable("tickets", {
   externalUpdatedAt: text("external_updated_at"),
   // Quando o líder já foi avisado de que o chamado passou do prazo (para não avisar de novo).
   lateAlertedAt: text("late_alerted_at"),
+  // Avaliação de quem abriu (1 a 5), feita depois de resolvido.
+  rating: integer("rating"),
+  ratingComment: text("rating_comment").notNull().default(""),
+  ratedAt: text("rated_at"),
 }, (table) => [uniqueIndex("tickets_jira_key_unique").on(table.jiraConnectionId, table.externalKey)]);
 
 /** Agenda pessoal: anotações com horário e reuniões (com convidados da equipe). */
@@ -377,6 +383,9 @@ export const agendaEvents = sqliteTable("agenda_events", {
   remindBefore: integer("remind_before"),
   teamsUrl: text("teams_url").notNull().default(""),
   done: integer("done", { mode: "boolean" }).notNull().default(false),
+  // Repetição: "" (não repete), "daily", "weekdays", "weekly" ou "monthly"; até (AAAA-MM-DD) opcional.
+  repeat: text("repeat").notNull().default(""),
+  repeatUntil: text("repeat_until"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("agenda_events_owner_idx").on(table.ownerId, table.startsAt), index("agenda_events_starts_idx").on(table.startsAt)]);
@@ -398,7 +407,8 @@ export const agendaReminders = sqliteTable("agenda_reminders", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  stage: text("stage", { enum: ["before", "start"] }).notNull(),
+  // "before"/"start" ou, em compromissos que se repetem, "before@<início da ocorrência>".
+  stage: text("stage").notNull(),
   sentAt: text("sent_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.eventId, table.memberId, table.stage] })]);
 
@@ -455,7 +465,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
@@ -475,3 +485,34 @@ export const auditLogs = sqliteTable("audit_logs", {
   details: text("details").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/** Arquivos anexados a demandas e chamados (o arquivo fica no R2; aqui só os dados). */
+export const attachments = sqliteTable("attachments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerType: text("owner_type", { enum: ["task", "ticket"] }).notNull(),
+  ownerId: integer("owner_id").notNull(),
+  storageKey: text("storage_key").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull().default("application/octet-stream"),
+  size: integer("size").notNull().default(0),
+  uploadedById: integer("uploaded_by_id").references(() => members.id, { onDelete: "set null" }),
+  uploadedByName: text("uploaded_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("attachments_key_unique").on(table.storageKey), index("attachments_owner_idx").on(table.ownerType, table.ownerId)]);
+
+/** Demanda que se repete: copia a demanda de origem na data marcada (semanal ou mensal). */
+export const taskRecurrences = sqliteTable("task_recurrences", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sourceTaskId: integer("source_task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  frequency: text("frequency", { enum: ["weekly", "monthly"] }).notNull(),
+  // Semanal: dia da semana (1 = segunda ... 7 = domingo). Mensal: dia do mês (1 a 28).
+  day: integer("day").notNull(),
+  // Prazo da cópia: dias depois de criada (null = sem prazo).
+  dueDays: integer("due_days"),
+  nextOn: text("next_on").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  lastTaskId: integer("last_task_id").references(() => tasks.id, { onDelete: "set null" }),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("task_recurrences_source_unique").on(table.sourceTaskId), index("task_recurrences_next_idx").on(table.active, table.nextOn)]);

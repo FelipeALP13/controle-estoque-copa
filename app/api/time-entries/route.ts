@@ -5,6 +5,7 @@ import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, taskCode } from "../../tasks";
 import { entryDateError, formatHours, MAX_ENTRY_NOTE, MAX_HOURS_PER_DAY, parseEntryHours } from "../../time-entries";
+import { readJsonBody } from "../../api-input";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -74,7 +75,9 @@ export async function POST(request: Request) {
     if (!member.active || member.role === "viewer") return json({ error: "Seu perfil pode apenas visualizar." }, 403);
     const isAdmin = member.role === "admin";
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonBody(request);
+
+    if (body instanceof Response) return body;
     const action = String(body.action ?? "");
 
     if (action === "addEntry") {

@@ -23,6 +23,9 @@ import Plug from "lucide-react/icons/plug";
 import JiraSettings from "./jira-settings";
 import { TICKETS_CHANGED } from "./use-jira-sync";
 import { relatedArticles, type SearchableArticle } from "./knowledge";
+import AttachmentsPanel from "./attachments-panel";
+import TicketRatingCard from "./ticket-rating-card";
+import { canRate } from "./ticket-rating";
 import type { ArticleDraft } from "./knowledge-view";
 import { downloadXlsx } from "./xlsx-writer";
 import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
@@ -32,6 +35,7 @@ type Ticket = {
   teamId: number | null; requesterId: number | null; requesterName: string; assigneeId: number | null; taskId: number | null;
   firstResponseAt: string | null; resolvedAt: string | null; createdAt: string; updatedAt: string; commentCount: number;
   source: "portal" | "jira"; externalKey: string | null; externalUrl: string | null; externalStatus: string | null;
+  rating: number | null; ratingComment: string; ratedAt: string | null;
 };
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
 type Team = { id: number; name: string; color: string };
@@ -420,6 +424,10 @@ function TicketDrawer({ ticket, data, onClose, onUpdate, onReload, onOpenTask, o
             <span><BookOpen size={13} /> Pode ajudar (base de conhecimento)</span>
             {related.map((article) => <button key={article.id} onClick={() => onOpenArticle(article.id)}>{article.title}</button>)}
           </div>}
+
+          {ticket.status === "resolved" && <TicketRatingCard ticket={ticket} canRateNow={canRate(ticket, me.id)} onRate={async (rating, text) => { await post({ action: "rateTicket", ticketId: ticket.id, rating, comment: text }); await onReload(); }} />}
+
+          <AttachmentsPanel ownerType="ticket" ownerId={ticket.id} />
 
           {error && <p className="modal-error task-drawer-error">{error}</p>}
 

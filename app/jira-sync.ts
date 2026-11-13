@@ -1,4 +1,5 @@
 // Sincronização Jira → Portal. Roda no servidor, chamada pela API (/api/jira).
+import { autoAssignTicket } from "./ticket-assign";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { getDb } from "../db";
 import { jiraConnections, jiraProjects, clients, members, notifications, teamMembers, teams, ticketEvents, tickets } from "../db/schema";
@@ -79,7 +80,10 @@ async function upsertIssue(db: Db, connection: Connection, issue: JiraIssueData,
     ticketId = ticket.id;
     created = 1;
     await db.insert(ticketEvents).values({ ticketId, kind: "created", body: `Trazido do Jira (${issue.key})`, actorId: null, actorName, createdAt: issue.created, externalId: `created:${issue.key}` }).onConflictDoNothing();
-    if (issue.status !== "resolved") await notify(db, ticketId, "ticket_new", await teamMemberIds(db, teamId), `${issue.key} · ${issue.title}`, actorName);
+    if (issue.status !== "resolved") {
+      await notify(db, ticketId, "ticket_new", await teamMemberIds(db, teamId), `${issue.key} · ${issue.title}`, actorName);
+      assigneeId = await autoAssignTicket(db, ticketId);
+    }
   } else {
     ticketId = current.id;
     assigneeId = current.assigneeId;
