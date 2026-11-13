@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { announcementReads, announcements, members, teamMembers } from "../../../db/schema";
+import { announcementReads, announcements, members, notifications, teamMembers, teams } from "../../../db/schema";
 import { getSessionMember, type SessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { hasTrustedOrigin } from "../../request-security";
@@ -36,6 +36,20 @@ async function canPost(db: Db, member: SessionMember) {
   }
 }
 
+/** Aviso no sino para o público do aviso (o time ou todos), menos quem publicou e quem já leu. */
+async function notifyAudience(db: Db, teamId: number | null, authorId: number | null, actorName: string, title: string, now: string, skip: ReadonlySet<number> = new Set()) {
+  try {
+    const people = await db.select({ id: members.id }).from(members).where(eq(members.active, true));
+    const inTeam = teamId ? new Set((await db.select({ memberId: teamMembers.memberId }).from(teamMembers).where(eq(teamMembers.teamId, teamId))).map((row) => row.memberId)) : null;
+    const targets = people.filter((person) => person.id !== authorId && !skip.has(person.id) && (!inTeam || inTeam.size === 0 || inTeam.has(person.id)));
+    for (let index = 0; index < targets.length; index += 20) await db.insert(notifications).values(targets.slice(index, index + 20).map((person) => ({ memberId: person.id, kind: "announcement" as const, actorName, body: title.slice(0, 140), createdAt: now })));
+    return targets.length;
+  } catch (error) {
+    console.error("announcement notification failed", error);
+    return 0;
+  }
+}
+
 export async function GET() {
   try {
     const db = getDb();
@@ -45,18 +59,26 @@ export async function GET() {
     const today = todayInSaoPaulo();
     const rows = (await db.select().from(announcements)).filter((row) => isNoticeActive(row, today));
     const ids = rows.map((row) => row.id);
-    const [reads, people, poster] = await Promise.all([
+    const [reads, people, poster, memberships, teamRows] = await Promise.all([
       ids.length ? db.select().from(announcementReads).where(inArray(announcementReads.announcementId, ids)) : Promise.resolve([]),
       db.select({ id: members.id, name: members.name }).from(members).where(eq(members.active, true)),
       canPost(db, member),
+      db.select({ memberId: teamMembers.memberId, teamId: teamMembers.teamId, isLead: teamMembers.isLead }).from(teamMembers),
+      db.select({ id: teams.id, name: teams.name }).from(teams),
     ]);
     const isAdmin = member.role === "admin";
+    const inTeam = (teamId: number, personId: number) => memberships.some((row) => row.teamId === teamId && row.memberId === personId);
+    const teamExists = (teamId: number | null) => teamId !== null && teamRows.some((team) => team.id === teamId);
+    // Aviso de um time: só quem está nele vê (além de quem publicou e dos administradores).
+    const visible = rows.filter((row) => !teamExists(row.teamId) || isAdmin || row.createdById === member.id || inTeam(row.teamId!, member.id));
+    const postTeams = isAdmin ? teamRows : teamRows.filter((team) => memberships.some((row) => row.teamId === team.id && row.memberId === member.id && row.isLead));
     return json({
-      notices: sortNotices(rows).map((row) => {
+      teams: poster ? postTeams : [],
+      notices: sortNotices(visible).map((row) => {
         const readers = new Set(reads.filter((read) => read.announcementId === row.id).map((read) => read.memberId));
         // Quem publicou e os administradores veem quem ainda não leu.
         const manager = isAdmin || row.createdById === member.id;
-        const audience = people.filter((person) => person.id !== row.createdById);
+        const audience = people.filter((person) => person.id !== row.createdById && (!teamExists(row.teamId) || inTeam(row.teamId!, person.id)));
         return {
           id: row.id, title: row.title, body: row.body, important: row.important, expiresOn: row.expiresOn,
           createdByName: row.createdByName, createdAt: row.createdAt,
@@ -65,6 +87,9 @@ export async function GET() {
           audience: audience.length,
           pending: manager ? audience.filter((person) => !readers.has(person.id)).map((person) => person.name).sort((a, b) => a.localeCompare(b, "pt-BR")) : null,
           canDelete: manager,
+          teamName: teamExists(row.teamId) ? teamRows.find((team) => team.id === row.teamId)!.name : null,
+          remindedAt: manager ? row.remindedAt : null,
+          remindedRecently: manager && Boolean(row.remindedAt && Date.now() - Date.parse(row.remindedAt) < 12 * 3600000),
         };
       }),
       me: { id: member.id, canPost: poster },
@@ -101,9 +126,27 @@ export async function POST(request: Request) {
       const expiresOn = body.expiresOn ? String(body.expiresOn) : null;
       if (!title) return json({ error: "Dê um título ao aviso." }, 400);
       if (expiresOn && (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn) || expiresOn < todayInSaoPaulo())) return json({ error: "A data de validade precisa ser hoje ou depois." }, 400);
-      const [notice] = await db.insert(announcements).values({ title, body: text, important: body.important === true, expiresOn, createdById: member.id, createdByName: member.name, createdAt: now }).returning();
+      const teamId = Number(body.teamId) || null;
+      if (teamId) {
+        const [lead] = member.role === "admin" ? [{ ok: true }] : await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(and(eq(teamMembers.memberId, member.id), eq(teamMembers.teamId, teamId), eq(teamMembers.isLead, true))).limit(1);
+        if (!lead) return json({ error: "Você publica para todos ou para os times que lidera." }, 403);
+      }
+      const [notice] = await db.insert(announcements).values({ title, body: text, important: body.important === true, expiresOn, teamId, createdById: member.id, createdByName: member.name, createdAt: now }).returning();
+      await notifyAudience(db, notice.teamId, member.id, member.name, title, now);
       await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "announcement_created", targetType: "announcement", targetId: notice.id, details: title }).catch((error) => console.error("audit log failed", error));
       return json({ notice }, 201);
+    }
+
+    if (action === "remindPending") {
+      const noticeId = Number(body.noticeId);
+      const [notice] = await db.select().from(announcements).where(eq(announcements.id, noticeId)).limit(1);
+      if (!notice) return json({ error: "Aviso não encontrado." }, 404);
+      if (member.role !== "admin" && notice.createdById !== member.id) return json({ error: "Só quem publicou ou um administrador pode lembrar." }, 403);
+      if (notice.remindedAt && Date.parse(now) - Date.parse(notice.remindedAt) < 12 * 3600000) return json({ error: "Já foi lembrado nas últimas 12 horas." }, 429);
+      const readers = new Set((await db.select({ memberId: announcementReads.memberId }).from(announcementReads).where(eq(announcementReads.announcementId, noticeId))).map((row) => row.memberId));
+      const sent = await notifyAudience(db, notice.teamId, notice.createdById, member.name, `Lembrete: ${notice.title}`, now, readers);
+      await db.update(announcements).set({ remindedAt: now }).where(eq(announcements.id, noticeId));
+      return json({ ok: true, sent });
     }
 
     if (action === "deleteNotice") {

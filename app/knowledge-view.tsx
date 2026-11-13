@@ -152,7 +152,7 @@ function ArticleModal({ value, clients, teams, onClose, onSaved }: { value: Arti
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal kb-modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">BASE DE CONHECIMENTO</p><h2>{existing ? "Editar artigo" : "Novo artigo"}</h2><p>{draft ? `A partir do chamado ${ticketCode(draft.ticketId)}. Revise e escreva o passo a passo que resolveu.` : "Escreva como quem vai atender da próxima vez: o sintoma, a causa e o passo a passo."}</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{existing ? "Editar artigo" : "Novo artigo"}</h2><p>{draft ? `A partir do chamado ${ticketCode(draft.ticketId)}. Revise e escreva o passo a passo que resolveu.` : "Escreva como quem vai atender da próxima vez: o sintoma, a causa e o passo a passo."}</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label className="full"><span>Título (o problema, como o cliente descreve)</span><input autoFocus required maxLength={140} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ex.: Boleto não aparece no site do cliente" /></label>
       <label><span>Cliente (opcional)</span><select value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}><option value="">Vale para todos</option>{clients.filter((entry) => entry.active || String(entry.id) === form.clientId).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>

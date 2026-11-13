@@ -13,7 +13,7 @@ export function TeamView({ members, currentUser, saving, onAddMember, onEditMemb
     <>
       <div className="team-intro">
         <span className="team-intro-icon"><Users /></span>
-        <div><p className="eyebrow">ACESSO INDIVIDUAL</p><h2>Usuários e permissões</h2><p>Cada pessoa entra com sua própria conta, e tudo o que ela faz fica registrado no nome dela. Cargo, telefone e times ficam na área Pessoas.</p></div>
+        <div><h2>Usuários e permissões</h2><p>Cada pessoa entra com sua própria conta, e tudo o que ela faz fica registrado no nome dela. Cargo, telefone e times ficam na área Pessoas.</p></div>
       </div>
       <div className="permission-cards">
         <article><strong>Administrador</strong><p>Acesso total: cria usuários, monta os times, edita a escala, atende qualquer chamado e pode excluir demandas e chamados.</p></article>

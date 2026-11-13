@@ -86,7 +86,7 @@ export default function JiraSettings({ onClose, onSynced }: { onClose: () => voi
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal jira-modal">
-    <div className="modal-head"><div><p className="eyebrow">INTEGRAÇÃO</p><h2>Chamados do Jira</h2><p>Chamados abertos nos projetos marcados aparecem sozinhos na fila do Suporte, com o cliente certo. O Portal busca a cada 2 minutos enquanto alguém da equipe está com ele aberto.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Chamados do Jira</h2><p>Chamados abertos nos projetos marcados aparecem sozinhos na fila do Suporte, com o cliente certo. O Portal busca a cada 2 minutos enquanto alguém da equipe está com ele aberto.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="jira-body">
       {error && <p className="modal-error">{error}</p>}
       {notice && !error && <p className="jira-notice">{notice}</p>}
@@ -149,7 +149,7 @@ function ConnectionForm({ value, teams, onClose, onSaved }: { value: Connection 
   }
 
   return <div className="modal-layer nested"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit} autoComplete="off">
-    <div className="modal-head"><div><p className="eyebrow">CONTA DO JIRA</p><h2>{value ? "Editar conta" : "Adicionar conta"}</h2><p>Ao salvar, o Portal testa a conexão com o Jira. A chave fica guardada no servidor e não aparece mais na tela.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{value ? "Editar conta" : "Adicionar conta"}</h2><p>Ao salvar, o Portal testa a conexão com o Jira. A chave fica guardada no servidor e não aparece mais na tela.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label className="full"><span>Nome</span><input autoFocus required maxLength={60} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Jira Dr. Hoje" /></label>
       <label className="full"><span>Endereço do Jira</span><input required value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder="https://suaempresa.atlassian.net" /></label>

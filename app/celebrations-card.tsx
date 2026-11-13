@@ -7,7 +7,7 @@ import { upcomingCelebrations, type Celebration } from "./team-tools";
 
 type Person = { id: number; name: string; active: boolean; birthday?: string | null; startedOn?: string | null };
 
-/** Pessoas ativas com aniversário e data de entrada (para a visão geral e a tela da TV). */
+/** Pessoas ativas com aniversário e data de entrada (para a visão geral). */
 export function useCelebrations(today: string, days = 14) {
   const [list, setList] = useState<Celebration[] | null>(null);
   useEffect(() => {

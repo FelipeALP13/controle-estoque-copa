@@ -1,5 +1,6 @@
 "use client";
 
+import LockKeyhole from "lucide-react/icons/lock-keyhole";
 import ThemePicker from "./theme-picker";
 import { useEffect, useMemo, useState } from "react";
 import { passwordPolicyError } from "./auth-policy";
@@ -213,12 +214,11 @@ export function Modal({ state, items, schedule, currentUser, saving, onClose, on
     if (submissionError) setFormError(submissionError);
   }
 
-  const isScheduleModal = state.kind === "supportTeam" || state.kind === "supportWeek" || state.kind === "generateWeeks";
   const generateBlocked = state.kind === "generateWeeks" && (!generatedPreview.length || generatedPreview.some((week) => week.conflict));
 
   return (
     <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className={`modal ${state.kind === "member" ? "member-modal" : ""}`} onSubmit={handleSubmit}>
-      <div className="modal-head"><div><p className="eyebrow">{isScheduleModal ? "ESCALA DE ATENDIMENTO" : state.kind === "profile" ? "CONFIGURAÇÕES PESSOAIS" : state.kind === "member" ? "GESTÃO DE ACESSO" : state.kind === "item" ? "CADASTRO EDITÁVEL" : "MOVIMENTAÇÃO DO ESTOQUE"}</p><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
+      <div className="modal-head"><div><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
       {state.kind === "member" && <div className="member-tabs"><button type="button" className={memberTab === "general" ? "active" : ""} onClick={() => setMemberTab("general")}>Geral</button><button type="button" className={memberTab === "permissions" ? "active" : ""} onClick={() => setMemberTab("permissions")}>Permissões</button></div>}
       <div className="form-grid">
         {state.kind === "supportTeam" ? <SupportTeamFields name={teamName} setName={setTeamName} color={teamColor} setColor={setTeamColor} membersText={teamMembersText} setMembersText={setTeamMembersText} /> : state.kind === "supportWeek" ? <>
@@ -257,7 +257,7 @@ export function Modal({ state, items, schedule, currentUser, saving, onClose, on
           <label><span>E-mail</span><input required type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="ana@empresa.com" /></label>
             <label><span>Perfil base</span><select value={memberRole} onChange={(e) => { const role = e.target.value as MemberRole; setMemberRole(role); setMemberPermissions(permissionPresets[role]); }}><option value="admin">Administrador</option><option value="member">Membro</option><option value="viewer">Somente leitura</option></select></label>
             <label><span>Status</span><select value={memberActive ? "active" : "inactive"} onChange={(event) => setMemberActive(event.target.value === "active")}><option value="active">Ativo</option><option value="inactive">Desativado</option></select></label>
-          <div className="account-security-note full"><span>🔐</span><div><strong>Credenciais protegidas</strong><small>A senha é transformada em um código seguro e não pode ser visualizada depois de salva.</small></div></div>
+          <div className="account-security-note full"><span><LockKeyhole size={15} /></span><div><strong>Credenciais protegidas</strong><small>A senha é transformada em um código seguro e não pode ser visualizada depois de salva.</small></div></div>
         </> : <>
           <div className="permission-editor full">
             <div className="permission-editor-head"><div><strong>Permissões individuais</strong><small>{memberRole === "admin" ? "Administradores possuem acesso total obrigatório." : `Defina exatamente o que ${memberName || "este usuário"} poderá fazer.`}</small></div><span>{memberRole === "admin" ? "Acesso total" : `${Object.values(memberPermissions).filter(Boolean).length} de ${permissionOptions.length}`}</span></div>

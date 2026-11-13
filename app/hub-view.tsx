@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { MyTasksPanel } from "./tasks-view";
 import { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
@@ -7,6 +8,7 @@ import NoticeBoard from "./notice-board";
 import CelebrationsCard from "./celebrations-card";
 import { OnboardingCard, useOnboardings } from "./onboarding-view";
 import { shoppingList } from "./stock-forecast";
+import { monthLabel } from "./people-tools";
 import NotebookPen from "lucide-react/icons/notebook-pen";
 import VideoIcon from "lucide-react/icons/video";
 import { isoToLocal, isTeamsJoinLink } from "./agenda";
@@ -23,9 +25,12 @@ import History from "lucide-react/icons/history";
 import Plus from "lucide-react/icons/plus";
 import Search from "lucide-react/icons/search";
 import Sun from "lucide-react/icons/sun";
-import { type CurrentUser, type Item, type Movement, type Schedule, movementCopy, fmt, toForecast, exactDate, ItemVisual, greeting, todayLong, isoDateInSaoPaulo, weekLabel, findTeam } from "./dashboard-shared";
+import Sprout from "lucide-react/icons/sprout";
+import ClipboardCheck from "lucide-react/icons/clipboard-check";
+import Smile from "lucide-react/icons/smile";
+import { type CurrentUser, type Item, type Movement, type Schedule, movementCopy, fmt, toForecast, exactDate, ItemVisual, todayLong, isoDateInSaoPaulo, weekLabel, findTeam } from "./dashboard-shared";
 
-export function HubView({ items, movements, schedule, currentUser, counts, agenda, onOpenAgenda, onMyDay, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket, onSearch }: { items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; agenda: AgendaEvent[]; onOpenAgenda: (eventId?: number) => void; onMyDay: () => void; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch: () => void }) {
+export function HubView({ onOpenReviews, onOpenPulse, items, movements, schedule, currentUser, counts, agenda, onOpenAgenda, onMyDay, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket, onSearch }: { onOpenReviews: () => void; onOpenPulse: () => void; items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; agenda: AgendaEvent[]; onOpenAgenda: (eventId?: number) => void; onMyDay: () => void; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch: () => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
@@ -33,7 +38,6 @@ export function HubView({ items, movements, schedule, currentUser, counts, agend
   const featuredTeam = featuredWeek ? findTeam(schedule, featuredWeek.teamId) : null;
   const hubShopping = shoppingList(items.map(toForecast), today);
   const lowItems = items.filter((item) => hubShopping.some((line) => line.id === item.id));
-  const firstName = currentUser?.name.split(/\s+/)[0] || "Equipe";
   const canEdit = currentUser ? currentUser.role !== "viewer" : false;
   const away = useAbsences();
   const absenceGroups = splitAbsences(away.absences, today, 7);
@@ -51,9 +55,8 @@ export function HubView({ items, movements, schedule, currentUser, counts, agend
   return <div className="hub">
     <section className="hub-hero">
       <div>
-        <p className="eyebrow">{greeting()}, {firstName.toLocaleUpperCase("pt-BR")}</p>
-        <h2>O que você precisa hoje?</h2>
-        <p className="hub-hero-date">{todayLong()}</p>
+        
+        <h2 className="hub-hero-date">{todayLong()}</h2>
       </div>
       <div className="hub-actions">
         {canEdit && <button className="primary-button" onClick={onNewTask}><Plus size={16} /> Nova demanda</button>}
@@ -65,11 +68,13 @@ export function HubView({ items, movements, schedule, currentUser, counts, agend
 
     <div className="hub-summary">
       {summary.map((tile, index) => <button key={tile.key} className={`hub-stat ${tile.alert ? "is-danger" : "warn" in tile && tile.warn ? "is-warn" : ""}`} style={{ "--i": index } as React.CSSProperties} onClick={tile.action}>
-        <span className="hub-stat-icon">{tile.icon}</span>
         <span className="hub-stat-body"><small>{tile.label}</small><strong>{tile.value ?? "—"}</strong><em>{tile.detail}</em></span>
         <span className="hub-stat-go" aria-hidden="true">→</span>
       </button>)}
     </div>
+
+    <HubReviews enabled={Boolean(currentUser?.active)} onOpen={onOpenReviews} />
+    <HubPulse enabled={Boolean(currentUser?.active)} onOpen={onOpenPulse} />
 
     <NoticeBoard />
 
@@ -138,7 +143,50 @@ function HubOnboarding({ enabled, onOpen }: { enabled: boolean; onOpen: () => vo
   const mine = (data?.onboardings ?? []).filter((row) => row.status === "active" && (row.memberId === meId || row.buddyId === meId));
   if (!data || !mine.length) return null;
   return <section className="hub-onboarding">
-    <div className="hub-panel-title"><div><span>🌱</span><div><h3>{mine.some((row) => row.memberId === meId) ? "Seus primeiros passos" : "Integração que você acompanha"}</h3><p>Marque os passos conforme forem feitos</p></div></div><button onClick={onOpen}>Ver tudo</button></div>
+    <div className="hub-panel-title"><div><span><Sprout /></span><div><h3>{mine.some((row) => row.memberId === meId) ? "Seus primeiros passos" : "Integração que você acompanha"}</h3><p>Marque os passos conforme forem feitos</p></div></div><button onClick={onOpen}>Ver tudo</button></div>
     <div className="onboarding-grid">{mine.map((row) => <OnboardingCard key={row.id} row={row} people={data.people} isAdmin={false} onChanged={load} compact />)}</div>
   </section>;
+}
+
+/** Avaliação aberta com pendências: aviso no topo da visão geral. */
+function HubReviews({ enabled, onOpen }: { enabled: boolean; onOpen: () => void }) {
+  const [state, setState] = useState<{ title: string; endDate: string; left: number } | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    void fetch("/api/reviews", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json() as { cycle: { title: string; endDate: string } | null; pending: { done: boolean }[] };
+      const left = data.pending.filter((item) => !item.done).length;
+      if (!cancelled) setState(data.cycle && left ? { title: data.cycle.title, endDate: data.cycle.endDate, left } : null);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [enabled]);
+  if (!state) return null;
+  return <button className="hub-review-banner" onClick={onOpen}>
+    <span><ClipboardCheck size={18} /></span>
+    <span><strong>{state.title}: faltam {state.left} avaliaç{state.left === 1 ? "ão" : "ões"}</strong><small>Anônimo · até {new Date(`${state.endDate}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" })}</small></span>
+    <em>Avaliar →</em>
+  </button>;
+}
+
+/** Pesquisa de clima do mês ainda sem a resposta de quem está logado. */
+function HubPulse({ enabled, onOpen }: { enabled: boolean; onOpen: () => void }) {
+  const [month, setMonth] = useState<string | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    void fetch("/api/pulse", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json() as { current: { month: string; answered: boolean } | null };
+      if (!cancelled) setMonth(data.current && !data.current.answered ? data.current.month : null);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [enabled]);
+  if (!month) return null;
+  return <button className="hub-review-banner pulse" onClick={onOpen}>
+    <span><Smile size={18} /></span>
+    <span><strong>Pesquisa de clima de {monthLabel(month)}</strong><small>3 perguntas, 1 minuto, anônima</small></span>
+    <em>Responder →</em>
+  </button>;
 }

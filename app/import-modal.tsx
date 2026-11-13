@@ -94,7 +94,7 @@ export default function ImportModal({ onClose, onImported }: { onClose: () => vo
   const canImport = report && !report.totalErrors && (report.demandsToImport > 0 || report.projectsToImport > 0) && !result;
 
   return <div className="modal-layer"><button className="backdrop" onClick={busy ? undefined : onClose} aria-label="Fechar janela" /><div className="modal import-modal">
-    <div className="modal-head"><div><p className="eyebrow">IMPORTAÇÃO</p><h2>Importar planilhas de demandas</h2><p>No Google Planilhas, abra cada planilha e use Arquivo → Fazer download → Microsoft Excel (.xlsx). Nada é gravado até você confirmar a prévia.</p></div><button type="button" onClick={onClose} disabled={Boolean(busy)} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Importar planilhas de demandas</h2><p>No Google Planilhas, abra cada planilha e use Arquivo → Fazer download → Microsoft Excel (.xlsx). Nada é gravado até você confirmar a prévia.</p></div><button type="button" onClick={onClose} disabled={Boolean(busy)} aria-label="Fechar"><X /></button></div>
 
     <div className="import-body">
       <div className="import-slots">

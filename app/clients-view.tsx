@@ -259,7 +259,7 @@ function ProfileModal({ client, onClose, onSaved }: { client: Client; onClose: (
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(""); try { await post({ action: "saveProfile", clientId: client.id, ...form }); onSaved(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível salvar."); setSaving(false); } }}>
-    <div className="modal-head"><div><p className="eyebrow">CLIENTE</p><h2>{client.name}</h2><p>Contato principal, pacote de horas e observações. O nome do cliente se muda em Demandas → Clientes.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{client.name}</h2><p>Contato principal, pacote de horas e observações. O nome do cliente se muda em Demandas → Clientes.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label><span>Contato principal</span><input autoFocus maxLength={80} value={form.contactName} onChange={(event) => setForm({ ...form, contactName: event.target.value })} placeholder="Nome de quem fala pelo cliente" /></label>
       <label><span>E-mail do contato</span><input type="email" maxLength={120} value={form.contactEmail} onChange={(event) => setForm({ ...form, contactEmail: event.target.value })} /></label>
@@ -278,7 +278,7 @@ function SystemModal({ clientId, system, teams, onClose, onSaved }: { clientId: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" autoComplete="off" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(""); try { await post({ action: "saveSystem", clientId, systemId: system?.id, ...form, teamId: form.teamId ? Number(form.teamId) : null }); onSaved(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível salvar."); setSaving(false); } }}>
-    <div className="modal-head"><div><p className="eyebrow">ACESSO DE SISTEMA</p><h2>{system ? "Editar acesso" : "Novo acesso"}</h2><p>A senha fica criptografada. Só o time escolhido e os administradores veem o login, e cada vez que alguém vê ou copia a senha fica registrado no histórico.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{system ? "Editar acesso" : "Novo acesso"}</h2><p>A senha fica criptografada. Só o time escolhido e os administradores veem o login, e cada vez que alguém vê ou copia a senha fica registrado no histórico.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label><span>Sistema</span><input autoFocus required maxLength={80} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: SGE" /></label>
       <label><span>Ambiente</span><select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value as Environment })}>{ENVIRONMENTS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label>

@@ -41,7 +41,7 @@ export function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam
 
       {highlightedWeek && highlightedTeam ? <section className={`schedule-hero ${highlightedTeam.color}`}>
         <div className="schedule-hero-copy">
-          <p className="eyebrow">{currentWeek ? "ATENDIMENTO DE HOJE" : nextWeek ? "PRÓXIMO ATENDIMENTO" : "ÚLTIMO PERÍODO DA ESCALA"}</p>
+          
           <h2>{highlightedTeam.name}</h2>
           <p>{currentWeek ? `Responsável pela semana de ${weekLabel(highlightedWeek)}.` : nextWeek ? `A próxima escala começa em ${scheduleDate(highlightedWeek.start, { weekday: "long", day: "2-digit", month: "long" })}.` : `A escala cadastrada terminou em ${scheduleDate(highlightedWeek.end, { day: "2-digit", month: "long" })}. Cadastre as próximas semanas.`}</p>
           {highlightedWeek.note && <p className="schedule-hero-note">{highlightedWeek.note}</p>}

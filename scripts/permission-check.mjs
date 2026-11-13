@@ -35,7 +35,9 @@ async function expectStatus(label, who, method, path, body, expected, extraHeade
   const headers = { Origin: BASE, ...extraHeaders };
   if (who) headers.Cookie = `estoque_session=${people[who].token}`;
   if (body) headers["Content-Type"] = "application/json";
-  const response = await fetch(BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined, redirect: "manual" });
+  // O servidor local às vezes derruba a conexão logo depois de o teste gravar direto no banco: tenta de novo uma vez.
+  const send = () => fetch(BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined, redirect: "manual" });
+  const response = await send().catch(async () => { await new Promise((resolve) => setTimeout(resolve, 1500)); return send(); });
   const ok = Array.isArray(expected) ? expected.includes(response.status) : response.status === expected;
   results.push({ ok, label, who: who ?? "sem login", got: response.status, expected });
 }
@@ -98,15 +100,12 @@ try {
   await expectStatus("calendário com link inválido", null, "GET", "/api/agenda/ics?token=1.0000000000000000000000000000000000000000000000000000000000000000", null, 404);
   await expectStatus("calendário sem link", null, "GET", "/api/agenda/ics", null, 404);
 
-  // Respostas prontas, dependências, cronômetro, passagem de plantão e tela da TV.
+  // Respostas prontas, dependências, cronômetro, passagem de plantão.
   await expectStatus("criar resposta pronta (somente leitura)", "viewer", "POST", "/api/tickets", { action: "saveReply", title: "x", body: "x" }, 403);
   await expectStatus("ligar dependência (somente leitura)", "viewer", "POST", "/api/tasks", { action: "addDependency", taskId: 1, blockedById: 2 }, 403);
   await expectStatus("iniciar cronômetro (somente leitura)", "viewer", "POST", "/api/time-entries", { action: "startTimer", taskId: 1 }, 403);
   await expectStatus("registrar passagem de plantão (somente leitura)", "viewer", "POST", "/api/handoffs", { action: "createHandoff", body: "x" }, 403);
   await expectStatus("ver passagem de plantão sem login", null, "GET", "/api/handoffs", null, 401);
-  await expectStatus("dados da TV sem login", null, "GET", "/api/tv", null, 401);
-  await expectStatus("tela da TV sem login", null, "GET", "/tv", null, [302, 303, 307, 308]);
-  await expectStatus("ler dados da TV", "viewer", "GET", "/api/tv", null, 200);
 
   // Clientes e acessos, sprints, retrospectivas e integração.
   for (const path of ["/api/clients", "/api/sprints", "/api/retros", "/api/onboarding"]) await expectStatus(`ler ${path}`, null, "GET", path, null, 401);
@@ -119,6 +118,31 @@ try {
   await expectStatus("criar sprint (somente leitura)", "viewer", "POST", "/api/sprints", { action: "saveSprint", name: "x", startDate: "2026-01-05", endDate: "2026-01-09" }, 403);
   await expectStatus("criar retrospectiva (somente leitura)", "viewer", "POST", "/api/retros", { action: "createRetro", title: "x" }, 403);
   await expectStatus("excluir sprint (membro)", "member", "POST", "/api/sprints", { action: "deleteSprint", sprintId: 1 }, [403, 404]);
+  // Avaliação trimestral e metas.
+  await expectStatus("ver avaliação sem login", null, "GET", "/api/reviews", null, 401);
+  await expectStatus("ver metas sem login", null, "GET", "/api/goals", null, 401);
+  for (const who of ["viewer", "member"]) {
+    await expectStatus("abrir ciclo de avaliação", who, "POST", "/api/reviews", { action: "openCycle", title: "x", endDate: "2099-01-01", peerCriteria: "a", companyCriteria: "a", managerCriteria: "a" }, 403);
+    await expectStatus("mudar gestão avaliada", who, "POST", "/api/reviews", { action: "saveManager", name: "x" }, 403);
+  }
+  await expectStatus("criar meta (somente leitura)", "viewer", "POST", "/api/goals", { action: "saveGoal", year: 2026, scope: "team", teamId: 1, title: "x", target: 1 }, 403);
+  await expectStatus("criar meta de time sem ser líder", "member", "POST", "/api/goals", { action: "saveGoal", year: 2026, scope: "team", teamId: 1, title: "x", target: 1 }, 403);
+  await expectStatus("criar meta individual sem ser líder", "member", "POST", "/api/goals", { action: "saveGoal", year: 2026, scope: "person", memberId: 1, title: "x", target: 1 }, 403);
+  await expectStatus("resultados de ciclo inexistente", "member", "GET", "/api/reviews?results=999999", null, 404);
+
+  // 1:1 e plano de desenvolvimento, pesquisa de clima, equipamentos e incidentes.
+  for (const path of ["/api/one-on-ones", "/api/pulse", "/api/assets", "/api/incidents"]) await expectStatus(`ler ${path} sem login`, null, "GET", path, null, 401);
+  await expectStatus("marcar 1:1 com quem não lidera", "member", "POST", "/api/one-on-ones", { action: "saveMeeting", memberId: 1, date: "2099-01-01" }, 403);
+  await expectStatus("criar ação no plano de outra pessoa", "member", "POST", "/api/one-on-ones", { action: "saveAction", memberId: 1, title: "x" }, 403);
+  await expectStatus("ler o próprio 1:1 e plano", "viewer", "GET", "/api/one-on-ones", null, 200);
+  await expectStatus("responder a pesquisa de clima (somente leitura participa)", "viewer", "GET", "/api/pulse", null, 200);
+  for (const who of ["viewer", "member"]) {
+    await expectStatus("configurar a pesquisa de clima", who, "POST", "/api/pulse", { action: "saveSettings", enabled: false, questions: "x" }, 403);
+    await expectStatus("cadastrar equipamento", who, "POST", "/api/assets", { action: "saveAsset", kind: "equipment", name: "x" }, 403);
+  }
+  await expectStatus("registrar incidente (somente leitura)", "viewer", "POST", "/api/incidents", { action: "saveIncident", title: "x", startedAt: "2026-01-01T10:00" }, 403);
+  await expectStatus("excluir incidente (membro)", "member", "POST", "/api/incidents", { action: "deleteIncident", incidentId: 1 }, 403);
+
   // Senha de um acesso de outro time: membro fora do time não vê.
   const [{ results: [client] }] = sql("select id from clients limit 1;");
   const [{ results: [team] }] = sql("select id from teams limit 1;");
@@ -126,7 +150,8 @@ try {
     sql(`insert into client_systems (client_id, team_id, name, created_by_name) values (${client.id}, ${team.id}, '${MARK}', '${MARK}');`);
     const [{ results: [system] }] = sql(`select id from client_systems where name = '${MARK}';`);
     await expectStatus("ver senha de acesso de outro time (membro)", "member", "POST", "/api/clients", { action: "revealPassword", systemId: system.id }, 403);
-    const detail = await fetch(`${BASE}/api/clients?clientId=${client.id}`, { headers: { Cookie: `estoque_session=${people.member.token}` } }).then((response) => response.json());
+    const readDetail = () => fetch(`${BASE}/api/clients?clientId=${client.id}`, { headers: { Cookie: `estoque_session=${people.member.token}` } }).then((response) => response.json());
+    const detail = await readDetail().catch(async () => { await new Promise((resolve) => setTimeout(resolve, 1500)); return readDetail(); });
     const leaked = detail.systems?.find((entry) => entry.id === system.id);
     results.push({ ok: Boolean(leaked) && leaked.username === null && leaked.canSeeLogin === false, label: "usuário do acesso escondido de quem não é do time", who: "member", got: leaked ? `username=${leaked.username}` : "não listado", expected: "username=null" });
   }

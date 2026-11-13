@@ -8,6 +8,13 @@ import NotificationsBell from "./notifications-bell";
 import { TimerBadge } from "./task-timer";
 import ClientsView from "./clients-view";
 import SprintsView from "./sprints-view";
+import ReviewsView, { type ReviewsTab } from "./reviews-view";
+import Sparkles from "lucide-react/icons/sparkles";
+import AssetsView from "./assets-view";
+import IncidentsView from "./incidents-view";
+import Laptop from "lucide-react/icons/laptop";
+import Siren from "lucide-react/icons/siren";
+import ClipboardCheck from "lucide-react/icons/clipboard-check";
 import Building2 from "lucide-react/icons/building-2";
 import CalendarRange from "lucide-react/icons/calendar-range";
 import { APP_NAME, APP_TAGLINE } from "./brand";
@@ -51,7 +58,6 @@ import Plus from "lucide-react/icons/plus";
 import Search from "lucide-react/icons/search";
 import Settings2 from "lucide-react/icons/settings-2";
 import ShoppingCart from "lucide-react/icons/shopping-cart";
-import Sparkles from "lucide-react/icons/sparkles";
 import TrendingDown from "lucide-react/icons/trending-down";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
 import UserPlus from "lucide-react/icons/user-plus";
@@ -63,14 +69,6 @@ import { ScheduleView } from "./schedule-view";
 import { StockRow, PlanningView, HistoryView } from "./stock-views";
 import { TeamView } from "./team-view";
 import { Modal } from "./dashboard-modal";
-
-const sidebarTips = [
-  "Na tela de Demandas, aperte a tecla C para criar uma demanda rápida.",
-  "Precisa de outro time? Abra um chamado: ele cai direto na fila de quem resolve.",
-  "Escreva @ e o nome da pessoa num comentário para avisá-la no sininho.",
-  "Mantenha seu cargo e telefone em dia em Meu perfil: eles aparecem em Pessoas.",
-  "Use “Do meu time” nas demandas e “Fila do meu time” nos chamados para focar no que é seu.",
-];
 
 export default function Home() {
   const router = useRouter();
@@ -85,12 +83,12 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "open">("all");
-  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "knowledge" | "admin" | "calendar" | "agenda" | "people" | "planning" | "reports" | "history" | "team" | "clients" | "sprints">("hub");
+  const [tab, setTab] = useState<"hub" | "stock" | "schedule" | "tasks" | "projects" | "panel" | "tickets" | "knowledge" | "admin" | "calendar" | "agenda" | "people" | "planning" | "reports" | "history" | "team" | "clients" | "sprints" | "reviews" | "assets" | "incidents">("hub");
+  // Aba de Avaliações e metas aberta por um aviso (1:1, clima); a chave recria a tela na aba certa.
+  const [reviewsTab, setReviewsTab] = useState<{ tab: ReviewsTab; key: number }>({ tab: "review", key: 0 });
   const [stockMenu, setStockMenu] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [taskToOpen, setTaskToOpen] = useState<number | null>(null);
-  // Uma dica por dia, a mesma para todos.
-  const [dailyTip] = useState(() => sidebarTips[Math.floor(Date.now() / 86400000) % sidebarTips.length]);
   const clearTaskToOpen = useCallback(() => setTaskToOpen(null), []);
   const [ticketToOpen, setTicketToOpen] = useState<number | null>(null);
   const clearTicketToOpen = useCallback(() => setTicketToOpen(null), []);
@@ -105,9 +103,19 @@ export default function Home() {
 
   // Menu lateral: troca de tela (os itens do estoque mantêm o submenu aberto) e fecha o menu no celular.
   function go(next: typeof tab, keepStock = false) {
+    if (next === "reviews") setReviewsTab((current) => ({ tab: "review", key: current.key + 1 }));
     setTab(next);
     setStockMenu(keepStock);
     setMobileMenu(false);
+  }
+  /** Abre a tela de um aviso; 1:1 e clima são abas de Avaliações e metas. */
+  function openView(view: typeof tab | "one_on_ones" | "pulse") {
+    if (view === "one_on_ones" || view === "pulse") {
+      go("reviews");
+      setReviewsTab((current) => ({ tab: view === "pulse" ? "pulse" : "oneonone", key: current.key + 1 }));
+      return;
+    }
+    go(view);
   }
   const { counts: navCounts } = useNavCounts(Boolean(currentUser?.active));
   // Menu lateral estilo Instagram: faixa só com ícones que se abre ao passar o mouse (ou com o teclado).
@@ -127,17 +135,6 @@ export default function Home() {
   // Atalhos da visão geral para abrir o formulário de nova demanda / novo chamado.
   const [newTaskRequest, setNewTaskRequest] = useState(0);
   const [newTicketRequest, setNewTicketRequest] = useState(0);
-  // A dica do dia pode ser escondida até amanhã (vale só neste navegador).
-  const tipKey = `dica-escondida-${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())}`;
-  const [showTip, setShowTip] = useState(true);
-  useEffect(() => {
-    const timer = window.setTimeout(() => { try { if (window.localStorage.getItem(tipKey)) setShowTip(false); } catch { /* opcional */ } }, 0);
-    return () => window.clearTimeout(timer);
-  }, [tipKey]);
-  function hideTip() {
-    setShowTip(false);
-    try { window.localStorage.setItem(tipKey, "1"); } catch { /* opcional */ }
-  }
 
   // Resultado escolhido na busca geral: abre a tela certa já no item.
   function openSearchHit(hit: SearchHit) {
@@ -315,11 +312,14 @@ export default function Home() {
             { key: "sprints", label: "Sprints e retros", icon: <CalendarRange />, onClick: () => go("sprints") },
             { key: "projects", label: "Projetos", icon: <FolderKanban />, onClick: () => go("projects") },
             { key: "clients", label: "Clientes", icon: <Building2 />, onClick: () => go("clients") },
+            { key: "incidents", label: "Incidentes", icon: <Siren />, onClick: () => go("incidents") },
             { key: "knowledge", label: "Base de conhecimento", icon: <BookOpen />, onClick: () => openKnowledge() },
           ] },
           { label: "Equipe", items: [
             { key: "schedule", label: "Escala", icon: <CalendarClock />, onClick: () => go("schedule") },
+            { key: "reviews", label: "Avaliações e metas", icon: <ClipboardCheck />, onClick: () => go("reviews") },
             { key: "people", label: "Pessoas", icon: <Contact />, onClick: () => { setPersonSearch(""); go("people"); } },
+            { key: "assets", label: "Equipamentos", icon: <Laptop />, onClick: () => go("assets") },
             { key: "panel", label: "Painel", icon: <Gauge />, onClick: () => go("panel") },
           ] },
           { label: "Copa", items: [
@@ -334,10 +334,6 @@ export default function Home() {
             { key: "admin", label: "Histórico e cópias", icon: <ShieldCheck />, onClick: () => go("admin") },
           ] : [] },
         ]} />
-        {showTip && sidebarOpen && <div className="sidebar-tip">
-          <span><Sparkles size={15} className="tip-sparkle" /> Dica do dia<button type="button" onClick={hideTip} aria-label="Esconder a dica de hoje" title="Esconder até amanhã"><X size={13} /></button></span>
-          <p>{dailyTip}</p>
-        </div>}
         <div className="sidebar-user">
           <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil" title="Meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div></button>
           <button className="signout-link" onClick={logout} title="Sair do sistema" aria-label="Sair do sistema"><LogOut size={16} /></button>
@@ -347,15 +343,15 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><p className="eyebrow">PORTAL DA EQUIPE</p><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Histórico e cópia de segurança" : tab === "calendar" ? "Calendário" : tab === "agenda" ? "Minha agenda" : tab === "clients" ? "Clientes e sistemas" : tab === "sprints" ? "Sprints e retrospectivas" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
-          <div className="topbar-actions">{currentUser?.active && currentUser.role !== "viewer" && <TimerBadge onOpenTask={openTask} />}<CommandSearch onPick={openSearchHit} /><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} onOpenEvent={openAgenda} onOpenView={(view) => go(view)} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
+          <div><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Histórico e cópia de segurança" : tab === "calendar" ? "Calendário" : tab === "agenda" ? "Minha agenda" : tab === "clients" ? "Clientes e sistemas" : tab === "reviews" ? "Avaliações e metas" : tab === "assets" ? "Equipamentos e licenças" : tab === "incidents" ? "Incidentes" : tab === "sprints" ? "Sprints e retrospectivas" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div className="topbar-actions">{currentUser?.active && currentUser.role !== "viewer" && <TimerBadge onOpenTask={openTask} />}<CommandSearch onPick={openSearchHit} /><NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} onOpenEvent={openAgenda} onOpenView={(view) => openView(view)} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 
         <section className="content">
           {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
-          {tab === "hub" ? <HubView items={items} movements={movements} schedule={schedule} currentUser={currentUser} counts={navCounts} agenda={upcomingAgenda} onOpenAgenda={openAgenda} onMyDay={() => setMyDayOpen(true)} onOpen={(destination) => go(destination)} onOpenTask={openTask} onOpenTicket={openTicket} onNewTask={() => { openTask(); setNewTaskRequest((value) => value + 1); }} onNewTicket={() => { openTicket(); setNewTicketRequest((value) => value + 1); }} onSearch={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))} /> : tab === "stock" ? (
+          {tab === "hub" ? <HubView onOpenReviews={() => go("reviews")} onOpenPulse={() => openView("pulse")} items={items} movements={movements} schedule={schedule} currentUser={currentUser} counts={navCounts} agenda={upcomingAgenda} onOpenAgenda={openAgenda} onMyDay={() => setMyDayOpen(true)} onOpen={(destination) => go(destination)} onOpenTask={openTask} onOpenTicket={openTicket} onNewTask={() => { openTask(); setNewTaskRequest((value) => value + 1); }} onNewTicket={() => { openTicket(); setNewTicketRequest((value) => value + 1); }} onSearch={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))} /> : tab === "stock" ? (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
@@ -424,7 +420,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} shopping={shopping} upcoming={upcomingStock} coverDays={coverDays} onCoverDays={setCoverDays} today={stockToday} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} createRequest={newTaskRequest} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} createRequest={newTicketRequest} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "clients" ? <ClientsView onOpenTask={openTask} onOpenTicket={openTicket} /> : tab === "sprints" ? <SprintsView onOpenTask={openTask} /> : tab === "agenda" ? <AgendaView openRequest={eventToOpen} onOpenRequestHandled={clearEventToOpen} /> : tab === "calendar" ? <CalendarView schedule={schedule} onOpenTask={openTask} onOpenEvent={openAgenda} onOpenProject={(id) => { setTab("projects"); setProjectToOpen(id); }} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
+          ) : tab === "schedule" ? <ScheduleView schedule={schedule} loading={loading} canEdit={permissions.manageSchedule} onNewTeam={() => setModal({ kind: "supportTeam" })} onEditTeam={(team) => setModal({ kind: "supportTeam", team })} onNewWeek={() => setModal({ kind: "supportWeek" })} onEditWeek={(week) => setModal({ kind: "supportWeek", week })} onGenerate={() => setModal({ kind: "generateWeeks" })} /> :tab === "planning" ? <PlanningView items={items} loading={loading} shopping={shopping} upcoming={upcomingStock} coverDays={coverDays} onCoverDays={setCoverDays} today={stockToday} /> : tab === "reports" ? <ReportsView /> : tab === "tasks" ? <TasksView openRequest={taskToOpen} onOpenRequestHandled={clearTaskToOpen} createRequest={newTaskRequest} /> : tab === "people" ? <PeopleView key={personSearch} initialSearch={personSearch} /> : tab === "projects" ? <ProjectsView onOpenTask={openTask} openRequest={projectToOpen} onOpenRequestHandled={clearProjectToOpen} /> : tab === "panel" ? <LeadershipView onOpenTask={openTask} onOpenProjects={() => setTab("projects")} /> : tab === "tickets" ? <TicketsView openRequest={ticketToOpen} onOpenRequestHandled={clearTicketToOpen} createRequest={newTicketRequest} onOpenTask={openTask} onOpenArticle={(articleId) => openKnowledge({ articleId })} onSaveSolution={(draft) => openKnowledge({ draft })} /> : tab === "clients" ? <ClientsView onOpenTask={openTask} onOpenTicket={openTicket} /> : tab === "sprints" ? <SprintsView onOpenTask={openTask} /> : tab === "reviews" ? <ReviewsView key={reviewsTab.key} initialTab={reviewsTab.tab} /> : tab === "assets" ? <AssetsView /> : tab === "incidents" ? <IncidentsView /> : tab === "agenda" ? <AgendaView openRequest={eventToOpen} onOpenRequestHandled={clearEventToOpen} /> : tab === "calendar" ? <CalendarView schedule={schedule} onOpenTask={openTask} onOpenEvent={openAgenda} onOpenProject={(id) => { setTab("projects"); setProjectToOpen(id); }} /> : tab === "admin" && isAdmin ? <AdminView /> : tab === "knowledge" ? <KnowledgeView openRequest={articleToOpen} draft={articleDraft} onRequestHandled={clearArticleRequest} onOpenTicket={openTicket} /> :tab === "team" ? <TeamView members={members} currentUser={currentUser} saving={saving} onAddMember={() => setModal({ kind: "member" })} onEditMember={(member) => setModal({ kind: "member", member })} onDeleteMember={deleteMember} onUpdateRole={(userId, role) => submit({ action: "updateMemberRole", userId, role }, "Permissão atualizada.")} onUpdateActive={(userId, active) => submit({ action: "updateMemberActive", userId, active }, active ? "Acesso reativado." : "Acesso desativado.")} /> : <HistoryView movements={movements} loading={loading} />}
         </section>
       </main>
 

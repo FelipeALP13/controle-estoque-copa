@@ -2,7 +2,7 @@
 // Roda junto com as rotinas automáticas, enquanto alguém da equipe está com o Portal aberto.
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import type { getDb } from "../db";
-import { clients, clientSystems, members, notifications, systemEvents, teamMembers } from "../db/schema";
+import { clients, clientSystems, incidents, incidentUpdates, members, notifications, systemEvents, teamMembers } from "../db/schema";
 import { CHECK_EVERY_MS, isUpStatus, monitorTransition, systemUrlError } from "./office-tools";
 
 type Db = ReturnType<typeof getDb>;
@@ -37,6 +37,20 @@ async function recipients(db: Db, teamId: number | null) {
   return (await db.select({ id: members.id }).from(members).where(and(eq(members.role, "admin"), eq(members.active, true)))).map((row) => row.id);
 }
 
+/** Caiu: abre um incidente (se não houver um aberto). Voltou: marca o incidente aberto como resolvido. */
+async function recordIncident(db: Db, system: SystemRow, change: "down" | "up", error: string | null, stamp: string) {
+  const [open] = await db.select({ id: incidents.id }).from(incidents).where(and(eq(incidents.systemId, system.id), eq(incidents.status, "open"))).limit(1);
+  if (change === "down") {
+    if (open) return;
+    const [created] = await db.insert(incidents).values({ clientId: system.clientId, systemId: system.id, title: `${system.name} fora do ar`.slice(0, 140), severity: "high", status: "open", startedAt: stamp, auto: true, createdByName: "Monitor", createdAt: stamp, updatedAt: stamp }).returning({ id: incidents.id });
+    await db.insert(incidentUpdates).values({ incidentId: created.id, body: `Detectado pelo monitor: ${error ?? "sem resposta"}.`, byName: "Monitor", at: stamp });
+    return;
+  }
+  if (!open) return;
+  await db.update(incidents).set({ status: "resolved", resolvedAt: stamp, updatedAt: stamp }).where(eq(incidents.id, open.id));
+  await db.insert(incidentUpdates).values({ incidentId: open.id, body: "Voltou ao ar (monitor). Falta registrar a causa e o que muda para não repetir.", byName: "Monitor", at: stamp });
+}
+
 /** Verifica um sistema agora, grava o resultado e avisa se caiu ou voltou. */
 export async function checkSystem(db: Db, system: SystemRow, now = new Date()) {
   if (!system.url || systemUrlError(system.url)) return null;
@@ -49,6 +63,7 @@ export async function checkSystem(db: Db, system: SystemRow, now = new Date()) {
   }).where(eq(clientSystems.id, system.id));
   if (next.changed) {
     await db.insert(systemEvents).values({ systemId: system.id, kind: next.changed, detail: result.error ?? `${result.ms} ms`, at: stamp });
+    await recordIncident(db, system, next.changed, result.error, stamp).catch((error) => console.error("monitor incident failed", error));
     const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, system.clientId)).limit(1);
     const label = `${client?.name ?? "Cliente"} · ${system.name}`.slice(0, 140);
     const ids = await recipients(db, system.teamId);
@@ -80,7 +95,7 @@ export async function monitorJob(db: Db, now = new Date()) {
   return { checked: results.filter(Boolean).length, down: results.filter((result) => result?.status === "down").length };
 }
 
-/** Sistemas monitorados fora do ar agora (para a TV e a lista de clientes). */
+/** Sistemas monitorados fora do ar agora (para a lista de clientes). */
 export async function downSystems(db: Db) {
   return db.select({ id: clientSystems.id, name: clientSystems.name, clientId: clientSystems.clientId, clientName: clients.name, since: clientSystems.lastChangeAt, error: clientSystems.lastError })
     .from(clientSystems).innerJoin(clients, eq(clientSystems.clientId, clients.id))

@@ -111,7 +111,7 @@ export function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defa
   return <div className="modal-layer" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
     <button className="backdrop" onClick={onClose} aria-label="Fechar janela" />
     <form className="modal task-modal" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) void submit(event); }}>
-      <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Nova demanda</h2><p>Ctrl + Enter cria a demanda.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+      <div className="modal-head"><div><h2>Nova demanda</h2><p>Ctrl + Enter cria a demanda.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
       <div className="task-modal-body">
         {templates.length > 0 && <label className="template-pick"><ListChecks size={14} /><select value={templateId} onChange={(event) => applyTemplate(event.target.value)} aria-label="Usar um modelo"><option value="">Começar do zero</option>{templates.map((template) => <option key={template.id} value={template.id}>Modelo: {template.name} ({template.items.length} passos)</option>)}</select></label>}
         <input className="task-title-input" autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Demanda / atividade" />
@@ -391,7 +391,7 @@ export function TemplatesModal({ lookups, onClose }: { lookups: Lookups; onClose
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal templates-modal">
-    <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Modelos de demanda</h2><p>Um modelo já traz categoria, time, prioridade e os passos do checklist. Aparece em “Nova demanda”.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Modelos de demanda</h2><p>Um modelo já traz categoria, time, prioridade e os passos do checklist. Aparece em “Nova demanda”.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="templates-body">
       {error && <p className="modal-error">{error}</p>}
       {notice && !error && <p className="jira-notice">{notice}</p>}
@@ -423,7 +423,7 @@ function TemplateForm({ value, lookups, onClose, onSaved, save }: { value: Templ
     }
   }
   return <div className="modal-layer nested"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">MODELO</p><h2>{value ? "Editar modelo" : "Novo modelo"}</h2><p>Mudar o modelo não altera as demandas já criadas com ele.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{value ? "Editar modelo" : "Novo modelo"}</h2><p>Mudar o modelo não altera as demandas já criadas com ele.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label className="full"><span>Nome do modelo</span><input autoFocus required maxLength={60} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Implantação de cliente" /></label>
       <label className="full"><span>Título sugerido (opcional)</span><input maxLength={160} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ex.: Implantação · " /></label>
@@ -564,7 +564,7 @@ export function ClientsModal({ clients, tasks, onClose, onSaved }: { clients: Ta
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal clients-modal">
-    <div className="modal-head"><div><p className="eyebrow">DEMANDAS</p><h2>Clientes e projetos</h2><p>É a lista que aparece em “Cliente / Projeto”. Desativar tira o nome dos menus sem mexer nas demandas antigas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Clientes e projetos</h2><p>É a lista que aparece em “Cliente / Projeto”. Desativar tira o nome dos menus sem mexer nas demandas antigas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <form className="clients-add" onSubmit={async (event) => { event.preventDefault(); if (name.trim() && await save({ name })) setName(""); }}>
       <input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Novo cliente ou projeto" />
       <button className="primary-button" disabled={busy || !name.trim()}><Plus size={15} /> Adicionar</button>

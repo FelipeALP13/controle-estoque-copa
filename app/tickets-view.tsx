@@ -31,7 +31,6 @@ import { downloadXlsx } from "./xlsx-writer";
 import Columns3 from "lucide-react/icons/columns-3";
 import List from "lucide-react/icons/list";
 import MessageSquareText from "lucide-react/icons/message-square-text";
-import Monitor from "lucide-react/icons/monitor";
 import Pencil from "lucide-react/icons/pencil";
 import { fillReply, onTicketBoard, REPLY_FIELDS, repliesFor, TICKET_BOARD_STATUSES, type TicketBoardStatus } from "./team-tools";
 import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
@@ -258,7 +257,6 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
         <button className={layout === "board" ? "active" : ""} aria-pressed={layout === "board"} onClick={() => setLayout("board")} title="Quadro"><Columns3 size={15} /> Quadro</button>
       </div>
       {data?.me.canEdit && <button className="secondary-button" onClick={() => setManagingReplies(true)} title="Textos prontos para responder os chamados"><MessageSquareText size={15} /> Respostas prontas</button>}
-      <a className="secondary-button" href="/tv" target="_blank" rel="noopener" title="Abre a fila em tela cheia, para deixar numa TV da sala"><Monitor size={15} /> Tela para TV</a>
       {data?.me.isAdmin && <button className="secondary-button" onClick={() => setJiraOpen(true)} title="Trazer chamados das contas do Jira"><Plug size={15} /> Jira</button>}
       {data && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os chamados que estão na tela, com os filtros aplicados"><Download size={15} /> Exportar Excel</button>}
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button>}
@@ -327,7 +325,7 @@ function NewTicketModal({ teams, defaultTeamId, onClose, onCreated }: { teams: T
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">CHAMADOS</p><h2>Abrir chamado</h2><p>O chamado cai na fila do time escolhido, e todos do time são avisados.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Abrir chamado</h2><p>O chamado cai na fila do time escolhido, e todos do time são avisados.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label className="full"><span>O que você precisa?</span><input autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Cliente não consegue emitir nota fiscal" /></label>
       {teams.length > 0 && <label><span>Para qual time?</span><select required value={teamId} onChange={(event) => setTeamId(event.target.value)}><option value="" disabled>Escolha o time</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>}
@@ -576,7 +574,7 @@ function RepliesModal({ replies, teams, me, onClose, onChanged }: { replies: Rep
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal replies-modal">
-    <div className="modal-head"><div><p className="eyebrow">CHAMADOS</p><h2>Respostas prontas</h2><p>Textos usados com frequência. No chamado, clique em “Respostas prontas” acima do comentário.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Respostas prontas</h2><p>Textos usados com frequência. No chamado, clique em “Respostas prontas” acima do comentário.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="templates-body">
       {editing ? <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); if (await run({ action: "saveReply", replyId: editing === "new" ? undefined : editing.id, title: form.title, body: form.body, teamId: form.teamId ? Number(form.teamId) : null })) setEditing(null); }}>
         <label><span>Nome</span><input autoFocus required maxLength={60} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ex.: Pedir print do erro" /></label>

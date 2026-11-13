@@ -24,7 +24,7 @@ export default function CalendarLinkModal({ hasLink, onClose, onChanged }: { has
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><section className="modal calendar-link" role="dialog" aria-label="Ver a agenda no Outlook">
-    <div className="modal-head"><div><p className="eyebrow">AGENDA</p><h2>Ver no Outlook e no Teams</h2><p>Seus compromissos do Portal aparecem no calendário do Outlook/Teams e se atualizam sozinhos (pode levar algumas horas, quem controla é o Outlook).</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Ver no Outlook e no Teams</h2><p>Seus compromissos do Portal aparecem no calendário do Outlook/Teams e se atualizam sozinhos (pode levar algumas horas, quem controla é o Outlook).</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="calendar-link-body">
       <ol>
         <li>Clique em <b>{hasLink ? "Gerar link novo" : "Gerar meu link"}</b> e copie.</li>

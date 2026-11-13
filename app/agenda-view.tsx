@@ -235,7 +235,7 @@ function AgendaModal({ event, people, today, onClose, onSaved }: { event: Agenda
   const past = startsAt !== null && Date.parse(startsAt) < now;
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal agenda-modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">AGENDA</p><h2>{event ? "Editar compromisso" : "Novo compromisso"}</h2><p>O sino avisa você e os convidados, com som.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{event ? "Editar compromisso" : "Novo compromisso"}</h2><p>O sino avisa você e os convidados, com som.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="agenda-kind-switch" role="radiogroup" aria-label="Tipo">
       <button type="button" role="radio" aria-checked={!meeting} className={!meeting ? "active" : ""} onClick={() => setKind("note")}><StickyNote size={15} /> Anotação</button>
       <button type="button" role="radio" aria-checked={meeting} className={meeting ? "active" : ""} onClick={() => setKind("meeting")}><Video size={15} /> Reunião no Teams</button>

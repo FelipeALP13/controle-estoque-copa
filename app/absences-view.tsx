@@ -93,7 +93,7 @@ function AbsenceModal({ people, meId, today, onClose, onSaved }: { people: Perso
 
   const days = form.endDate >= form.startDate ? daysBetween(form.startDate, form.endDate) : 0;
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">AUSÊNCIAS</p><h2>Registrar ausência</h2><p>O período avisa a escala, o painel e quem for atribuir demandas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>Registrar ausência</h2><p>O período avisa a escala, o painel e quem for atribuir demandas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       {people.length > 1 && <label className="full"><span>Pessoa</span><select value={form.memberId} onChange={(event) => setForm({ ...form, memberId: event.target.value })}>{people.map((person) => <option key={person.id} value={person.id}>{person.name}{person.id === meId ? " (você)" : ""}</option>)}</select></label>}
       <label className="full"><span>Tipo</span><select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as AbsenceKind })}>{absenceKinds.map((kind) => <option key={kind} value={kind}>{absenceKindLabels[kind]}</option>)}</select></label>

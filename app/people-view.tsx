@@ -165,7 +165,7 @@ function PersonModal({ person, teams, isAdmin, currentTeamIds, onClose, onSaved 
   }
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">PESSOAS</p><h2>{person.name}</h2><p>Cargo e contato aparecem no diretório para toda a empresa.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{person.name}</h2><p>Cargo e contato aparecem no diretório para toda a empresa.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label><span>Cargo</span><input autoFocus maxLength={60} value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="Ex.: Analista de Suporte" /></label>
       <label><span>Telefone ou ramal</span><input maxLength={30} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Ex.: (11) 98765-4321" inputMode="tel" /></label>
@@ -213,7 +213,7 @@ function TeamModal({ team, people, onClose, onSaved }: { team: Team | null; peop
   const visible = people.filter((person) => !filter || fold(`${person.name} ${person.jobTitle}`).includes(fold(filter)));
 
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={submit}>
-    <div className="modal-head"><div><p className="eyebrow">TIMES</p><h2>{team ? "Editar time" : "Novo time"}</h2><p>Defina quem faz parte do time e quem lidera.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{team ? "Editar time" : "Novo time"}</h2><p>Defina quem faz parte do time e quem lidera.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label><span>Nome do time</span><input autoFocus required maxLength={40} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Suporte" /></label>
       <label><span>Descrição <em>opcional</em></span><input maxLength={200} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="O que este time faz" /></label>

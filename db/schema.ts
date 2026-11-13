@@ -291,6 +291,9 @@ export const announcements = sqliteTable("announcements", {
   createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
   createdByName: text("created_by_name").notNull().default("Equipe"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  // Público: um time (só quem está nele vê) ou todos (null).
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  remindedAt: text("reminded_at"),
 });
 
 export const announcementReads = sqliteTable("announcement_reads", {
@@ -476,7 +479,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
@@ -677,3 +680,187 @@ export const onboardingItems = sqliteTable("onboarding_items", {
   doneAt: text("done_at"),
   sortOrder: real("sort_order").notNull().default(0),
 }, (table) => [index("onboarding_items_idx").on(table.onboardingId)]);
+
+/** Ciclo de avaliação (a cada 3 meses): período, critérios e situação. */
+export const reviewCycles = sqliteTable("review_cycles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
+  // Critérios em JSON (lista de textos) para colegas, empresa e gestão.
+  peerCriteria: text("peer_criteria").notNull().default("[]"),
+  companyCriteria: text("company_criteria").notNull().default("[]"),
+  managerCriteria: text("manager_criteria").notNull().default("[]"),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  closedAt: text("closed_at"),
+});
+
+/** Gestão avaliada por todos, só com nome e cargo (não precisam de usuário no Portal). */
+export const reviewManagers = sqliteTable("review_managers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  title: text("title").notNull().default(""),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+/**
+ * Respostas, sem ligação com quem respondeu (anônimas). Alvo: "member:ID", "manager:ID" ou "company".
+ * Notas em JSON na ordem dos critérios do ciclo.
+ */
+export const reviewAnswers = sqliteTable("review_answers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  cycleId: integer("cycle_id").notNull().references(() => reviewCycles.id, { onDelete: "cascade" }),
+  target: text("target").notNull(),
+  scores: text("scores").notNull(),
+  comment: text("comment").notNull().default(""),
+  // Justificativa de cada nota, na mesma ordem dos critérios (JSON).
+  notes: text("notes").notNull().default("[]"),
+}, (table) => [index("review_answers_cycle_idx").on(table.cycleId, table.target)]);
+
+/** Quem já avaliou quem em cada ciclo (só para não repetir e mostrar o que falta; não guarda as notas). */
+export const reviewSubmissions = sqliteTable("review_submissions", {
+  cycleId: integer("cycle_id").notNull().references(() => reviewCycles.id, { onDelete: "cascade" }),
+  reviewerId: integer("reviewer_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  target: text("target").notNull(),
+}, (table) => [primaryKey({ columns: [table.cycleId, table.reviewerId, table.target] })]);
+
+/** Metas anuais do time ou individuais, com valor-alvo e progresso. */
+export const goals = sqliteTable("goals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  year: integer("year").notNull(),
+  scope: text("scope", { enum: ["team", "person"] }).notNull(),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").references(() => members.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  unit: text("unit").notNull().default(""),
+  // "up": quanto mais, melhor (ex.: entregas); "down": quanto menos, melhor (ex.: chamados atrasados).
+  direction: text("direction", { enum: ["up", "down"] }).notNull().default("up"),
+  startValue: real("start_value").notNull().default(0),
+  target: real("target").notNull(),
+  current: real("current").notNull().default(0),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("goals_year_idx").on(table.year, table.scope)]);
+
+export const goalUpdates = sqliteTable("goal_updates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  value: real("value").notNull(),
+  note: text("note").notNull().default(""),
+  byName: text("by_name").notNull().default("Equipe"),
+  at: text("at").notNull(),
+}, (table) => [index("goal_updates_goal_idx").on(table.goalId)]);
+
+/** Reunião 1:1 entre líder e liderado: pauta e anotações dos dois, e uma nota só do líder. */
+export const oneOnOnes = sqliteTable("one_on_ones", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  leaderId: integer("leader_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  status: text("status", { enum: ["planned", "done"] }).notNull().default("planned"),
+  agenda: text("agenda").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  privateNotes: text("private_notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("one_on_ones_member_idx").on(table.memberId, table.date), index("one_on_ones_leader_idx").on(table.leaderId, table.date)]);
+
+/** Plano de desenvolvimento individual: ações ligadas (ou não) a um critério da avaliação. */
+export const devActions = sqliteTable("dev_actions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  criterion: text("criterion").notNull().default(""),
+  description: text("description").notNull().default(""),
+  dueDate: text("due_date"),
+  status: text("status", { enum: ["todo", "doing", "done"] }).notNull().default("todo"),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  doneAt: text("done_at"),
+}, (table) => [index("dev_actions_member_idx").on(table.memberId)]);
+
+/** Pesquisa de clima do mês (AAAA-MM), com as perguntas daquele mês. */
+export const pulseSurveys = sqliteTable("pulse_surveys", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  month: text("month").notNull(),
+  questions: text("questions").notNull().default("[]"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("pulse_surveys_month_unique").on(table.month)]);
+
+/** Respostas da pesquisa de clima, sem quem respondeu. */
+export const pulseAnswers = sqliteTable("pulse_answers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  surveyId: integer("survey_id").notNull().references(() => pulseSurveys.id, { onDelete: "cascade" }),
+  scores: text("scores").notNull(),
+  comment: text("comment").notNull().default(""),
+}, (table) => [index("pulse_answers_survey_idx").on(table.surveyId)]);
+
+/** Quem já respondeu no mês (só para não repetir; não guarda as notas). */
+export const pulseSubmissions = sqliteTable("pulse_submissions", {
+  surveyId: integer("survey_id").notNull().references(() => pulseSurveys.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.surveyId, table.memberId] })]);
+
+/** Equipamentos (notebook, monitor...) e licenças de software da empresa. */
+export const assets = sqliteTable("assets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind", { enum: ["equipment", "license"] }).notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull().default(""),
+  identifier: text("identifier").notNull().default(""),
+  status: text("status", { enum: ["in_use", "available", "maintenance", "retired"] }).notNull().default("available"),
+  seats: integer("seats").notNull().default(1),
+  purchaseDate: text("purchase_date"),
+  expiresOn: text("expires_on"),
+  cost: real("cost"),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("assets_kind_idx").on(table.kind, table.status)]);
+
+export const assetAssignments = sqliteTable("asset_assignments", {
+  assetId: integer("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  assignedAt: text("assigned_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.assetId, table.memberId] })]);
+
+export const assetEvents = sqliteTable("asset_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  assetId: integer("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  byName: text("by_name").notNull().default("Equipe"),
+  at: text("at").notNull(),
+}, (table) => [index("asset_events_asset_idx").on(table.assetId)]);
+
+/** Incidente: sistema de cliente fora do ar ou problema grave, com causa e o que muda para não repetir. */
+export const incidents = sqliteTable("incidents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
+  systemId: integer("system_id").references(() => clientSystems.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  severity: text("severity", { enum: ["low", "medium", "high", "critical"] }).notNull().default("medium"),
+  status: text("status", { enum: ["open", "resolved", "analyzed"] }).notNull().default("open"),
+  startedAt: text("started_at").notNull(),
+  resolvedAt: text("resolved_at"),
+  impact: text("impact").notNull().default(""),
+  cause: text("cause").notNull().default(""),
+  resolution: text("resolution").notNull().default(""),
+  prevention: text("prevention").notNull().default(""),
+  auto: integer("auto", { mode: "boolean" }).notNull().default(false),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("incidents_status_idx").on(table.status, table.startedAt), index("incidents_system_idx").on(table.systemId)]);
+
+export const incidentUpdates = sqliteTable("incident_updates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  incidentId: integer("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  byName: text("by_name").notNull().default("Equipe"),
+  at: text("at").notNull(),
+}, (table) => [index("incident_updates_incident_idx").on(table.incidentId)]);

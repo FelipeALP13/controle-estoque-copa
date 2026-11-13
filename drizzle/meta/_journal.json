@@ -197,6 +197,20 @@
       "when": 1794579843128,
       "tag": "0027_office_tools",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1794593863731,
+      "tag": "0028_reviews_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1794596898537,
+      "tag": "0029_people_ops",
+      "breakpoints": true
     }
   ]
 }

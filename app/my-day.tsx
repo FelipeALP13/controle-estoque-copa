@@ -84,7 +84,7 @@ export default function MyDay({ name, agenda, onClose, onOpenTask, onOpenTicket,
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar" /><section className="modal my-day" role="dialog" aria-label="Meu dia">
     <div className="my-day-head">
       <span className="my-day-sun"><Sun size={22} /></span>
-      <div><p className="eyebrow">MEU DIA</p><h2>{greeting}, {name.split(/\s+/)[0]}!</h2><p>{new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }).format(new Date())}</p></div>
+      <div><h2>{greeting}, {name.split(/\s+/)[0]}!</h2><p>{new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }).format(new Date())}</p></div>
       <button type="button" className="my-day-close" onClick={onClose} aria-label="Fechar"><X /></button>
     </div>
     <div className="my-day-body">
