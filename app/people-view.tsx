@@ -14,6 +14,7 @@ import X from "lucide-react/icons/x";
 import { Avatar, TeamChip } from "./tasks-view";
 import { teamColorLabels, teamColors, type TeamColor } from "./teams";
 import AbsencesView from "./absences-view";
+import OnboardingView from "./onboarding-view";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
 
@@ -40,7 +41,7 @@ const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").t
 export default function PeopleView({ initialSearch = "" }: { initialSearch?: string }) {
   const [data, setData] = useState<PeopleData | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"people" | "teams" | "absences">("people");
+  const [tab, setTab] = useState<"people" | "teams" | "absences" | "onboarding">("people");
   const { absences } = useAbsences();
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   const [search, setSearch] = useState(initialSearch);
@@ -84,8 +85,9 @@ export default function PeopleView({ initialSearch = "" }: { initialSearch?: str
         <button role="tab" aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}>Pessoas <b className="count">{data.people.filter((person) => person.active).length}</b></button>
         <button role="tab" aria-selected={tab === "teams"} className={tab === "teams" ? "active" : ""} onClick={() => setTab("teams")}>Times <b className="count">{data.teams.length}</b></button>
         <button role="tab" aria-selected={tab === "absences"} className={tab === "absences" ? "active" : ""} onClick={() => setTab("absences")}>Férias e ausências{absences.some((absence) => absence.startDate <= today && absence.endDate >= today) && <b className="count">{new Set(absences.filter((absence) => absence.startDate <= today && absence.endDate >= today).map((absence) => absence.memberId)).size}</b>}</button>
+        <button role="tab" aria-selected={tab === "onboarding"} className={tab === "onboarding" ? "active" : ""} onClick={() => setTab("onboarding")}>Integração</button>
       </div>
-      {tab === "absences" ? null : tab === "people" ? <>
+      {tab === "absences" || tab === "onboarding" ? null : tab === "people" ? <>
         <label className="tasks-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, cargo ou e-mail" /></label>
         <select aria-label="Filtrar por time" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)}>
           <option value="">Todos os times</option>
@@ -97,7 +99,7 @@ export default function PeopleView({ initialSearch = "" }: { initialSearch?: str
 
     {error && <div className="alert error"><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16} /></button></div>}
 
-    {tab === "absences" ? <AbsencesView people={data.people} /> : tab === "people" ? (
+    {tab === "onboarding" ? <OnboardingView /> : tab === "absences" ? <AbsencesView people={data.people} /> : tab === "people" ? (
       people.length ? <div className="people-grid">
         {people.map((person) => {
           const memberships = teamsOf(person.id);

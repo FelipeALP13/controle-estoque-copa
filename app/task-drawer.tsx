@@ -23,7 +23,7 @@ import Link2 from "lucide-react/icons/link-2";
 import Lock from "lucide-react/icons/lock";
 import { type Task, type TaskClient, type Me, type TaskEvent, type Lookups, relativeTime, fullDate, postTask, StatusIcon, PriorityIcon, Avatar, DueChip, PeoplePicker, MentionTextarea } from "./task-shared";
 
-type Fields = Pick<Task, "status" | "priority" | "owners" | "support" | "teamId" | "clientId" | "projectId" | "category" | "startDate" | "dueDate" | "completedOn" | "estimatedHours" | "origin">;
+type Fields = Pick<Task, "status" | "priority" | "owners" | "support" | "teamId" | "clientId" | "projectId" | "category" | "startDate" | "dueDate" | "completedOn" | "estimatedHours" | "origin" | "sprintId">;
 
 /** Campos da demanda; usado na criação e no painel lateral. Horas e textos salvam ao sair do campo. */
 function PropertyFields({ value, onChange, lookups, disabled, compact }: { value: Fields; onChange: (changes: Partial<Fields>) => void; lookups: Lookups; disabled?: boolean; compact?: boolean }) {
@@ -48,6 +48,7 @@ function PropertyFields({ value, onChange, lookups, disabled, compact }: { value
     <label className="task-prop"><span>Categoria</span><span className="task-prop-control"><select disabled={disabled} value={value.category} onChange={(event) => onChange({ category: event.target.value })}><option value="">Sem categoria</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></span></label>
     {lookups.teams.length > 0 && <label className="task-prop"><span>Time</span><span className="task-prop-control"><span className={`team-chip-dot ${team?.color ?? "none"}`} /><select disabled={disabled} value={value.teamId ?? ""} onChange={(event) => onChange({ teamId: event.target.value ? Number(event.target.value) : null })}><option value="">Sem time</option>{lookups.teams.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></span></label>}
     {lookups.projects.length > 0 && <label className="task-prop"><span>Projeto grande</span><span className="task-prop-control"><select disabled={disabled} value={value.projectId ?? ""} onChange={(event) => onChange({ projectId: event.target.value ? Number(event.target.value) : null })}><option value="">Nenhum</option>{lookups.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></span></label>}
+    {!compact && (lookups.sprints?.length || value.sprintId) ? <label className="task-prop"><span>Sprint</span><span className="task-prop-control"><select disabled={disabled} value={value.sprintId ?? ""} onChange={(event) => onChange({ sprintId: event.target.value ? Number(event.target.value) : null })}><option value="">Fora de sprint</option>{(lookups.sprints ?? []).map((sprint) => <option key={sprint.id} value={sprint.id}>{sprint.name}{sprint.status === "active" ? " (em andamento)" : ""}</option>)}{value.sprintId && !(lookups.sprints ?? []).some((sprint) => sprint.id === value.sprintId) ? <option value={value.sprintId}>Sprint encerrado</option> : null}</select></span></label> : null}
     {dateField("startDate", "Data de Início")}
     {dateField("dueDate", "Prazo")}
     {!compact && dateField("completedOn", "Data de Conclusão")}

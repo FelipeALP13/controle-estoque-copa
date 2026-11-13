@@ -8,13 +8,14 @@ import CalendarOff from "lucide-react/icons/calendar-off";
 import Maximize from "lucide-react/icons/maximize";
 import PartyPopper from "lucide-react/icons/party-popper";
 import Repeat from "lucide-react/icons/repeat-2";
+import ServerCrash from "lucide-react/icons/server-crash";
 import { compareTickets, formatMinutes, isTicketLate, resolutionStatus, slaStatus, ticketCode, ticketStatusLabels, ticketUrgencyLabels, type TicketStatus, type TicketUrgency } from "./tickets";
 import { celebrationText, type Celebration } from "./team-tools";
 import { APP_NAME } from "./brand";
 
 type TvTicket = { id: number; title: string; urgency: TicketUrgency; status: TicketStatus; client: string; teamId: number | null; assigneeId: number | null; assigneeName: string | null; externalKey: string | null; createdAt: string; firstResponseAt: string | null; resolvedAt: string | null };
 type Week = { start: string; end: string; note: string; teamName: string; color: string; members: string[] } | null;
-type Data = { now: string; today: string; teamId: number | null; teams: { id: number; name: string; color: string }[]; tickets: TvTicket[]; openedToday: number; resolvedToday: number; onCall: Week; nextOnCall: Week; away: string[]; celebrations: Celebration[]; handoff: { teamName: string; body: string; createdByName: string; createdAt: string } | null };
+type Data = { now: string; today: string; teamId: number | null; teams: { id: number; name: string; color: string }[]; tickets: TvTicket[]; openedToday: number; resolvedToday: number; onCall: Week; nextOnCall: Week; away: string[]; celebrations: Celebration[]; handoff: { teamName: string; body: string; createdByName: string; createdAt: string } | null; systemsDown?: { name: string; clientName: string; since: string | null }[] };
 
 const REFRESH_MS = 30000;
 const shortDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit" });
@@ -124,6 +125,10 @@ export default function TvBoard() {
       </section>
 
       <aside className="tv-side">
+        {data?.systemsDown && data.systemsDown.length > 0 && <section className="tv-card tv-down">
+          <h3><ServerCrash size={18} /> Fora do ar</h3>
+          <ul>{data.systemsDown.map((system) => <li key={`${system.clientName}-${system.name}`}><b>{system.clientName}</b> · {system.name}{system.since ? <small> desde {new Date(system.since).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}</small> : null}</li>)}</ul>
+        </section>}
         <section className={`tv-card tv-oncall ${data?.onCall?.color ?? "purple"}`}>
           <h3><CalendarClock size={18} /> {data?.onCall ? "De plantão nesta semana" : "Próximo plantão"}</h3>
           {(data?.onCall ?? data?.nextOnCall) ? (() => { const week = (data?.onCall ?? data?.nextOnCall)!; return <>

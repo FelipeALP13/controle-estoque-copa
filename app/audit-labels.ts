@@ -14,6 +14,11 @@ export const auditGroupLabels: Record<AuditGroup, string> = {
 
 const actions: Record<string, { label: string; group: AuditGroup; sensitive?: boolean }> = {
   login: { label: "Entrou no sistema", group: "access" },
+  system_password_viewed: { label: "Viu a senha de um sistema de cliente", group: "access", sensitive: true },
+  system_password_copied: { label: "Copiou a senha de um sistema de cliente", group: "access", sensitive: true },
+  system_saved: { label: "Cadastrou ou editou um acesso de sistema", group: "access", sensitive: true },
+  system_deleted: { label: "Excluiu um acesso de sistema", group: "access", sensitive: true },
+  client_profile_updated: { label: "Editou a ficha de um cliente", group: "work" },
   logout: { label: "Saiu do sistema", group: "access" },
   other_sessions_ended: { label: "Encerrou as sessões dos outros aparelhos", group: "access", sensitive: true },
   all_sessions_ended: { label: "Encerrou todas as próprias sessões", group: "access", sensitive: true },

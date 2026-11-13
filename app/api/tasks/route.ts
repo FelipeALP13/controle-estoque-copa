@@ -10,7 +10,7 @@ import { hasTrustedOrigin } from "../../request-security";
 import { cleanMultiline, cleanTitle, isClosedStatus, isTaskPriority, isTaskStatus, MAX_COMMENT_LENGTH, MAX_DESCRIPTION_LENGTH, parseDueDate, sortOrderBetween, taskCategories, taskCode, taskStatusLabels, type TaskEventKind, type TaskStatus } from "../../tasks";
 import { readJsonBody } from "../../api-input";
 import { removeAttachmentsOf } from "../../attachments-store";
-import { taskDependencies, taskRecurrences } from "../../../db/schema";
+import { sprints, taskDependencies, taskRecurrences } from "../../../db/schema";
 import { openBlockers, releasedBy, wouldCreateCycle } from "../../team-tools";
 
 /** Do que a demanda depende e o que depende dela (vazio se a migração ainda não foi aplicada). */
@@ -220,6 +220,7 @@ export async function GET(request: Request) {
         teamId: tasks.teamId,
         clientId: tasks.clientId,
         projectId: tasks.projectId,
+        sprintId: tasks.sprintId,
         category: tasks.category,
         openedOn: tasks.openedOn,
         startDate: tasks.startDate,
@@ -264,6 +265,13 @@ export async function GET(request: Request) {
     } catch (error) {
       console.error("checklist progress failed", error);
     }
+    // Sprints em aberto (para escolher na demanda).
+    let sprintRows: { id: number; name: string; status: string }[] = [];
+    try {
+      sprintRows = await db.select({ id: sprints.id, name: sprints.name, status: sprints.status }).from(sprints).where(sql`${sprints.status} != 'closed'`).orderBy(asc(sprints.startDate));
+    } catch (error) {
+      console.error("sprints load failed", error);
+    }
     // Quantas pendências ainda seguram cada demanda.
     let blockers = new Map<number, number>();
     try {
@@ -278,6 +286,7 @@ export async function GET(request: Request) {
       clients: clientRows,
       projects: projectRows,
       categories: taskCategories,
+      sprints: sprintRows,
       me: { id: member.id, canEdit: canEdit(member), isAdmin: isAdmin(member), teamIds: teamData.myTeamIds },
     });
   } catch (error) {
@@ -487,6 +496,15 @@ export async function POST(request: Request) {
         const project = await existingProject(db, body.projectId);
         if (project === undefined) return json({ error: "Escolha um projeto válido." }, 400);
         if (project.id !== current.projectId) changes.projectId = project.id;
+      }
+      if ("sprintId" in body) {
+        const sprintId = body.sprintId === null || body.sprintId === "" ? null : Number(body.sprintId);
+        if (sprintId !== null) {
+          const [sprint] = Number.isInteger(sprintId) ? await db.select({ id: sprints.id, status: sprints.status, name: sprints.name }).from(sprints).where(eq(sprints.id, sprintId)).limit(1) : [];
+          if (!sprint || sprint.status === "closed") return json({ error: "Escolha um sprint em aberto." }, 400);
+          if (sprintId !== current.sprintId) events.push({ kind: "comment", body: `Entrou no ${sprint.name}.` });
+        }
+        if (sprintId !== current.sprintId) changes.sprintId = sprintId;
       }
       if ("category" in body) {
         const category = cleanCategory(body.category);

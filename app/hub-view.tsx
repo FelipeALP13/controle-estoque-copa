@@ -5,6 +5,7 @@ import { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import NoticeBoard from "./notice-board";
 import CelebrationsCard from "./celebrations-card";
+import { OnboardingCard, useOnboardings } from "./onboarding-view";
 import { shoppingList } from "./stock-forecast";
 import NotebookPen from "lucide-react/icons/notebook-pen";
 import VideoIcon from "lucide-react/icons/video";
@@ -74,6 +75,8 @@ export function HubView({ items, movements, schedule, currentUser, counts, agend
 
     <HubAgenda events={agenda} today={today} onOpen={onOpenAgenda} />
 
+    <HubOnboarding enabled={Boolean(currentUser?.active)} onOpen={() => onOpen("people")} />
+
     <h3 className="hub-heading">Meu trabalho</h3>
     <div className="hub-work-grid">
       <MyTasksPanel onOpen={onOpenTask} />
@@ -126,4 +129,16 @@ function HubAgenda({ events, today, onOpen }: { events: AgendaEvent[]; today: st
       </li>;
     })}{list.length > 4 && <li className="more"><button onClick={() => onOpen()}>e mais {list.length - 4}</button></li>}</ul>
   </article>;
+}
+
+/** Integração em andamento de quem está logado (como quem chega ou como padrinho). */
+function HubOnboarding({ enabled, onOpen }: { enabled: boolean; onOpen: () => void }) {
+  const { data, load } = useOnboardings(enabled);
+  const meId = data?.me.id ?? null;
+  const mine = (data?.onboardings ?? []).filter((row) => row.status === "active" && (row.memberId === meId || row.buddyId === meId));
+  if (!data || !mine.length) return null;
+  return <section className="hub-onboarding">
+    <div className="hub-panel-title"><div><span>🌱</span><div><h3>{mine.some((row) => row.memberId === meId) ? "Seus primeiros passos" : "Integração que você acompanha"}</h3><p>Marque os passos conforme forem feitos</p></div></div><button onClick={onOpen}>Ver tudo</button></div>
+    <div className="onboarding-grid">{mine.map((row) => <OnboardingCard key={row.id} row={row} people={data.people} isAdmin={false} onChanged={load} compact />)}</div>
+  </section>;
 }

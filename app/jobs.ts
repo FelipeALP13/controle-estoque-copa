@@ -4,6 +4,7 @@ import { and, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-o
 import type { getDb } from "../db";
 import { agendaAttendees, agendaEvents, agendaReminders, celebrationAlerts, members, notifications, teamMembers, tickets } from "../db/schema";
 import { celebrationText, upcomingCelebrations } from "./team-tools";
+import { monitorJob } from "./system-monitor";
 import { dueStages, isoToLocal, occurrences, reminderKey, reminderText, START_GRACE_MS } from "./agenda";
 import { syncDue } from "./jira-sync";
 import { recurringTasksJob } from "./task-recurrence-job";
@@ -108,7 +109,7 @@ export async function celebrationsJob(db: Db, now: Date) {
 /** Uma rodada completa. Cada parte é independente: o erro de uma não impede as outras. */
 export async function runJobs(db: Db, options: { now?: Date; includeJira?: boolean } = {}) {
   const now = options.now ?? new Date();
-  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, errors: [] };
+  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; monitor: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, monitor: null, errors: [] };
   if (options.includeJira !== false) {
     try {
       result.jira = (await syncDue(db, false, now)).map((entry) => ({ name: entry.name, created: entry.created, updated: entry.updated, comments: entry.comments, error: entry.error }));
@@ -120,5 +121,6 @@ export async function runJobs(db: Db, options: { now?: Date; includeJira?: boole
   try { result.agenda = await agendaRemindersJob(db, now); } catch (error) { result.errors.push(`Agenda: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.recurring = await recurringTasksJob(db, isoToLocal(now.toISOString()).day); } catch (error) { result.errors.push(`Repetições: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.celebrations = await celebrationsJob(db, now); } catch (error) { result.errors.push(`Comemorações: ${error instanceof Error ? error.message : "erro"}`); }
+  try { result.monitor = await monitorJob(db, now); } catch (error) { result.errors.push(`Monitor: ${error instanceof Error ? error.message : "erro"}`); }
   return result;
 }

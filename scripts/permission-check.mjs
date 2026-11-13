@@ -26,6 +26,7 @@ const expires = new Date(Date.now() + 3600000).toISOString();
 const now = new Date().toISOString();
 
 function cleanup() {
+  sql(`delete from client_systems where name = '${MARK}';`);
   sql(`delete from members where user_id like '${MARK}-%';`);
 }
 
@@ -106,6 +107,29 @@ try {
   await expectStatus("dados da TV sem login", null, "GET", "/api/tv", null, 401);
   await expectStatus("tela da TV sem login", null, "GET", "/tv", null, [302, 303, 307, 308]);
   await expectStatus("ler dados da TV", "viewer", "GET", "/api/tv", null, 200);
+
+  // Clientes e acessos, sprints, retrospectivas e integração.
+  for (const path of ["/api/clients", "/api/sprints", "/api/retros", "/api/onboarding"]) await expectStatus(`ler ${path}`, null, "GET", path, null, 401);
+  await expectStatus("ver senha de sistema (somente leitura)", "viewer", "POST", "/api/clients", { action: "revealPassword", systemId: 1 }, 403);
+  for (const who of ["viewer", "member"]) {
+    await expectStatus("cadastrar acesso de sistema", who, "POST", "/api/clients", { action: "saveSystem", clientId: 1, name: "x", environment: "demo" }, 403);
+    await expectStatus("editar ficha do cliente", who, "POST", "/api/clients", { action: "saveProfile", clientId: 1 }, 403);
+    await expectStatus("começar integração", who, "POST", "/api/onboarding", { action: "createOnboarding", memberId: 1, startDate: "2026-01-01", steps: "x" }, 403);
+  }
+  await expectStatus("criar sprint (somente leitura)", "viewer", "POST", "/api/sprints", { action: "saveSprint", name: "x", startDate: "2026-01-05", endDate: "2026-01-09" }, 403);
+  await expectStatus("criar retrospectiva (somente leitura)", "viewer", "POST", "/api/retros", { action: "createRetro", title: "x" }, 403);
+  await expectStatus("excluir sprint (membro)", "member", "POST", "/api/sprints", { action: "deleteSprint", sprintId: 1 }, [403, 404]);
+  // Senha de um acesso de outro time: membro fora do time não vê.
+  const [{ results: [client] }] = sql("select id from clients limit 1;");
+  const [{ results: [team] }] = sql("select id from teams limit 1;");
+  if (client && team) {
+    sql(`insert into client_systems (client_id, team_id, name, created_by_name) values (${client.id}, ${team.id}, '${MARK}', '${MARK}');`);
+    const [{ results: [system] }] = sql(`select id from client_systems where name = '${MARK}';`);
+    await expectStatus("ver senha de acesso de outro time (membro)", "member", "POST", "/api/clients", { action: "revealPassword", systemId: system.id }, 403);
+    const detail = await fetch(`${BASE}/api/clients?clientId=${client.id}`, { headers: { Cookie: `estoque_session=${people.member.token}` } }).then((response) => response.json());
+    const leaked = detail.systems?.find((entry) => entry.id === system.id);
+    results.push({ ok: Boolean(leaked) && leaked.username === null && leaked.canSeeLogin === false, label: "usuário do acesso escondido de quem não é do time", who: "member", got: leaked ? `username=${leaked.username}` : "não listado", expected: "username=null" });
+  }
 } finally {
   cleanup();
 }

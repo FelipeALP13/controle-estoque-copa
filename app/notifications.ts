@@ -1,4 +1,4 @@
-export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late" | "agenda_reminder" | "agenda_invite" | "ticket_rate" | "task_unblocked" | "handoff" | "celebration";
+export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late" | "agenda_reminder" | "agenda_invite" | "ticket_rate" | "task_unblocked" | "handoff" | "celebration" | "system_down" | "system_up" | "onboarding";
 
 type Person = { id: number; name: string };
 
@@ -78,6 +78,9 @@ export function notificationText(kind: NotificationKind, actorName: string, body
   if (kind === "task_unblocked") return `Demanda liberada: ${body} foi concluída`;
   if (kind === "handoff") return `${actorName} deixou a passagem de plantão para a sua equipe`;
   if (kind === "celebration") return body;
+  if (kind === "system_down") return `Fora do ar: ${body}`;
+  if (kind === "system_up") return `Voltou ao ar: ${body}`;
+  if (kind === "onboarding") return body;
   if (kind === "ticket_rate") return `${actorName} resolveu o seu chamado. Como foi o atendimento?`;
   return `${actorName} comentou`;
 }

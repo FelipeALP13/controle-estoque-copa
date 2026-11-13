@@ -5,6 +5,7 @@ import { getSessionMember } from "../../auth-session";
 import { isSupportTeamName } from "../../ticket-routing";
 import { upcomingCelebrations } from "../../team-tools";
 import { snippet } from "../../notifications";
+import { downSystems } from "../../system-monitor";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
       db.select({ teamName: handoffs.teamName, body: handoffs.body, createdByName: handoffs.createdByName, createdAt: handoffs.createdAt }).from(handoffs).orderBy(desc(handoffs.createdAt)).limit(1).catch(() => []),
     ]);
 
+    const down = await downSystems(db).catch(() => []);
     const nameOf = new Map(people.map((person) => [person.id, person.name]));
     const week = (row: (typeof weekRows)[number] | undefined) => {
       if (!row) return null;
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
       nextOnCall: week(next),
       away: [...new Set(awayRows.map((row) => nameOf.get(row.memberId)).filter((name): name is string => Boolean(name)))],
       celebrations: upcomingCelebrations(people, today, 7),
+      systemsDown: down.map((system) => ({ name: system.name, clientName: system.clientName, since: system.since })),
       handoff: lastHandoff ? { ...lastHandoff, body: snippet(lastHandoff.body, 280) } : null,
     });
   } catch (error) {

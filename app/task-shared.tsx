@@ -42,6 +42,7 @@ export type Task = {
   checklist: { done: number; total: number } | null;
   /** Quantas demandas das quais esta depende ainda não terminaram. */
   waitingOn?: number;
+  sprintId?: number | null;
 };
 
 type TaskMember = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
@@ -50,8 +51,9 @@ export type TaskClient = { id: number; name: string; active: boolean };
 type TaskProject = { id: number; name: string };
 export type Me = { id: number; canEdit: boolean; isAdmin: boolean; teamIds: number[] };
 export type TaskEvent = { id: number; kind: TaskEventKind; body: string; actorId: number | null; actorName: string; createdAt: string; canDelete: boolean };
-export type TasksData = { tasks: Task[]; members: TaskMember[]; teams: TaskTeam[]; clients: TaskClient[]; projects: TaskProject[]; categories: string[]; me: Me };
-export type Lookups = { members: TaskMember[]; membersById: Map<number, TaskMember>; teams: TaskTeam[]; clients: TaskClient[]; clientsById: Map<number, TaskClient>; projects: TaskProject[]; categories: string[] };
+export type TasksData = { tasks: Task[]; members: TaskMember[]; teams: TaskTeam[]; clients: TaskClient[]; projects: TaskProject[]; categories: string[]; sprints?: TaskSprint[]; me: Me };
+export type TaskSprint = { id: number; name: string; status: string };
+export type Lookups = { members: TaskMember[]; membersById: Map<number, TaskMember>; teams: TaskTeam[]; clients: TaskClient[]; clientsById: Map<number, TaskClient>; projects: TaskProject[]; categories: string[]; sprints?: TaskSprint[] };
 
 // O quadro mostra o fluxo de trabalho; "Cancelado" fica só na lista.
 export const boardStatuses: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review", "waiting", "blocked", "paused", "done"];

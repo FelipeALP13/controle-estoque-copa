@@ -119,6 +119,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled, cr
     clientsById: new Map((data?.clients ?? []).map((client) => [client.id, client])),
     projects: data?.projects ?? [],
     categories: data?.categories ?? [],
+    sprints: data?.sprints ?? [],
   }), [data]);
   const teamsById = useMemo(() => new Map(lookups.teams.map((team) => [team.id, team])), [lookups.teams]);
 

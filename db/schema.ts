@@ -149,6 +149,12 @@ export const clients = sqliteTable("clients", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  // Ficha do cliente: contato principal, pacote de horas por mês e observações.
+  contactName: text("contact_name").notNull().default(""),
+  contactEmail: text("contact_email").notNull().default(""),
+  contactPhone: text("contact_phone").notNull().default(""),
+  monthlyHours: real("monthly_hours"),
+  notes: text("notes").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -190,6 +196,7 @@ export const tasks = sqliteTable("tasks", {
   teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
   clientId: integer("client_id").references(() => clients.id, { onDelete: "set null" }),
   projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  sprintId: integer("sprint_id").references(() => sprints.id, { onDelete: "set null" }),
   category: text("category").notNull().default(""),
   openedOn: text("opened_on"),
   startDate: text("start_date"),
@@ -469,7 +476,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
@@ -569,3 +576,104 @@ export const celebrationAlerts = sqliteTable("celebration_alerts", {
   key: text("key").primaryKey(),
   sentAt: text("sent_at").notNull(),
 });
+
+/** Sistemas dos clientes: endereço, login de acesso (senha criptografada) e monitor de "no ar". */
+export const clientSystems = sqliteTable("client_systems", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  // Time dono do acesso: só ele (e administradores) vê usuário e senha.
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  environment: text("environment").notNull().default("demo"),
+  url: text("url").notNull().default(""),
+  username: text("username").notNull().default(""),
+  passwordEnc: text("password_enc"),
+  notes: text("notes").notNull().default(""),
+  monitor: integer("monitor", { mode: "boolean" }).notNull().default(false),
+  status: text("status").notNull().default("unknown"),
+  lastCheckedAt: text("last_checked_at"),
+  lastChangeAt: text("last_change_at"),
+  lastMs: integer("last_ms"),
+  lastError: text("last_error"),
+  failCount: integer("fail_count").notNull().default(0),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("client_systems_client_idx").on(table.clientId), index("client_systems_monitor_idx").on(table.monitor, table.lastCheckedAt)]);
+
+/** Quedas e voltas de cada sistema monitorado. */
+export const systemEvents = sqliteTable("system_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  systemId: integer("system_id").notNull().references(() => clientSystems.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["down", "up"] }).notNull(),
+  detail: text("detail").notNull().default(""),
+  at: text("at").notNull(),
+}, (table) => [index("system_events_system_idx").on(table.systemId, table.at)]);
+
+/** Sprints: período de trabalho de um time, com as demandas planejadas. */
+export const sprints = sqliteTable("sprints", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  goal: text("goal").notNull().default(""),
+  hoursPerDay: real("hours_per_day").notNull().default(6),
+  status: text("status", { enum: ["planned", "active", "closed"] }).notNull().default("planned"),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  closedAt: text("closed_at"),
+});
+
+/** Retrospectivas: o que foi bem, o que melhorar e as ações, com votos. */
+export const retros = sqliteTable("retros", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  sprintId: integer("sprint_id").references(() => sprints.id, { onDelete: "set null" }),
+  anonymous: integer("anonymous", { mode: "boolean" }).notNull().default(true),
+  status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  closedAt: text("closed_at"),
+});
+
+export const retroItems = sqliteTable("retro_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  retroId: integer("retro_id").notNull().references(() => retros.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["good", "improve", "action"] }).notNull(),
+  text: text("text").notNull(),
+  // Guardado só para a pessoa poder apagar o que escreveu; em retrospectiva anônima nunca vai para a tela.
+  authorId: integer("author_id").references(() => members.id, { onDelete: "set null" }),
+  authorName: text("author_name").notNull().default(""),
+  taskId: integer("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("retro_items_retro_idx").on(table.retroId)]);
+
+export const retroVotes = sqliteTable("retro_votes", {
+  itemId: integer("item_id").notNull().references(() => retroItems.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.itemId, table.memberId] })]);
+
+/** Integração de quem chega: checklist dos primeiros dias, com um padrinho. */
+export const onboardings = sqliteTable("onboardings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  buddyId: integer("buddy_id").references(() => members.id, { onDelete: "set null" }),
+  startDate: text("start_date").notNull(),
+  status: text("status", { enum: ["active", "done"] }).notNull().default("active"),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
+
+export const onboardingItems = sqliteTable("onboarding_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  onboardingId: integer("onboarding_id").notNull().references(() => onboardings.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  done: integer("done", { mode: "boolean" }).notNull().default(false),
+  doneByName: text("done_by_name"),
+  doneAt: text("done_at"),
+  sortOrder: real("sort_order").notNull().default(0),
+}, (table) => [index("onboarding_items_idx").on(table.onboardingId)]);
