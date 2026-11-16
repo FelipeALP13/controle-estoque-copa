@@ -78,6 +78,31 @@ export function relatedArticles<T extends SearchableArticle>(articles: readonly 
     .map((entry) => entry.article);
 }
 
+export type SearchableTicket = { id: number; title: string; description: string; client: string; status: string; resolvedAt: string | null; createdAt: string };
+
+/**
+ * Chamados já resolvidos parecidos com um texto (título do chamado novo ou aberto): mesma regra dos artigos,
+ * com o título valendo mais que a descrição. Os mais parecidos primeiro; empate, o resolvido mais recente.
+ */
+export function similarTickets<T extends SearchableTicket>(tickets: readonly T[], text: string, excludeId: number | null = null, limit = 3) {
+  const words = keywords(text);
+  if (!words.length) return [];
+  const needed = Math.min(2, words.length);
+  return tickets
+    .filter((ticket) => ticket.status === "resolved" && ticket.id !== excludeId)
+    .map((ticket) => {
+      const title = new Set(keywords(`${ticket.title} ${ticket.client}`));
+      const description = fold(ticket.description);
+      const hits = words.filter((word) => title.has(word)).length;
+      const bodyHits = words.filter((word) => !title.has(word) && description.includes(word)).length;
+      return { ticket, hits, matched: hits + bodyHits, score: hits * 2 + bodyHits };
+    })
+    .filter((entry) => entry.hits >= 1 && entry.matched >= needed)
+    .sort((a, b) => b.score - a.score || (b.ticket.resolvedAt ?? b.ticket.createdAt).localeCompare(a.ticket.resolvedAt ?? a.ticket.createdAt))
+    .slice(0, limit)
+    .map((entry) => entry.ticket);
+}
+
 export type Notice = { id: number; important: boolean; expiresOn: string | null; createdAt: string };
 
 /** Aviso vale até o fim do dia de validade; sem validade, fica até alguém excluir. */

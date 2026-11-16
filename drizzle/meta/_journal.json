@@ -211,6 +211,48 @@
       "when": 1794596898537,
       "tag": "0029_people_ops",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1794602349931,
+      "tag": "0030_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1794603363584,
+      "tag": "0031_chat_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1794836642166,
+      "tag": "0032_chat_topics",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1794839487002,
+      "tag": "0033_chat_status_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1794853365561,
+      "tag": "0034_goal_checklist",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1794854287588,
+      "tag": "0035_pins_goal_tasks",
+      "breakpoints": true
     }
   ]
 }

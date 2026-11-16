@@ -12,6 +12,7 @@ import { readJsonBody } from "../../api-input";
 import { removeAttachmentsOf } from "../../attachments-store";
 import { sprints, taskDependencies, taskRecurrences } from "../../../db/schema";
 import { openBlockers, releasedBy, wouldCreateCycle } from "../../team-tools";
+import { syncGoalItemsForTask } from "../../goal-sync";
 
 /** Do que a demanda depende e o que depende dela (vazio se a migração ainda não foi aplicada). */
 async function loadDependencies(db: Db, taskId: number) {
@@ -559,6 +560,10 @@ export async function POST(request: Request) {
       await notify(db, member.id, member.name, now, alerts);
       // Concluída: avisa quem esperava por ela (quando não sobra outra pendência).
       if (changes.status === "done") await notifyReleased(db, member, taskId, now);
+      // Item de meta ligado a esta demanda: acompanha a conclusão (ou a reabertura).
+      if (changes.status && (changes.status === "done" || current.status === "done")) {
+        await syncGoalItemsForTask(db, taskId, changes.status === "done", member.name, now).catch((error) => console.error("goal item sync failed", error));
+      }
       return json({ task, closed: isClosedStatus(task.status) });
     }
 

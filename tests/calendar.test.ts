@@ -2,15 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildCalendar, isIsoDay, monthGrid, spanDays } from "../app/calendar.ts";
 
-test("grade do mês começa na segunda e fecha semanas inteiras", () => {
+test("grade do mês começa no domingo e fecha semanas inteiras", () => {
   const nov = monthGrid("2026-11"); // 1º de novembro de 2026 é domingo
-  assert.equal(nov.from, "2026-10-26");
+  assert.equal(nov.from, "2026-11-01");
   assert.equal(nov.days.length % 7, 0);
   assert.equal(nov.days.filter((day) => day.inMonth).length, 30);
-  assert.equal(nov.to, "2026-12-06");
-  const feb = monthGrid("2027-02"); // começa numa segunda e tem 28 dias: 4 semanas exatas
-  assert.equal(feb.from, "2027-02-01");
+  assert.equal(nov.to, "2026-12-05");
+  const feb = monthGrid("2026-02"); // começa num domingo e tem 28 dias: 4 semanas exatas
+  assert.equal(feb.from, "2026-02-01");
   assert.equal(feb.days.length, 28);
+  const dec = monthGrid("2026-12"); // começa numa terça
+  assert.equal(dec.from, "2026-11-29");
 });
 
 test("períodos cortados ao intervalo visível", () => {

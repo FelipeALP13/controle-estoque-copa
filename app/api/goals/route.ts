@@ -1,11 +1,13 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { goals, goalUpdates, members, notifications, teamMembers, teams } from "../../../db/schema";
+import { goalItems, goals, goalUpdates, members, notifications, tasks, teamMembers, teams } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { readJsonBody } from "../../api-input";
 import { cleanMultiline, cleanTitle } from "../../tasks";
-import { parseGoalNumber } from "../../review-tools";
+import { parseGoalItems, parseGoalNumber, syncGoalItems } from "../../review-tools";
+import { refreshGoalPercents } from "../../goal-sync";
+import { taskCode } from "../../tasks";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -28,7 +30,16 @@ async function scopeOf(db: Db, memberId: number, isAdmin: boolean) {
   const canManagePerson = (personId: number | null) => isAdmin || (personId !== null && memberships.some((row) => row.memberId === personId && ledTeams?.has(row.teamId)));
   // Meta individual: a própria pessoa, os líderes dos times dela e administradores.
   const canSeePerson = (personId: number | null) => personId === memberId || canManagePerson(personId);
-  return { memberships, ledTeams, canManageTeam, canManagePerson, canSeePerson };
+  // Marcar itens do checklist: quem gerencia, a própria pessoa (meta individual) e quem é do time (meta do time).
+  const canCheck = (goal: { scope: string; teamId: number | null; memberId: number | null }) => goal.scope === "team"
+    ? canManageTeam(goal.teamId) || memberships.some((row) => row.memberId === memberId && row.teamId === goal.teamId)
+    : canManagePerson(goal.memberId) || goal.memberId === memberId;
+  return { memberships, ledTeams, canManageTeam, canManagePerson, canSeePerson, canCheck };
+}
+
+/** Recalcula a % da meta pelo checklist e grava. */
+async function refreshChecklist(db: Db, goalId: number, now: string) {
+  return (await refreshGoalPercents(db, [goalId], now)).get(goalId) ?? 0;
 }
 
 export async function GET(request: Request) {
@@ -46,9 +57,10 @@ export async function GET(request: Request) {
     ]);
     const visible = rows.filter((goal) => goal.scope === "team" || scope.canSeePerson(goal.memberId));
     const history = visible.length ? await db.select().from(goalUpdates).where(inArray(goalUpdates.goalId, visible.map((goal) => goal.id))).orderBy(desc(goalUpdates.at)) : [];
+    const items = visible.some((goal) => goal.mode === "checklist") ? await db.select({ id: goalItems.id, goalId: goalItems.goalId, text: goalItems.text, done: goalItems.done, doneByName: goalItems.doneByName, doneAt: goalItems.doneAt, taskId: goalItems.taskId, taskTitle: tasks.title, taskStatus: tasks.status }).from(goalItems).leftJoin(tasks, eq(tasks.id, goalItems.taskId)).where(inArray(goalItems.goalId, visible.filter((goal) => goal.mode === "checklist").map((goal) => goal.id))).orderBy(asc(goalItems.sortOrder), asc(goalItems.id)) : [];
     return json({
       year,
-      goals: visible.map((goal) => ({ ...goal, canManage: goal.scope === "team" ? scope.canManageTeam(goal.teamId) : scope.canManagePerson(goal.memberId), updates: history.filter((update) => update.goalId === goal.id).slice(0, 12) })),
+      goals: visible.map((goal) => ({ ...goal, canManage: goal.scope === "team" ? scope.canManageTeam(goal.teamId) : scope.canManagePerson(goal.memberId), canCheck: member.role !== "viewer" && scope.canCheck(goal), items: items.filter((item) => item.goalId === goal.id).map((item) => ({ id: item.id, text: item.text, done: item.done, doneByName: item.doneByName, doneAt: item.doneAt, task: item.taskId ? { id: item.taskId, code: taskCode(item.taskId), title: item.taskTitle ?? "", status: item.taskStatus ?? "" } : null })), updates: history.filter((update) => update.goalId === goal.id).slice(0, 12) })),
       teams: teamRows,
       // Quem a pessoa pode receber meta: administradores, todos; líderes, quem está nos times que lideram.
       people: people.filter((person) => scope.canManagePerson(person.id) || person.id === member.id),
@@ -82,32 +94,86 @@ export async function POST(request: Request) {
       const teamId = kind === "team" ? Number(body.teamId) || null : null;
       const memberId = kind === "person" ? Number(body.memberId) || null : null;
       const title = cleanTitle(body.title).slice(0, 120);
-      const target = parseGoalNumber(body.target);
-      const startValue = parseGoalNumber(body.startValue) ?? 0;
+      const mode = body.mode === "checklist" ? "checklist" as const : "number" as const;
+      const itemTexts = mode === "checklist" ? parseGoalItems(body.items) : [];
+      const target = mode === "checklist" ? 100 : parseGoalNumber(body.target);
+      const startValue = mode === "checklist" ? 0 : parseGoalNumber(body.startValue) ?? 0;
       if (!kind) return json({ error: "Escolha se a meta é do time ou individual." }, 400);
       if (!Number.isInteger(year) || year < 2020 || year > 2100) return json({ error: "Ano inválido." }, 400);
       if (!title) return json({ error: "Descreva a meta." }, 400);
       if (target === null) return json({ error: "Informe o valor-alvo em número." }, 400);
+      if (mode === "checklist" && !itemTexts.length) return json({ error: "Escreva pelo menos um item do checklist." }, 400);
       if (kind === "team" && !teamId) return json({ error: "Escolha o time." }, 400);
       if (kind === "person" && !memberId) return json({ error: "Escolha a pessoa." }, 400);
       if (!allowed({ scope: kind, teamId, memberId })) return denied();
-      const values = { year, scope: kind, teamId, memberId, title, description: cleanMultiline(body.description, 1000), unit: cleanTitle(body.unit).slice(0, 20), direction: body.direction === "down" ? "down" as const : "up" as const, startValue, target, updatedAt: now };
+      const values = { year, scope: kind, teamId, memberId, title, description: cleanMultiline(body.description, 1000), unit: mode === "checklist" ? "%" : cleanTitle(body.unit).slice(0, 20), direction: mode === "checklist" ? "up" as const : body.direction === "down" ? "down" as const : "up" as const, startValue, target, mode, updatedAt: now };
       if (goalId) {
         const [current] = await db.select().from(goals).where(eq(goals.id, goalId)).limit(1);
         if (!current) return json({ error: "Meta não encontrada." }, 404);
         if (!allowed(current)) return denied();
         await db.update(goals).set(values).where(eq(goals.id, goalId));
+        if (mode === "checklist") {
+          const existing = await db.select({ id: goalItems.id, text: goalItems.text }).from(goalItems).where(eq(goalItems.goalId, goalId));
+          const sync = syncGoalItems(existing, itemTexts);
+          if (sync.remove.length) await db.delete(goalItems).where(and(eq(goalItems.goalId, goalId), inArray(goalItems.id, sync.remove)));
+          for (const item of sync.keep) await db.update(goalItems).set({ sortOrder: item.sortOrder }).where(eq(goalItems.id, item.id));
+          if (sync.add.length) await db.insert(goalItems).values(sync.add.map((item) => ({ goalId, text: item.text, sortOrder: item.sortOrder })));
+          await refreshChecklist(db, goalId, now);
+        } else if (current.mode === "checklist") {
+          // Deixou de ser checklist: os itens saem e o valor volta a ser digitado.
+          await db.delete(goalItems).where(eq(goalItems.goalId, goalId));
+        }
         return json({ ok: true });
       }
       const [goal] = await db.insert(goals).values({ ...values, current: startValue, createdByName: member.name, createdAt: now }).returning({ id: goals.id });
+      if (itemTexts.length) await db.insert(goalItems).values(itemTexts.map((text, index) => ({ goalId: goal.id, text, sortOrder: index })));
       return json({ id: goal.id }, 201);
     }
 
     const [goal] = await db.select().from(goals).where(eq(goals.id, Number(body.goalId))).limit(1);
     if (!goal) return json({ error: "Meta não encontrada." }, 404);
+
+    // Marcar/desmarcar um item: a % da meta sobe ou desce sozinha.
+    if (action === "toggleItem") {
+      if (!scope.canSeePerson(goal.memberId) && goal.scope === "person") return json({ error: "Meta não encontrada." }, 404);
+      if (!scope.canCheck(goal)) return json({ error: "Só quem é da meta (a pessoa ou o time), os líderes e administradores marcam os itens." }, 403);
+      const [item] = await db.select().from(goalItems).where(and(eq(goalItems.id, Number(body.itemId)), eq(goalItems.goalId, goal.id))).limit(1);
+      if (!item) return json({ error: "Item não encontrado." }, 404);
+      if (item.taskId) return json({ error: `Este item é marcado sozinho quando a demanda ${taskCode(item.taskId)} for concluída.` }, 400);
+      const done = body.done === true;
+      if (item.done === done) return json({ ok: true, percent: goal.current });
+      await db.update(goalItems).set({ done, doneByName: done ? member.name : null, doneAt: done ? now : null }).where(eq(goalItems.id, item.id));
+      const percent = await refreshChecklist(db, goal.id, now);
+      await db.insert(goalUpdates).values({ goalId: goal.id, value: percent, note: `${done ? "Concluiu" : "Reabriu"}: ${item.text}`.slice(0, 300), byName: member.name, at: now });
+      if (goal.scope === "person" && goal.memberId && goal.memberId !== member.id) {
+        await db.insert(notifications).values({ memberId: goal.memberId, kind: "goal_update", actorName: member.name, body: `${goal.title}: ${done ? "concluiu" : "reabriu"} “${item.text}” (${percent}%)`.slice(0, 140), createdAt: now }).catch((error) => console.error("goal notification failed", error));
+      }
+      return json({ ok: true, percent });
+    }
+
     if (!allowed(goal)) return denied();
 
+    // Ligar um item do checklist a uma demanda (ou desligar com taskId nulo).
+    if (action === "linkItemTask") {
+      const [item] = await db.select().from(goalItems).where(and(eq(goalItems.id, Number(body.itemId)), eq(goalItems.goalId, goal.id))).limit(1);
+      if (!item) return json({ error: "Item não encontrado." }, 404);
+      const taskId = body.taskId === null || body.taskId === "" ? null : Number(body.taskId);
+      if (taskId === null) {
+        await db.update(goalItems).set({ taskId: null }).where(eq(goalItems.id, item.id));
+        return json({ ok: true });
+      }
+      const [task] = Number.isInteger(taskId) ? await db.select({ id: tasks.id, status: tasks.status }).from(tasks).where(eq(tasks.id, taskId)).limit(1) : [];
+      if (!task) return json({ error: "Demanda não encontrada." }, 404);
+      // Já concluída: o item fica marcado agora; aberta: o item volta a aberto e espera a demanda.
+      const done = task.status === "done";
+      await db.update(goalItems).set({ taskId: task.id, done, doneByName: done ? member.name : null, doneAt: done ? now : null }).where(eq(goalItems.id, item.id));
+      const percent = await refreshChecklist(db, goal.id, now);
+      if (done !== item.done) await db.insert(goalUpdates).values({ goalId: goal.id, value: percent, note: `${done ? "Concluiu" : "Reabriu"} pela demanda ${taskCode(task.id)}: ${item.text}`.slice(0, 300), byName: member.name, at: now });
+      return json({ ok: true, percent });
+    }
+
     if (action === "updateProgress") {
+      if (goal.mode === "checklist") return json({ error: "Esta meta é medida pelo checklist: marque os itens concluídos." }, 400);
       const value = parseGoalNumber(body.value);
       if (value === null) return json({ error: "Informe o valor atual em número." }, 400);
       const note = cleanMultiline(body.note, 300);

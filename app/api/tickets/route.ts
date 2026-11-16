@@ -10,7 +10,6 @@ import { sendJiraComment, transitionJira } from "../../jira-sync";
 import { canHandleTicket, isTicketStatus, isTicketType, isTicketUrgency, requesterCanSetStatus, ticketCode, ticketStatusLabels, type TicketUrgency } from "../../tickets";
 import { readJsonBody } from "../../api-input";
 import { removeAttachmentsOf } from "../../attachments-store";
-import { autoAssignTicket } from "../../ticket-assign";
 import { canRate, isRating, MAX_RATING_COMMENT, RATING_LABELS, stars } from "../../ticket-rating";
 import { MAX_REPLY_BODY, MAX_REPLY_TITLE } from "../../team-tools";
 
@@ -135,9 +134,8 @@ export async function POST(request: Request) {
       }).returning();
       await db.insert(ticketEvents).values({ ticketId: ticket.id, kind: "created", ...actor, createdAt: now });
       await notify(db, member.name, now, ticket.id, (await teamRecipients(db, teamId)).map((memberId) => ({ memberId, kind: "ticket_new", body: ticket.title })), member.id);
-      // Suporte: vai para quem está de plantão na semana (com menos chamados abertos).
-      const assigned = await autoAssignTicket(db, ticket.id);
-      return json({ ticket: assigned ? { ...ticket, assigneeId: assigned } : ticket }, 201);
+      // Sem responsável: o chamado cai na fila do time e quem atende assume.
+      return json({ ticket }, 201);
     }
 
     // Respostas prontas: do time (só quem é do time usa e edita) ou de todos.

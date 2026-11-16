@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -479,7 +479,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_reminder"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
@@ -741,10 +741,25 @@ export const goals = sqliteTable("goals", {
   startValue: real("start_value").notNull().default(0),
   target: real("target").notNull(),
   current: real("current").notNull().default(0),
+  // "number": progresso digitado; "checklist": a % sobe sozinha conforme os itens são concluídos.
+  mode: text("mode", { enum: ["number", "checklist"] }).notNull().default("number"),
   createdByName: text("created_by_name").notNull().default("Equipe"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("goals_year_idx").on(table.year, table.scope)]);
+
+/** Itens do checklist de uma meta (modo "checklist"). */
+export const goalItems = sqliteTable("goal_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  done: integer("done", { mode: "boolean" }).notNull().default(false),
+  doneByName: text("done_by_name"),
+  doneAt: text("done_at"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  // Demanda ligada: o item é marcado (e desmarcado) sozinho quando ela é concluída (ou reaberta).
+  taskId: integer("task_id").references(() => tasks.id, { onDelete: "set null" }),
+}, (table) => [index("goal_items_goal_idx").on(table.goalId, table.sortOrder), index("goal_items_task_idx").on(table.taskId)]);
 
 export const goalUpdates = sqliteTable("goal_updates", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -864,3 +879,93 @@ export const incidentUpdates = sqliteTable("incident_updates", {
   byName: text("by_name").notNull().default("Equipe"),
   at: text("at").notNull(),
 }, (table) => [index("incident_updates_incident_idx").on(table.incidentId)]);
+
+/** Conversa: canal aberto a todos ou mensagem direta entre duas pessoas (dm_key "menorId:maiorId"). */
+export const chatChannels = sqliteTable("chat_channels", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind", { enum: ["channel", "dm"] }).notNull().default("channel"),
+  name: text("name").notNull(),
+  topic: text("topic").notNull().default(""),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  dmKey: text("dm_key"),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  lastMessageAt: text("last_message_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("chat_channels_dm_unique").on(table.dmKey)]);
+
+export const chatMessages = sqliteTable("chat_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  channelId: integer("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
+  topicId: integer("topic_id").references((): AnySQLiteColumn => chatTopics.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").references(() => members.id, { onDelete: "set null" }),
+  authorName: text("author_name").notNull().default("Equipe"),
+  body: text("body").notNull(),
+  replyToId: integer("reply_to_id"),
+  // Fotos e GIFs (JSON): [{ kind: "upload", key } | { kind: "gif", url, width, height }].
+  attachments: text("attachments").notNull().default("[]"),
+  editedAt: text("edited_at"),
+  deleted: integer("deleted", { mode: "boolean" }).notNull().default(false),
+  // Demanda criada a partir desta mensagem ("Virar demanda").
+  taskId: integer("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  // Fixada no topo da conversa.
+  pinnedAt: text("pinned_at"),
+  pinnedByName: text("pinned_by_name"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("chat_messages_channel_idx").on(table.channelId, table.id), index("chat_messages_topic_idx").on(table.topicId, table.id)]);
+
+export const chatReactions = sqliteTable("chat_reactions", {
+  messageId: integer("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  emoji: text("emoji").notNull(),
+}, (table) => [primaryKey({ columns: [table.messageId, table.memberId, table.emoji] })]);
+
+/** Até onde cada pessoa leu cada conversa (para o contador de não lidas). */
+export const chatReads = sqliteTable("chat_reads", {
+  channelId: integer("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  lastReadId: integer("last_read_id").notNull().default(0),
+}, (table) => [primaryKey({ columns: [table.channelId, table.memberId] })]);
+
+
+/** Presença nas conversas: visto por último (online) e em qual conversa está digitando. */
+export const chatPresence = sqliteTable("chat_presence", {
+  memberId: integer("member_id").primaryKey().references(() => members.id, { onDelete: "cascade" }),
+  lastSeenAt: text("last_seen_at").notNull(),
+  typingChannelId: integer("typing_channel_id"),
+  typingTopicId: integer("typing_topic_id"),
+  typingAt: text("typing_at"),
+  // Status escolhido pela pessoa (meeting | lunch | client | away) e até quando vale (null = até tirar).
+  statusKind: text("status_kind"),
+  statusUntil: text("status_until"),
+});
+
+/** "Me lembre desta mensagem": o aviso vai para o sino na hora marcada. */
+export const chatReminders = sqliteTable("chat_reminders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  messageId: integer("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+  remindAt: text("remind_at").notNull(),
+  firedAt: text("fired_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("chat_reminders_due_idx").on(table.memberId, table.firedAt, table.remindAt), uniqueIndex("chat_reminders_message_idx").on(table.memberId, table.messageId)]);
+
+/** Assunto de uma conversa: no canal, cada tema tem o seu (com título e "resolvido"); na conversa direta há um só. */
+export const chatTopics = sqliteTable("chat_topics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  channelId: integer("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  resolved: integer("resolved", { mode: "boolean" }).notNull().default(false),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastMessageAt: text("last_message_at"),
+}, (table) => [index("chat_topics_channel_idx").on(table.channelId, table.lastMessageAt)]);
+
+/** Até onde cada pessoa leu cada assunto (contador de não lidas). */
+export const chatTopicReads = sqliteTable("chat_topic_reads", {
+  topicId: integer("topic_id").notNull().references(() => chatTopics.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  lastReadId: integer("last_read_id").notNull().default(0),
+}, (table) => [primaryKey({ columns: [table.topicId, table.memberId] })]);

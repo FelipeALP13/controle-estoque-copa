@@ -12,7 +12,7 @@ function json(body: unknown, status = 200) {
 }
 
 // Tabelas que nunca entram na cópia (sessões, travas, tentativas de login, controle de migrações).
-const SKIP_TABLES = new Set(["sessions", "auth_rate_limits", "password_reset_tokens", "app_settings", "inventory_locks", "d1_migrations", "__drizzle_migrations", "_cf_KV", "_cf_METADATA", "sqlite_sequence", "review_submissions", "pulse_submissions"]);
+const SKIP_TABLES = new Set(["sessions", "auth_rate_limits", "password_reset_tokens", "app_settings", "inventory_locks", "d1_migrations", "__drizzle_migrations", "_cf_KV", "_cf_METADATA", "sqlite_sequence", "review_submissions", "pulse_submissions", "chat_messages", "chat_reactions", "chat_reads", "chat_presence", "chat_topic_reads"]);
 // Colunas secretas que nunca saem do servidor.
 const SECRET_COLUMNS: Record<string, string[]> = { members: ["password_hash", "password_salt", "calendar_token_hash"], jira_connections: ["api_token", "lock_until"], client_systems: ["password_enc"], one_on_ones: ["private_notes"] };
 const MAX_ROWS_PER_TABLE = 50000;

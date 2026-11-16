@@ -42,11 +42,12 @@ export async function POST(request: Request) {
   if (!(await hasAccess())) return Response.json({ error: "Faça login para enviar imagens." }, { status: 401 });
   const form = await request.formData();
   const file = form.get("file");
-  const kind = form.get("kind") === "profile" ? "profiles" : "items";
+  const kind = form.get("kind") === "profile" ? "profiles" : form.get("kind") === "chat" ? "chat" : "items";
+    const maxBytes = kind === "chat" ? 8 * 1024 * 1024 : 3 * 1024 * 1024;
   if (!(file instanceof File)) return Response.json({ error: "Selecione uma imagem." }, { status: 400 });
   const imageType = allowedImages[file.type];
   if (!imageType) return Response.json({ error: "Use uma imagem PNG, JPG, GIF ou WebP." }, { status: 400 });
-  if (file.size > 3 * 1024 * 1024) return Response.json({ error: "A imagem deve ter no máximo 3 MB." }, { status: 400 });
+  if (file.size > maxBytes) return Response.json({ error: `A imagem deve ter no máximo ${maxBytes / 1024 / 1024} MB.` }, { status: 400 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!imageType.valid(bytes)) return Response.json({ error: "O conteúdo do arquivo não corresponde a uma imagem válida." }, { status: 400 });
   const key = `media/${kind}/${crypto.randomUUID()}.${imageType.extension}`;

@@ -102,7 +102,7 @@ function emit(rules) {
   for (const rule of rules) {
     if (rule.at) { const inner = emit(rule.rules); if (inner.length) lines.push(`${rule.at} {`, ...inner.map((line) => `  ${line}`), "}"); continue; }
     // O menu lateral, e a tela de login já foram desenhados para fundo escuro/colorido.
-    if (/\.sidebar|\.brand|\.login-|\.hero-status|\.overview-hero/.test(rule.selector)) continue;
+    if (/\.sidebar|\.brand|\.nav-|\.login-|\.hero-status|\.overview-hero|\.community/.test(rule.selector)) continue;
     const declarations = rule.body.split(";").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
       const colon = entry.indexOf(":");
       if (colon < 0) return null;

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isNoticeActive, keywords, parseTags, relatedArticles, searchArticles, sortNotices } from "../app/knowledge.ts";
+import { isNoticeActive, keywords, parseTags, relatedArticles, searchArticles, similarTickets, sortNotices } from "../app/knowledge.ts";
 
 test("etiquetas sem repetir e com limite", () => {
   assert.deepEqual(parseTags("Boleto, API , boleto;  segunda via"), ["Boleto", "API", "segunda via"]);
@@ -47,4 +47,19 @@ test("avisos ativos e ordem do mural", () => {
     { id: 3, important: false, expiresOn: null, createdAt: "2026-11-11" },
   ]);
   assert.deepEqual(list.map((n) => n.id), [2, 3, 1]);
+});
+
+test("chamados parecidos já resolvidos", () => {
+  const base = { description: "", client: "", createdAt: "2026-01-01T00:00:00Z" };
+  const tickets = [
+    { ...base, id: 1, title: "Nota fiscal rejeitada na emissão", status: "resolved", resolvedAt: "2026-03-01T00:00:00Z" },
+    { ...base, id: 2, title: "Emissão de nota fiscal travando", status: "resolved", resolvedAt: "2026-05-01T00:00:00Z" },
+    { ...base, id: 3, title: "Nota fiscal com erro", status: "open", resolvedAt: null },
+    { ...base, id: 4, title: "Senha do SGE", description: "nota fiscal não sai", status: "resolved", resolvedAt: "2026-06-01T00:00:00Z" },
+    { ...base, id: 5, title: "Impressora", status: "resolved", resolvedAt: "2026-06-01T00:00:00Z" },
+  ];
+  assert.deepEqual(similarTickets(tickets, "Cliente não consegue emitir nota fiscal").map((t) => t.id), [2, 1], "só resolvidos, com palavra no título");
+  assert.deepEqual(similarTickets(tickets, "Emissão de nota fiscal travando", 2).map((t) => t.id), [1], "sem o próprio chamado");
+  assert.deepEqual(similarTickets(tickets, "de para"), [], "só palavras comuns");
+  assert.deepEqual(similarTickets(tickets, "impressora").map((t) => t.id), [5]);
 });

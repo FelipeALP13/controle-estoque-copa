@@ -131,3 +131,44 @@ export function parseGoalNumber(value: unknown) {
   const number = Number(normalized);
   return Number.isFinite(number) && Math.abs(number) < 1e9 ? Math.round(number * 100) / 100 : null;
 }
+
+// ---------- Meta por checklist ----------
+
+export const MAX_GOAL_ITEMS = 50;
+export const MAX_GOAL_ITEM = 200;
+
+/** % concluída do checklist (0 a 100). Sem itens, 0. */
+export function checklistPercent(items: readonly { done: boolean }[]) {
+  if (!items.length) return 0;
+  return Math.round((items.filter((item) => item.done).length / items.length) * 100);
+}
+
+/** Itens digitados (array ou um por linha): sem vazios, sem repetidos, no máximo 50. */
+export function parseGoalItems(value: unknown) {
+  const lines = Array.isArray(value) ? value.map((entry) => String(entry ?? "")) : String(value ?? "").split(/\r?\n/);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const text = line.replace(/^\s*(?:[-*•]|\[[ xX]?\])\s*/, "").replace(/\s+/g, " ").trim().slice(0, MAX_GOAL_ITEM);
+    const key = text.toLocaleLowerCase("pt-BR");
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= MAX_GOAL_ITEMS) break;
+  }
+  return out;
+}
+
+/** Ao editar a lista: mantém os itens que continuam (com o "feito"), cria os novos e remove os que saíram. */
+export function syncGoalItems<T extends { id: number; text: string }>(existing: readonly T[], texts: readonly string[]) {
+  const key = (text: string) => text.toLocaleLowerCase("pt-BR");
+  const byText = new Map(existing.map((item) => [key(item.text), item]));
+  const keep: { id: number; sortOrder: number }[] = [];
+  const add: { text: string; sortOrder: number }[] = [];
+  texts.forEach((text, index) => {
+    const found = byText.get(key(text));
+    if (found) { keep.push({ id: found.id, sortOrder: index }); byText.delete(key(text)); }
+    else add.push({ text, sortOrder: index });
+  });
+  return { keep, add, remove: [...byText.values()].map((item) => item.id) };
+}

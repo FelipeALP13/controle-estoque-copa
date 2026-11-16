@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import ChevronDown from "lucide-react/icons/chevron-down";
 import { TICKETS_CHANGED } from "./use-jira-sync";
+import { NOTIFY_REFRESH_EVENT } from "./notify-sound";
 
 export type NavBadge = { count: number; tone?: "info" | "danger"; title: string };
 export type NavItem = { key: string; label: string; icon: ReactNode; onClick: () => void; badge?: NavBadge | null; children?: NavItem[]; open?: boolean };
 export type NavSection = { label?: string; items: NavItem[] };
 
-export type NavCounts = { tasks: number; tasksOverdue: number; tickets: number; ticketsLate: number; ticketsUnassigned: number };
+export type NavCounts = { tasks: number; tasksOverdue: number; tickets: number; ticketsLate: number; ticketsUnassigned: number; chat?: number; chatDirect?: number };
+/** Disparado pela tela de conversas quando a pessoa lê ou envia algo: atualiza o contador do menu. */
+export const CHAT_CHANGED = "chat-changed";
+/** Pede ao Portal para abrir uma demanda (detail = id). Usado pelo chat. */
+export const OPEN_TASK_EVENT = "portal-open-task";
 
 /** Contadores do menu (minhas demandas e fila de chamados), atualizados a cada minuto e quando chegam chamados novos. */
 export function useNavCounts(enabled: boolean) {
@@ -16,7 +21,11 @@ export function useNavCounts(enabled: boolean) {
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/counts", { cache: "no-store" });
-      if (response.ok) setCounts(await response.json() as NavCounts);
+      if (!response.ok) return;
+      const json = await response.json() as NavCounts & { reminded?: number };
+      setCounts(json);
+      // Lembrete de mensagem venceu: o sino busca o aviso na hora.
+      if (json.reminded) window.dispatchEvent(new Event(NOTIFY_REFRESH_EVENT));
     } catch { /* sem conexão: mantém os números anteriores */ }
   }, []);
   useEffect(() => {
@@ -25,8 +34,9 @@ export function useNavCounts(enabled: boolean) {
     const interval = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60000);
     const refresh = () => { void load(); };
     window.addEventListener(TICKETS_CHANGED, refresh);
+    window.addEventListener(CHAT_CHANGED, refresh);
     window.addEventListener("focus", refresh);
-    return () => { window.clearTimeout(first); window.clearInterval(interval); window.removeEventListener(TICKETS_CHANGED, refresh); window.removeEventListener("focus", refresh); };
+    return () => { window.clearTimeout(first); window.clearInterval(interval); window.removeEventListener(TICKETS_CHANGED, refresh); window.removeEventListener(CHAT_CHANGED, refresh); window.removeEventListener("focus", refresh); };
   }, [enabled, load]);
   return { counts, reload: load };
 }

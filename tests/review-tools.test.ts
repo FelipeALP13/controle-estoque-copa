@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { goalProgress, goalStatus, parseCriteria, parseGoalNumber, parseTarget, peersFor, quarterTitle, reviewDue, summarize, targetsFor, validScores, parseNotes } from "../app/review-tools.ts";
+import { checklistPercent, goalProgress, goalStatus, parseGoalItems, syncGoalItems, parseCriteria, parseGoalNumber, parseTarget, peersFor, quarterTitle, reviewDue, summarize, targetsFor, validScores, parseNotes } from "../app/review-tools.ts";
 
 // Times: 1 = Desenvolvimento (5 líder), 2 = Suporte (8 líder).
 const memberships = [
@@ -61,4 +61,14 @@ test("progresso das metas", () => {
   assert.equal(parseGoalNumber("1.234,5"), 1234.5);
   assert.equal(parseGoalNumber("95%"), 95);
   assert.equal(parseGoalNumber("abc"), null);
+});
+
+test("meta por checklist", () => {
+  assert.equal(checklistPercent([]), 0);
+  assert.equal(checklistPercent([{ done: true }, { done: false }, { done: false }]), 33);
+  assert.equal(checklistPercent([{ done: true }, { done: true }]), 100);
+  assert.deepEqual(parseGoalItems("- Mapear processos\n\n[x] Treinar equipe\nmapear  processos\n• Publicar manual"), ["Mapear processos", "Treinar equipe", "Publicar manual"]);
+  assert.equal(parseGoalItems(Array.from({ length: 80 }, (_, i) => `item ${i}`)).length, 50);
+  const sync = syncGoalItems([{ id: 1, text: "A" }, { id: 2, text: "B" }, { id: 3, text: "C" }], ["c", "D", "A"]);
+  assert.deepEqual(sync, { keep: [{ id: 3, sortOrder: 0 }, { id: 1, sortOrder: 2 }], add: [{ text: "D", sortOrder: 1 }], remove: [2] });
 });

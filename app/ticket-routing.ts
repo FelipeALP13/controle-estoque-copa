@@ -1,4 +1,5 @@
-// Atribuição automática de chamados do Suporte pela escala da semana (regras puras, testáveis).
+// Escala do Suporte: liga os nomes escritos na escala às pessoas do Portal (regras puras, testáveis).
+// Usado na passagem de plantão. Os chamados não são mais atribuídos pela escala: caem na fila do time.
 
 const fold = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").replace(/\.$/, "").trim();
 
@@ -31,13 +32,6 @@ export function matchScheduleNames<T extends { id: number; name: string }>(names
     if (candidates.length === 1 && !matched.some((person) => person.id === candidates[0].id)) matched.push(candidates[0]);
   }
   return matched;
-}
-
-/** Quem fica com o chamado: entre os disponíveis, quem tem menos chamados abertos; empate vai pela ordem da escala. */
-export function pickAssignee(candidates: readonly { id: number; open: number; away: boolean }[]) {
-  const available = candidates.filter((candidate) => !candidate.away);
-  if (!available.length) return null;
-  return available.reduce((best, candidate) => (candidate.open < best.open ? candidate : best)).id;
 }
 
 /** O time que recebe a escala: o que se chama "Suporte" (sem diferenciar maiúsculas e acentos). */

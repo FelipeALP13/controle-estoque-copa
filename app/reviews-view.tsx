@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Building2 from "lucide-react/icons/building-2";
 import Check from "lucide-react/icons/check";
 import ClipboardCheck from "lucide-react/icons/clipboard-check";
+import Link2 from "lucide-react/icons/link-2";
+import ListTodo from "lucide-react/icons/list-todo";
 import Lock from "lucide-react/icons/lock";
 import Pencil from "lucide-react/icons/pencil";
 import Plus from "lucide-react/icons/plus";
@@ -18,6 +20,8 @@ import Smile from "lucide-react/icons/smile";
 import OneOnOnesView from "./one-on-ones-view";
 import PulseView from "./pulse-view";
 import { Avatar, relativeTime } from "./task-shared";
+import { OPEN_TASK_EVENT } from "./sidebar-nav";
+import { taskCode } from "./tasks";
 
 type Me = { id: number; isAdmin: boolean };
 type Cycle = { id: number; title: string; startDate: string; endDate: string; status: "open" | "closed"; criteria?: { peer: string[]; company: string[]; manager: string[] } };
@@ -251,7 +255,7 @@ function ResultCard({ row, minAnswers }: { row: Result; minAnswers: number }) {
 
 // ---------------- Metas ----------------
 
-type Goal = { id: number; year: number; scope: "team" | "person"; teamId: number | null; memberId: number | null; title: string; description: string; unit: string; direction: "up" | "down"; startValue: number; target: number; current: number; updatedAt: string; canManage: boolean; updates: { id: number; value: number; note: string; byName: string; at: string }[] };
+type Goal = { id: number; year: number; scope: "team" | "person"; teamId: number | null; memberId: number | null; title: string; description: string; unit: string; direction: "up" | "down"; startValue: number; target: number; current: number; mode: "number" | "checklist"; updatedAt: string; canManage: boolean; canCheck: boolean; items: { id: number; text: string; done: boolean; doneByName: string | null; doneAt: string | null; task: { id: number; code: string; title: string; status: string } | null }[]; updates: { id: number; value: number; note: string; byName: string; at: string }[] };
 type GoalsData = { year: number; goals: Goal[]; teams: { id: number; name: string; color: string }[]; people: { id: number; name: string; avatarIcon: string; avatarKey: string | null }[]; me: { id: number; isAdmin: boolean; ledTeamIds: number[]; canManageSomeone: boolean } };
 const fmt = (value: number) => value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
@@ -303,17 +307,45 @@ function GoalCard({ goal, owner, today, onEdit, onChanged }: { goal: Goal; owner
   const [note, setNote] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState("");
+  const [busyItem, setBusyItem] = useState<number | null>(null);
+  const [linking, setLinking] = useState<number | null>(null);
+  async function link(itemId: number, taskId: number | null) {
+    setLinking(null); setBusyItem(itemId); setError("");
+    try { await call("/api/goals", { action: "linkItemTask", goalId: goal.id, itemId, taskId }); await onChanged(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível ligar a demanda."); }
+    setBusyItem(null);
+  }
   const status = goalStatus(goal, goal.year, goal.year < Number(today.slice(0, 4)) ? `${goal.year}-12-31` : today);
+  const checklist = goal.mode === "checklist";
+  const doneCount = goal.items.filter((item) => item.done).length;
+  async function toggle(item: Goal["items"][number]) {
+    setBusyItem(item.id); setError("");
+    try { await call("/api/goals", { action: "toggleItem", goalId: goal.id, itemId: item.id, done: !item.done }); await onChanged(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível marcar."); }
+    setBusyItem(null);
+  }
   const unit = goal.unit ? (goal.unit === "%" ? "%" : ` ${goal.unit}`) : "";
   return <article className={`goal-card ${status.status}`}>
     <header>
       <div>{owner && <small className="goal-owner">{owner}</small>}<strong>{goal.title}</strong>{goal.description && <p>{goal.description}</p>}</div>
       <em className={`goal-status ${status.status}`}>{goalStatusLabels[status.status]}</em>
     </header>
-    <div className="goal-numbers"><b>{fmt(goal.current)}{unit}</b><span>{goal.direction === "down" ? "meta: reduzir para" : "meta:"} {fmt(goal.target)}{unit}{goal.startValue ? ` · começou em ${fmt(goal.startValue)}${unit}` : ""}</span></div>
+    <div className="goal-numbers"><b>{fmt(goal.current)}{unit}</b><span>{checklist ? `${doneCount} de ${goal.items.length} ${goal.items.length === 1 ? "item concluído" : "itens concluídos"}` : <>{goal.direction === "down" ? "meta: reduzir para" : "meta:"} {fmt(goal.target)}{unit}{goal.startValue ? ` · começou em ${fmt(goal.startValue)}${unit}` : ""}</>}</span></div>
     <div className="goal-bar" title={`${status.progress}% atingido · esperado até hoje: ${status.expected}%`}><b style={{ width: `${Math.min(100, status.progress)}%` }} /><i style={{ left: `${status.expected}%` }} /></div>
     <p className="goal-meta">{status.progress}% atingido · o esperado até hoje seria {status.expected}% · atualizada {relativeTime(goal.updatedAt)}</p>
-    {goal.canManage && (updating ? <form className="goal-update" onSubmit={async (event) => { event.preventDefault(); setError(""); try { await call("/api/goals", { action: "updateProgress", goalId: goal.id, value, note }); setUpdating(false); setNote(""); await onChanged(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível salvar."); } }}>
+    {checklist && <ul className="goal-checklist">{goal.items.map((item) => <li key={item.id}>
+      <label className={item.done ? "done" : ""} title={item.task ? `Marcado sozinho quando ${item.task.code} for concluída` : item.done && item.doneByName ? `Concluído por ${item.doneByName}${item.doneAt ? ` · ${relativeTime(item.doneAt)}` : ""}` : undefined}>
+        <input type="checkbox" checked={item.done} disabled={!goal.canCheck || Boolean(item.task) || busyItem === item.id} onChange={() => void toggle(item)} />
+        <span>{item.text}</span>
+      </label>
+      {item.task && <button className="goal-item-task" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_TASK_EVENT, { detail: item.task!.id }))} title={`Abrir ${item.task.code} · ${item.task.title}`}><ListTodo size={12} />{item.task.code}</button>}
+      {goal.canManage && <span className="goal-item-link">
+        <button onClick={() => setLinking(linking === item.id ? null : item.id)} aria-label={item.task ? "Trocar ou tirar a demanda ligada" : "Ligar a uma demanda"} title={item.task ? "Trocar ou tirar a demanda ligada" : "Ligar a uma demanda: o item é marcado quando ela for concluída"}><Link2 size={13} /></button>
+        {linking === item.id && <TaskPicker current={item.task?.id ?? null} onPick={(taskId) => void link(item.id, taskId)} onClose={() => setLinking(null)} />}
+      </span>}
+    </li>)}</ul>}
+    {goal.canManage && (checklist ? <div className="goal-actions">
+      <button className="secondary-button" onClick={onEdit}>Editar checklist</button>
+      <button className="person-edit" onClick={async () => { if (!window.confirm(`Excluir a meta “${goal.title}”?`)) return; try { await call("/api/goals", { action: "deleteGoal", goalId: goal.id }); await onChanged(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível excluir."); } }} title="Excluir meta" aria-label="Excluir meta"><Trash2 size={13} /></button>
+    </div> : updating ? <form className="goal-update" onSubmit={async (event) => { event.preventDefault(); setError(""); try { await call("/api/goals", { action: "updateProgress", goalId: goal.id, value, note }); setUpdating(false); setNote(""); await onChanged(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível salvar."); } }}>
       <input autoFocus aria-label="Valor atual" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} />
       <input aria-label="Observação" maxLength={300} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Observação (opcional)" />
       <button className="primary-button">Salvar</button><button type="button" className="secondary-button" onClick={() => setUpdating(false)}>Cancelar</button>
@@ -328,26 +360,59 @@ function GoalCard({ goal, owner, today, onEdit, onChanged }: { goal: Goal; owner
   </article>;
 }
 
+type PickTask = { id: number; title: string; status: string };
+// Lista de demandas para escolher (vale por 1 minuto, para pegar as recém-criadas).
+let tasksCache: { at: number; promise: Promise<PickTask[]> } | null = null;
+function loadPickTasks() {
+  if (tasksCache && Date.now() - tasksCache.at < 60000) return tasksCache.promise;
+  const promise = fetch("/api/tasks", { cache: "no-store" }).then(async (response) => response.ok ? ((await response.json()) as { tasks: PickTask[] }).tasks : []).catch(() => [] as PickTask[]);
+  tasksCache = { at: Date.now(), promise };
+  return promise;
+}
+/** Escolher a demanda que conclui o item da meta (busca por código ou título). */
+function TaskPicker({ current, onPick, onClose }: { current: number | null; onPick: (taskId: number | null) => void; onClose: () => void }) {
+  const [tasks, setTasks] = useState<PickTask[] | null>(null);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    void loadPickTasks().then((list) => { if (!cancelled) setTasks(list); });
+    return () => { cancelled = true; };
+  }, []);
+  const term = query.trim().toLocaleLowerCase("pt-BR").replace(/^dem-?/, "");
+  const list = (tasks ?? []).filter((task) => task.status !== "canceled" && (!term || String(task.id) === term || task.title.toLocaleLowerCase("pt-BR").includes(term))).slice(0, 8);
+  return <div className="goal-task-picker" role="dialog" aria-label="Ligar a uma demanda">
+    <header><strong>Ligar a uma demanda</strong><button onClick={onClose} aria-label="Fechar"><X size={14} /></button></header>
+    <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por título ou código" aria-label="Buscar demanda" />
+    {!tasks ? <p className="muted">Carregando…</p> : list.length ? <ul>{list.map((task) => <li key={task.id}><button className={task.id === current ? "active" : ""} onClick={() => onPick(task.id)}><b>{taskCode(task.id)}</b><span>{task.title}</span>{task.status === "done" && <small>concluída</small>}</button></li>)}</ul> : <p className="muted">Nenhuma demanda encontrada.</p>}
+    {current && <button className="goal-task-unlink" onClick={() => onPick(null)}>Tirar a demanda ligada</button>}
+  </div>;
+}
+
 function GoalModal({ goal, year, data, onClose, onSaved }: { goal: Goal | null; year: number; data: GoalsData; onClose: () => void; onSaved: () => void }) {
   const teams = data.me.isAdmin ? data.teams : data.teams.filter((team) => data.me.ledTeamIds.includes(team.id));
   const people = data.people.filter((person) => data.me.isAdmin || person.id !== data.me.id || data.me.ledTeamIds.length > 0);
-  const [form, setForm] = useState({ scope: goal?.scope ?? (teams.length ? "team" : "person"), teamId: String(goal?.teamId ?? teams[0]?.id ?? ""), memberId: String(goal?.memberId ?? ""), title: goal?.title ?? "", description: goal?.description ?? "", unit: goal?.unit ?? "", direction: goal?.direction ?? "up", startValue: goal ? String(goal.startValue).replace(".", ",") : "0", target: goal ? String(goal.target).replace(".", ",") : "" });
+  const [form, setForm] = useState({ scope: goal?.scope ?? (teams.length ? "team" : "person"), teamId: String(goal?.teamId ?? teams[0]?.id ?? ""), memberId: String(goal?.memberId ?? ""), title: goal?.title ?? "", description: goal?.description ?? "", unit: goal?.unit ?? "", direction: goal?.direction ?? "up", startValue: goal ? String(goal.startValue).replace(".", ",") : "0", target: goal ? String(goal.target).replace(".", ",") : "", mode: goal?.mode ?? "checklist", items: goal?.items.map((item) => item.text).join("\n") ?? "" });
+  const checklist = form.mode === "checklist";
+  const itemCount = form.items.split("\n").filter((line) => line.trim()).length;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className="modal" onSubmit={async (event) => { event.preventDefault(); setSaving(true); setError(""); try { await call("/api/goals", { action: "saveGoal", goalId: goal?.id, year, ...form, teamId: Number(form.teamId) || null, memberId: Number(form.memberId) || null }); onSaved(); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível salvar."); setSaving(false); } }}>
-    <div className="modal-head"><div><h2>{goal ? "Editar meta" : `Nova meta de ${year}`}</h2><p>Defina o valor de partida e o alvo; o progresso é atualizado ao longo do ano.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+    <div className="modal-head"><div><h2>{goal ? "Editar meta" : `Nova meta de ${year}`}</h2><p>{checklist ? "Liste as entregas da meta: cada item concluído sobe a porcentagem." : "Defina o valor de partida e o alvo; o progresso é atualizado ao longo do ano."}</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label><span>Tipo</span><select value={form.scope} disabled={Boolean(goal)} onChange={(event) => setForm({ ...form, scope: event.target.value as "team" | "person" })}>{teams.length > 0 && <option value="team">Meta do time</option>}<option value="person">Meta individual</option></select></label>
       {form.scope === "team" ? <label><span>Time</span><select required value={form.teamId} onChange={(event) => setForm({ ...form, teamId: event.target.value })}>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
         : <label><span>Pessoa</span><select required value={form.memberId} onChange={(event) => setForm({ ...form, memberId: event.target.value })}><option value="" disabled>Escolha</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>}
       <label className="full"><span>Meta</span><input autoFocus required maxLength={120} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Ex.: Chamados respondidos no prazo" /></label>
       <label className="full"><span>Como medir <em>opcional</em></span><textarea rows={2} maxLength={1000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Ex.: % de chamados com primeira resposta dentro do prazo, pelo relatório de qualidade do Suporte" /></label>
+      <label className="full"><span>Como acompanhar</span><select value={form.mode} onChange={(event) => setForm({ ...form, mode: event.target.value as "number" | "checklist" })}><option value="checklist">Checklist: cada item concluído sobe a %</option><option value="number">Número: atualizo o valor de tempos em tempos</option></select></label>
+      {checklist ? <label className="full"><span>Itens do checklist <em>um por linha · {itemCount} {itemCount === 1 ? "item" : "itens"}</em></span><textarea rows={6} required value={form.items} onChange={(event) => setForm({ ...form, items: event.target.value })} placeholder={"Ex.:\nMapear os processos do Suporte\nTreinar a equipe\nPublicar o manual na base de conhecimento"} />{goal?.mode === "checklist" && <small className="muted">Itens que continuam na lista mantêm o que já foi concluído.</small>}</label> : <>
       <label><span>Sentido</span><select value={form.direction} onChange={(event) => setForm({ ...form, direction: event.target.value as "up" | "down" })}><option value="up">Quanto mais, melhor</option><option value="down">Quanto menos, melhor</option></select></label>
       <label><span>Unidade <em>opcional</em></span><input maxLength={20} value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="%, entregas, horas…" /></label>
       <label><span>Valor de partida</span><input inputMode="decimal" value={form.startValue} onChange={(event) => setForm({ ...form, startValue: event.target.value })} /></label>
       <label><span>Valor-alvo</span><input required inputMode="decimal" value={form.target} onChange={(event) => setForm({ ...form, target: event.target.value })} placeholder="Ex.: 95" /></label>
+      </>}
     </div>
     {error && <p className="modal-error">{error}</p>}
-    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !form.title.trim() || !form.target.trim()}>{saving ? "Salvando..." : "Salvar meta"}</button></div>
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !form.title.trim() || (checklist ? !itemCount : !form.target.trim())}>{saving ? "Salvando..." : "Salvar meta"}</button></div>
   </form></div>;
 }

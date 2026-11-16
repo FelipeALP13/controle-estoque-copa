@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import CircleCheck from "lucide-react/icons/circle-check";
 import Hand from "lucide-react/icons/hand";
 import LifeBuoy from "lucide-react/icons/life-buoy";
@@ -18,11 +18,12 @@ import { taskCode } from "./tasks";
 import { Avatar, MentionTextarea, relativeTime, TeamChip } from "./tasks-view";
 import Download from "lucide-react/icons/download";
 import BookOpen from "lucide-react/icons/book-open";
+import Lightbulb from "lucide-react/icons/lightbulb";
 import ExternalLink from "lucide-react/icons/external-link";
 import Plug from "lucide-react/icons/plug";
 import JiraSettings from "./jira-settings";
 import { TICKETS_CHANGED } from "./use-jira-sync";
-import { relatedArticles, type SearchableArticle } from "./knowledge";
+import { relatedArticles, similarTickets, type SearchableArticle } from "./knowledge";
 import AttachmentsPanel from "./attachments-panel";
 import TicketRatingCard from "./ticket-rating-card";
 import { canRate } from "./ticket-rating";
@@ -295,18 +296,32 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     </>}
 
     {jiraOpen && <JiraSettings onClose={() => setJiraOpen(false)} onSynced={load} />}
-    {creating && data && <NewTicketModal teams={data.teams} defaultTeamId={teamFilter ? Number(teamFilter) : null} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); setStatusFilter("active"); await load(); setOpenId(id); }} />}
+    {creating && data && <NewTicketModal teams={data.teams} tickets={data.tickets} onOpenArticle={(articleId) => { setCreating(false); onOpenArticle(articleId); }} onOpenTicket={(id) => { setCreating(false); setOpenId(id); }} defaultTeamId={teamFilter ? Number(teamFilter) : null} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); setStatusFilter("active"); await load(); setOpenId(id); }} />}
     {managingReplies && data && <RepliesModal replies={data.replies ?? []} teams={data.teams} me={data.me} onClose={() => setManagingReplies(false)} onChanged={load} />}
-    {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onManageReplies={() => setManagingReplies(true)} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} onOpenArticle={onOpenArticle} onSaveSolution={onSaveSolution} />}
+    {openTicket && data && <TicketDrawer key={openTicket.id} ticket={openTicket} data={data} onOpenTicket={setOpenId} onManageReplies={() => setManagingReplies(true)} onClose={() => setOpenId(null)} onUpdate={(changes) => update(openTicket.id, changes)} onReload={load} onOpenTask={onOpenTask} onOpenArticle={onOpenArticle} onSaveSolution={onSaveSolution} />}
   </div>;
 }
 
-function NewTicketModal({ teams, defaultTeamId, onClose, onCreated }: { teams: Team[]; defaultTeamId: number | null; onClose: () => void; onCreated: (id: number) => void }) {
+/** "Antes de abrir": artigos da base e chamados já resolvidos parecidos com o que a pessoa está escrevendo. */
+function SimilarSuggestions({ articles, tickets, title, onOpenArticle, onOpenTicket }: { articles: SearchableArticle[]; tickets: Ticket[]; title: string; onOpenArticle: (id: number) => void; onOpenTicket: (id: number) => void }) {
+  if (!articles.length && !tickets.length) return null;
+  return <div className="kb-related similar">
+    <span><Lightbulb size={13} /> {title}</span>
+    {articles.map((article) => <button type="button" key={`a${article.id}`} onClick={() => onOpenArticle(article.id)}><BookOpen size={13} /> {article.title}</button>)}
+    {tickets.map((ticket) => <button type="button" key={`t${ticket.id}`} onClick={() => onOpenTicket(ticket.id)}><CircleCheck size={13} /> <b>{ticketCode(ticket.id)}</b> {ticket.title}{ticket.resolvedAt && <small> · resolvido {relativeTime(ticket.resolvedAt)}</small>}</button>)}
+  </div>;
+}
+
+function NewTicketModal({ teams, tickets, defaultTeamId, onClose, onCreated, onOpenArticle, onOpenTicket }: { teams: Team[]; tickets: Ticket[]; defaultTeamId: number | null; onClose: () => void; onCreated: (id: number) => void; onOpenArticle: (id: number) => void; onOpenTicket: (id: number) => void }) {
   const [title, setTitle] = useState("");
+  const [articles, setArticles] = useState<SearchableArticle[]>([]);
+  useEffect(() => { let cancelled = false; void loadArticles().then((list) => { if (!cancelled) setArticles(list); }); return () => { cancelled = true; }; }, []);
+  const typed = useDeferredValue(title);
+  const [client, setClient] = useState("");
+  const suggestions = useMemo(() => typed.trim().length < 6 ? { articles: [], tickets: [] } : { articles: relatedArticles(articles, `${typed} ${client}`), tickets: similarTickets(tickets, `${typed} ${client}`) }, [typed, client, articles, tickets]);
   const [teamId, setTeamId] = useState(defaultTeamId ? String(defaultTeamId) : "");
   const [type, setType] = useState<TicketType>("question");
   const [urgency, setUrgency] = useState<TicketUrgency>("normal");
-  const [client, setClient] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -328,6 +343,7 @@ function NewTicketModal({ teams, defaultTeamId, onClose, onCreated }: { teams: T
     <div className="modal-head"><div><h2>Abrir chamado</h2><p>O chamado cai na fila do time escolhido, e todos do time são avisados.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="form-grid">
       <label className="full"><span>O que você precisa?</span><input autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Cliente não consegue emitir nota fiscal" /></label>
+      {(suggestions.articles.length > 0 || suggestions.tickets.length > 0) && <div className="full"><SimilarSuggestions title="Antes de abrir, veja se isso já resolve" articles={suggestions.articles} tickets={suggestions.tickets} onOpenArticle={onOpenArticle} onOpenTicket={onOpenTicket} /></div>}
       {teams.length > 0 && <label><span>Para qual time?</span><select required value={teamId} onChange={(event) => setTeamId(event.target.value)}><option value="" disabled>Escolha o time</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>}
       <label><span>Tipo</span><select value={type} onChange={(event) => setType(event.target.value as TicketType)}>{ticketTypes.map((value) => <option key={value} value={value}>{ticketTypeLabels[value]}</option>)}</select></label>
       <label><span>Urgência</span><select value={urgency} onChange={(event) => setUrgency(event.target.value as TicketUrgency)}>{ticketUrgencies.map((value) => <option key={value} value={value}>{ticketUrgencyLabels[value]}</option>)}</select><small>{{ critical: "Primeira resposta em até 2 h.", high: "Primeira resposta em até 8 h.", normal: "Primeira resposta em até 24 h.", low: "Primeira resposta em até 72 h." }[urgency]}</small></label>
@@ -350,13 +366,14 @@ function loadArticles() {
   return promise;
 }
 
-function TicketDrawer({ ticket, data, onManageReplies, onClose, onUpdate, onReload, onOpenTask, onOpenArticle, onSaveSolution }: { ticket: Ticket; data: Data; onManageReplies: () => void; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onReload: () => Promise<void>; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
+function TicketDrawer({ ticket, data, onOpenTicket, onManageReplies, onClose, onUpdate, onReload, onOpenTask, onOpenArticle, onSaveSolution }: { ticket: Ticket; data: Data; onOpenTicket: (id: number) => void; onManageReplies: () => void; onClose: () => void; onUpdate: (changes: Record<string, unknown>) => Promise<void>; onReload: () => Promise<void>; onOpenTask: (taskId: number) => void; onOpenArticle: (articleId: number) => void; onSaveSolution: (draft: ArticleDraft) => void }) {
   const [related, setRelated] = useState<SearchableArticle[]>([]);
   useEffect(() => {
     let cancelled = false;
     void loadArticles().then((articles) => { if (!cancelled) setRelated(relatedArticles(articles, `${ticket.title} ${ticket.client}`)); });
     return () => { cancelled = true; };
   }, [ticket.title, ticket.client]);
+  const similar = useMemo(() => similarTickets(data.tickets, `${ticket.title} ${ticket.client}`, ticket.id), [data.tickets, ticket.title, ticket.client, ticket.id]);
   const [events, setEvents] = useState<TicketEvent[] | null>(null);
   const [comment, setComment] = useState("");
   const [description, setDescription] = useState(ticket.description);
@@ -460,10 +477,7 @@ function TicketDrawer({ ticket, data, onManageReplies, onClose, onUpdate, onRelo
             {me.canEdit && ticket.status === "resolved" && <button className="secondary-button" onClick={saveSolution} title="Cria um artigo na base de conhecimento com o que resolveu este chamado"><BookOpen size={15} /> Salvar solução na base</button>}
           </div>
 
-          {related.length > 0 && isActiveTicket(ticket.status) && <div className="kb-related">
-            <span><BookOpen size={13} /> Pode ajudar (base de conhecimento)</span>
-            {related.map((article) => <button key={article.id} onClick={() => onOpenArticle(article.id)}>{article.title}</button>)}
-          </div>}
+          {isActiveTicket(ticket.status) && <SimilarSuggestions title="Pode ajudar: base de conhecimento e chamados parecidos já resolvidos" articles={related} tickets={similar} onOpenArticle={onOpenArticle} onOpenTicket={onOpenTicket} />}
 
           {ticket.status === "resolved" && <TicketRatingCard ticket={ticket} canRateNow={canRate(ticket, me.id)} onRate={async (rating, text) => { await post({ action: "rateTicket", ticketId: ticket.id, rating, comment: text }); await onReload(); }} />}
 

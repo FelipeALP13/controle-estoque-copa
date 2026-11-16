@@ -27,6 +27,7 @@ const now = new Date().toISOString();
 
 function cleanup() {
   sql(`delete from client_systems where name = '${MARK}';`);
+  sql(`delete from goals where title = '${MARK}';`);
   sql(`delete from members where user_id like '${MARK}-%';`);
 }
 
@@ -128,6 +129,15 @@ try {
   await expectStatus("criar meta (somente leitura)", "viewer", "POST", "/api/goals", { action: "saveGoal", year: 2026, scope: "team", teamId: 1, title: "x", target: 1 }, 403);
   await expectStatus("criar meta de time sem ser líder", "member", "POST", "/api/goals", { action: "saveGoal", year: 2026, scope: "team", teamId: 1, title: "x", target: 1 }, 403);
   await expectStatus("criar meta individual sem ser líder", "member", "POST", "/api/goals", { action: "saveGoal", year: 2026, scope: "person", memberId: 1, title: "x", target: 1 }, 403);
+  // Checklist da meta: só a pessoa, quem é do time, líderes e administradores marcam.
+  sql(`insert into goals (year, scope, member_id, title, target, mode) values (2026, 'person', 1, '${MARK}', 100, 'checklist'); insert into goals (year, scope, team_id, title, target, mode) select 2026, 'team', id, '${MARK}', 100, 'checklist' from teams order by id limit 1;`);
+  sql(`insert into goal_items (goal_id, text) select id, 'x' from goals where title = '${MARK}';`);
+  const [{ results: checklistGoals }] = sql(`select g.id, g.scope, i.id item from goals g join goal_items i on i.goal_id = g.id where g.title = '${MARK}';`);
+  for (const goal of checklistGoals) {
+    const what = goal.scope === "person" ? "meta individual de outra pessoa" : "meta de time de que não faz parte";
+    await expectStatus(`marcar item da ${what}`, "member", "POST", "/api/goals", { action: "toggleItem", goalId: goal.id, itemId: goal.item, done: true }, [403, 404]);
+    await expectStatus(`marcar item da ${what} (somente leitura)`, "viewer", "POST", "/api/goals", { action: "toggleItem", goalId: goal.id, itemId: goal.item, done: true }, 403);
+  }
   await expectStatus("resultados de ciclo inexistente", "member", "GET", "/api/reviews?results=999999", null, 404);
 
   // 1:1 e plano de desenvolvimento, pesquisa de clima, equipamentos e incidentes.
@@ -142,6 +152,15 @@ try {
   }
   await expectStatus("registrar incidente (somente leitura)", "viewer", "POST", "/api/incidents", { action: "saveIncident", title: "x", startedAt: "2026-01-01T10:00" }, 403);
   await expectStatus("excluir incidente (membro)", "member", "POST", "/api/incidents", { action: "deleteIncident", incidentId: 1 }, 403);
+
+  // Conversas: precisa estar logado; ninguém mexe no que é dos outros (fora administradores nos canais).
+  await expectStatus("ler conversas sem login", null, "GET", "/api/chat", null, 401);
+  await expectStatus("enviar mensagem sem login", null, "POST", "/api/chat", { action: "send", channelId: 1, body: "x" }, 401);
+  await expectStatus("ler conversas (somente leitura participa)", "viewer", "GET", "/api/chat", null, 200);
+  await expectStatus("ler conversa que não existe", "member", "GET", "/api/chat?channel=999999", null, 404);
+  await expectStatus("arquivar canal de outra pessoa", "member", "POST", "/api/chat", { action: "archiveChannel", channelId: 1 }, 403);
+  await expectStatus("buscar GIFs sem login", null, "GET", "/api/gifs?q=oi", null, 401);
+  for (const who of ["viewer", "member"]) await expectStatus("configurar a chave dos GIFs", who, "POST", "/api/gifs", { action: "saveKey", key: "abcdefghijklmnop1234" }, 403);
 
   // Senha de um acesso de outro time: membro fora do time não vê.
   const [{ results: [client] }] = sql("select id from clients limit 1;");

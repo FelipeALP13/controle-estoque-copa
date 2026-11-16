@@ -183,8 +183,9 @@ export function PeoplePicker({ label, value, onChange, members, exclude = [], di
 }
 
 /** Campo de comentário que sugere pessoas ao digitar "@". */
-export function MentionTextarea({ value, onChange, members, onSubmit }: { value: string; onChange: (value: string) => void; members: TaskMember[]; onSubmit: () => void }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+export function MentionTextarea({ value, onChange, members, onSubmit, placeholder, rows = 3, enterSends = false, maxLength = 4000, autoFocus, inputRef, onPaste, onKey }: { value: string; onChange: (value: string) => void; members: TaskMember[]; onSubmit: () => void; placeholder?: string; rows?: number; enterSends?: boolean; maxLength?: number; autoFocus?: boolean; inputRef?: React.RefObject<HTMLTextAreaElement | null>; onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void; onKey?: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean }) {
+  const ownRef = useRef<HTMLTextAreaElement>(null);
+  const ref = inputRef ?? ownRef;
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [active, setActive] = useState(0);
   const suggestions = mention ? members.filter((member) => fold(member.name).includes(fold(mention.query))).slice(0, 6) : [];
@@ -210,7 +211,7 @@ export function MentionTextarea({ value, onChange, members, onSubmit }: { value:
   }
 
   return <div className="mention-field">
-    <textarea ref={ref} value={value} rows={3} maxLength={4000} placeholder="Escreva um comentário... Use @ para mencionar alguém (Ctrl + Enter envia)"
+    <textarea ref={ref} value={value} rows={rows} maxLength={maxLength} autoFocus={autoFocus} onPaste={onPaste} placeholder={placeholder ?? "Escreva um comentário... Use @ para mencionar alguém (Ctrl + Enter envia)"}
       onChange={(event) => { onChange(event.target.value); detect(event.target.value, event.target.selectionStart); }}
       onClick={(event) => detect(event.currentTarget.value, event.currentTarget.selectionStart)}
       onBlur={() => window.setTimeout(() => setMention(null), 150)}
@@ -221,7 +222,10 @@ export function MentionTextarea({ value, onChange, members, onSubmit }: { value:
           if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); choose(suggestions[active]); return; }
           if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setMention(null); return; }
         }
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) onSubmit();
+        // Atalhos de quem usa o campo (ex.: seta para cima edita a última mensagem no chat).
+        if (onKey?.(event)) return;
+        // No chat, Enter envia e Shift + Enter quebra a linha; nos comentários, Ctrl + Enter envia.
+        if (event.key === "Enter" && (enterSends ? !event.shiftKey : event.ctrlKey || event.metaKey)) { event.preventDefault(); onSubmit(); }
       }} />
     {suggestions.length > 0 && <ul className="mention-menu" role="listbox" aria-label="Mencionar">
       {suggestions.map((member, index) => <li key={member.id} role="option" aria-selected={index === active}>

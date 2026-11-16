@@ -25,7 +25,7 @@ const layers: { kind: CalendarKind; label: string }[] = [
   { kind: "schedule", label: "Escala do Suporte" },
   { kind: "project", label: "Projetos" },
 ];
-const weekdays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 function todayInSaoPaulo() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -106,6 +106,9 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject, onOp
   }
 
   const selectedEvents = calendar.get(selected) ?? [];
+  // A bolinha da legenda da escala usa a cor da equipe de plantão hoje.
+  const dutyWeek = schedule.weeks.find((week) => week.start <= today && week.end >= today);
+  const dutyColor = dutyWeek ? schedule.teams.find((team) => team.id === dutyWeek.teamId)?.color ?? null : null;
   const monthDays = grid.days.filter((day) => day.inMonth && (calendar.get(day.date)?.length ?? 0) > 0);
 
   return <div className="calendar-page">
@@ -117,7 +120,7 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject, onOp
         {month !== today.slice(0, 7) && <button className="link-button" onClick={() => { setMonth(today.slice(0, 7)); setSelected(today); }}>Hoje</button>}
       </div>
       <div className="calendar-layers" role="group" aria-label="O que mostrar">
-        {layers.map((layer) => <label key={layer.kind} className={`calendar-layer ${layer.kind}`}><input type="checkbox" checked={visible[layer.kind]} onChange={(event) => setVisible({ ...visible, [layer.kind]: event.target.checked })} /><i />{layer.label}</label>)}
+        {layers.map((layer) => <label key={layer.kind} className={`calendar-layer ${layer.kind}`}><input type="checkbox" checked={visible[layer.kind]} onChange={(event) => setVisible({ ...visible, [layer.kind]: event.target.checked })} /><i className={layer.kind === "schedule" && dutyColor ? `tone-${dutyColor}` : ""} />{layer.label}</label>)}
         {visible.due && <select aria-label="Quais prazos" value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="mine">Meus prazos</option><option value="team">Do meu time</option><option value="all">Todos os prazos</option></select>}
       </div>
     </div>
@@ -128,7 +131,7 @@ export default function CalendarView({ schedule, onOpenTask, onOpenProject, onOp
         {weekdays.map((day) => <span key={day} className="calendar-weekday">{day}</span>)}
         {grid.days.map((day, index) => {
           const events = calendar.get(day.date) ?? [];
-          return <button key={day.date} role="gridcell" className={`calendar-day ${day.inMonth ? "" : "outside"} ${index % 7 >= 5 ? "weekend" : ""} ${day.date === today ? "today" : ""} ${day.date === selected ? "selected" : ""}`} onClick={() => setSelected(day.date)} aria-label={`${Number(day.date.slice(8))}: ${events.length} ${events.length === 1 ? "item" : "itens"}`}>
+          return <button key={day.date} role="gridcell" className={`calendar-day ${day.inMonth ? "" : "outside"} ${index % 7 === 0 || index % 7 === 6 ? "weekend" : ""} ${day.date === today ? "today" : ""} ${day.date === selected ? "selected" : ""}`} onClick={() => setSelected(day.date)} aria-label={`${Number(day.date.slice(8))}: ${events.length} ${events.length === 1 ? "item" : "itens"}`}>
             <span className="calendar-number">{Number(day.date.slice(8))}</span>
             {events.slice(0, 3).map((event) => <span key={event.id} className={`calendar-chip ${event.kind} ${event.tone ?? ""} ${event.late ? "late" : ""}`}>{event.label}</span>)}
             {events.length > 3 && <span className="calendar-more">+{events.length - 3} mais</span>}

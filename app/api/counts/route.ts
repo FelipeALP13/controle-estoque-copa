@@ -3,6 +3,8 @@ import { getDb } from "../../../db";
 import { taskPeople, tasks, teamMembers, tickets } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
 import { isTicketLate } from "../../tickets";
+import { chatUnread, fireChatReminders } from "../../chat-unread";
+import { chatPresence } from "../../../db/schema";
 
 function todayInSaoPaulo() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -29,7 +31,14 @@ export async function GET() {
       .from(tickets)
       .where(and(inArray(tickets.status, [...active]), teamIds.length ? inArray(tickets.teamId, teamIds) : eq(tickets.assigneeId, member.id)));
     const now = new Date();
+    const chat = await chatUnread(db, member.id).catch(() => ({ total: 0, direct: 0 }));
+    const seen = now.toISOString();
+    const reminded = await fireChatReminders(db, member.id, seen).catch((error) => { console.error("chat reminders failed", error); return 0; });
+    await db.insert(chatPresence).values({ memberId: member.id, lastSeenAt: seen }).onConflictDoUpdate({ target: chatPresence.memberId, set: { lastSeenAt: seen } }).catch(() => undefined);
     return Response.json({
+      chat: chat.total,
+      chatDirect: chat.direct,
+      reminded,
       tasks: Number(openTasks[0]?.count ?? 0),
       tasksOverdue: Number(overdueTasks[0]?.count ?? 0),
       tickets: queue.length,
@@ -38,6 +47,6 @@ export async function GET() {
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("counts failed", error);
-    return Response.json({ tasks: 0, tasksOverdue: 0, tickets: 0, ticketsLate: 0, ticketsUnassigned: 0 }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ tasks: 0, tasksOverdue: 0, tickets: 0, ticketsLate: 0, ticketsUnassigned: 0, chat: 0, chatDirect: 0 }, { headers: { "Cache-Control": "no-store" } });
   }
 }

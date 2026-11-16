@@ -13,7 +13,7 @@ export const isIsoDay = (value: unknown): value is string => typeof value === "s
 /** Semanas do mês (segunda a domingo), completas com dias do mês anterior e do seguinte. */
 export function monthGrid(month: string) {
   const first = parse(`${month}-01`);
-  const weekday = (new Date(first).getUTCDay() + 6) % 7; // 0 = segunda
+  const weekday = new Date(first).getUTCDay(); // 0 = domingo (a semana começa no domingo)
   const start = first - weekday * DAY;
   const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
   const cells = Math.ceil((weekday + lastDay) / 7) * 7;

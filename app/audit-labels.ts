@@ -26,6 +26,7 @@ const actions: Record<string, { label: string; group: AuditGroup; sensitive?: bo
   asset_saved: { label: "Cadastrou ou editou um equipamento ou licença", group: "work" },
   asset_deleted: { label: "Excluiu um equipamento ou licença", group: "work", sensitive: true },
   incident_deleted: { label: "Excluiu um incidente", group: "work", sensitive: true },
+  giphy_key_saved: { label: "Mudou a chave da busca de GIFs", group: "access", sensitive: true },
   client_profile_updated: { label: "Editou a ficha de um cliente", group: "work" },
   logout: { label: "Saiu do sistema", group: "access" },
   other_sessions_ended: { label: "Encerrou as sessões dos outros aparelhos", group: "access", sensitive: true },

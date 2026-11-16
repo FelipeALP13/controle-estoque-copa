@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isSupportTeamName, matchScheduleNames, pickAssignee } from "../app/ticket-routing.ts";
+import { isSupportTeamName, matchScheduleNames } from "../app/ticket-routing.ts";
 
 const people = [
   { id: 1, name: "Allex T." },
@@ -21,13 +21,6 @@ test("liga nomes da escala às pessoas", () => {
   const short = [{ id: 7, name: "Lucas P." }, { id: 8, name: "Lucas B." }, { id: 9, name: "Gabriel M." }];
   assert.deepEqual(matchScheduleNames(["Lucas Pevarello", "Lucas Boroto", "Gabriel Moraes"], short).map((p) => p.id), [7, 8, 9]);
   assert.deepEqual(matchScheduleNames(["Lucas"], short).map((p) => p.id), [], "só o primeiro nome com dois Lucas é ambíguo");
-});
-
-test("escolhe quem tem menos chamados e pula quem está fora", () => {
-  assert.equal(pickAssignee([{ id: 1, open: 3, away: false }, { id: 4, open: 1, away: false }, { id: 5, open: 1, away: false }]), 4);
-  assert.equal(pickAssignee([{ id: 1, open: 3, away: false }, { id: 4, open: 0, away: true }]), 1);
-  assert.equal(pickAssignee([{ id: 4, open: 0, away: true }]), null);
-  assert.equal(pickAssignee([]), null);
 });
 
 test("time do suporte", () => {
