@@ -7,6 +7,7 @@ import Search from "lucide-react/icons/search";
 import ShieldAlert from "lucide-react/icons/shield-alert";
 import { auditGroupLabels, type AuditGroup } from "./audit-labels";
 import { downloadXlsx, type SheetData } from "./xlsx-writer";
+import { IntegrationsPanel } from "./integrations-panel";
 
 type Entry = { id: number; actorName: string; action: string; label: string; group: AuditGroup; sensitive: boolean; targetType: string; targetId: string | null; details: string; createdAt: string };
 
@@ -108,6 +109,8 @@ export default function AdminView() {
       <div><h3>Cópia de segurança</h3><p>Baixa todos os dados do Portal num arquivo Excel, uma aba por tabela. Senhas, chaves do Jira e sessões de login ficam de fora. Recomendado uma vez por semana.</p>{backupInfo && <p className="admin-backup-ok">{backupInfo}</p>}</div>
       <button className="primary-button" onClick={downloadBackup} disabled={backingUp}><Download size={15} /> {backingUp ? "Gerando..." : "Baixar cópia"}</button>
     </section>
+
+    <IntegrationsPanel />
 
     <section className="report-card">
       <div className="report-card-head report-card-toolbar">

@@ -366,7 +366,7 @@ export const tickets = sqliteTable("tickets", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   // Chamados que vieram do Jira: chave (ex.: DRH-123), link e status lá.
-  source: text("source", { enum: ["portal", "jira"] }).notNull().default("portal"),
+  source: text("source", { enum: ["portal", "jira", "atendechat"] }).notNull().default("portal"),
   jiraConnectionId: integer("jira_connection_id").references(() => jiraConnections.id, { onDelete: "set null" }),
   externalKey: text("external_key"),
   externalUrl: text("external_url"),
@@ -962,6 +962,26 @@ export const chatTopics = sqliteTable("chat_topics", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   lastMessageAt: text("last_message_at"),
 }, (table) => [index("chat_topics_channel_idx").on(table.channelId, table.lastMessageAt)]);
+
+/**
+ * Chaves para outros sistemas usarem a API do Portal (hoje: o agente N1 do AtendeChat).
+ * Só o hash da chave fica salvo; a chave aparece uma única vez, ao ser criada.
+ */
+export const integrationKeys = sqliteTable("integration_keys", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  kind: text("kind", { enum: ["atendechat"] }).notNull().default("atendechat"),
+  keyHash: text("key_hash").notNull(),
+  keyPrefix: text("key_prefix").notNull(),
+  // Time que recebe os chamados abertos pela integração.
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "set null" }),
+  // Só artigos da base com esta etiqueta podem ser lidos pela integração (o resto é interno).
+  kbTag: text("kb_tag").notNull().default("n1"),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  createdAt: text("created_at").notNull(),
+  lastUsedAt: text("last_used_at"),
+  revokedAt: text("revoked_at"),
+}, (table) => [uniqueIndex("integration_keys_hash_unique").on(table.keyHash)]);
 
 /** Pedidos da equipe para a Copa ("podia ter adoçante"): os outros apoiam e quem cuida das compras decide. */
 export const copaRequests = sqliteTable("copa_requests", {

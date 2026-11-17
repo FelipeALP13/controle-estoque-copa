@@ -40,7 +40,7 @@ type Ticket = {
   id: number; title: string; description: string; type: TicketType; urgency: TicketUrgency; status: TicketStatus; client: string;
   teamId: number | null; requesterId: number | null; requesterName: string; assigneeId: number | null; taskId: number | null;
   firstResponseAt: string | null; resolvedAt: string | null; createdAt: string; updatedAt: string; commentCount: number;
-  source: "portal" | "jira"; externalKey: string | null; externalUrl: string | null; externalStatus: string | null;
+  source: "portal" | "jira" | "atendechat"; externalKey: string | null; externalUrl: string | null; externalStatus: string | null;
   rating: number | null; ratingComment: string; ratedAt: string | null;
 };
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
@@ -462,7 +462,8 @@ function TicketDrawer({ ticket, data, onOpenTicket, onManageReplies, onClose, on
         <div className="task-drawer-main">
           <div className="ticket-drawer-badges"><UrgencyBadge urgency={ticket.urgency} /><StatusPill status={ticket.status} />{team && <TeamChip team={team} />}<span className="ticket-type">{ticketTypeLabels[ticket.type]}</span>{ticket.client && <span className="ticket-type">Cliente: {ticket.client}</span>}</div>
           <h2 className="ticket-drawer-title">{ticket.title}</h2>
-          {ticket.externalUrl && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Veio do Jira{ticket.externalStatus ? <> · lá está <b>{ticket.externalStatus}</b></> : null}. Responda ao cliente pelo Jira; os comentários daqui ficam só para a equipe. <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir no Jira</a></p>}
+          {ticket.source === "atendechat" && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Aberto pelo agente N1 do AtendeChat, a partir de uma conversa com o cliente. O resumo está na descrição; a conversa continua no AtendeChat.{ticket.externalUrl && <> <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir a conversa</a></>}</p>}
+          {ticket.source === "jira" && ticket.externalUrl && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Veio do Jira{ticket.externalStatus ? <> · lá está <b>{ticket.externalStatus}</b></> : null}. Responda ao cliente pelo Jira; os comentários daqui ficam só para a equipe. <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir no Jira</a></p>}
           <textarea className="task-description-input" readOnly={(!handler && !isRequester) || ticket.source === "jira"} title={ticket.source === "jira" ? "A descrição vem do Jira; edite lá." : undefined} value={description} rows={5} placeholder="Sem detalhes."
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== ticket.description && handler) void onUpdate({ description }); }} />

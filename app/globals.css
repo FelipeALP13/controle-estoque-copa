@@ -3327,3 +3327,31 @@ html[data-theme="dark"] .community {
   .copa-list li { flex-wrap: wrap; }
   .copa-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* Administração: chaves de integração (agente N1 do AtendeChat) */
+.integrations-panel h3 { display: flex; align-items: center; gap: 7px; }
+.integration-new-key { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 14px; padding: 14px; border: 1px solid #f3d27a; border-radius: 10px; background: #fffaeb; color: #5c4a12; }
+.integration-new-key > svg { flex: 0 0 auto; margin-top: 2px; color: #b56b16; }
+.integration-new-key > div { flex: 1; min-width: 0; }
+.integration-new-key strong { display: block; font-size: 13px; }
+.integration-new-key p { margin: 3px 0 8px; font-size: 12px; }
+.integration-new-key code { display: block; overflow-x: auto; padding: 8px 10px; border: 1px solid #ecdcae; border-radius: 7px; color: #172033; background: #ffffff; font-size: 12px; white-space: nowrap; }
+.integration-new-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.integration-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 14px; }
+.integration-form label { display: grid; gap: 5px; }
+.integration-form label span { color: #344054; font-size: 11px; font-weight: 800; }
+.integration-form input, .integration-form select { min-height: 38px; padding: 0 10px; border: 1px solid #dbe1ea; border-radius: 8px; color: #172033; background: #ffffff; font: inherit; font-size: 13px; }
+.integration-form-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 8px; }
+.integration-list { margin: 0; padding: 0; list-style: none; }
+.integration-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #eef1f5; }
+.integration-list li > div { flex: 1; min-width: 0; }
+.integration-list strong { color: #172033; font-size: 13px; }
+.integration-list code { margin-left: 6px; padding: 1px 6px; border-radius: 5px; color: #475467; background: #f2f4f7; font-size: 11px; }
+.integration-list small { display: block; margin-top: 3px; color: #667085; font-size: 11px; }
+.integration-list .secondary-button.danger { color: #b44437; }
+.integration-revoked { margin-top: 8px; font-size: 11px; }
+@media (max-width: 720px) {
+  .integration-form { grid-template-columns: 1fr; }
+  .integration-new-key { flex-wrap: wrap; }
+  .integration-list li { flex-wrap: wrap; }
+}

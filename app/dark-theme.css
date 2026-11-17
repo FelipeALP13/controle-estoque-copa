@@ -1079,5 +1079,15 @@ html[data-theme="dark"] { --chart-grid: #263244; --chart-baseline: #495669; }
 :where(html[data-theme="dark"]) .copa-channel span { color: #c4cddb; }
 :where(html[data-theme="dark"]) .copa-channel small { color: #a4abb9; }
 :where(html[data-theme="dark"]) .form-grid .copa-link-choice label { color: #c4cddb; }
+:where(html[data-theme="dark"]) .integration-new-key { background: #403618; color: #e1dbc8; }
+:where(html[data-theme="dark"]) .integration-new-key > svg { color: #eaa351; }
+:where(html[data-theme="dark"]) .integration-new-key code { border: 1px solid #806b30; color: #d1d8e6; background: #1a2028; }
+:where(html[data-theme="dark"]) .integration-form label span { color: #c4cddb; }
+:where(html[data-theme="dark"]) .integration-form input, :where(html[data-theme="dark"]) .integration-form select { border: 1px solid #303d51; color: #d1d8e6; background: #1a2028; }
+:where(html[data-theme="dark"]) .integration-list li { border-top: 1px solid #242e3c; }
+:where(html[data-theme="dark"]) .integration-list strong { color: #d1d8e6; }
+:where(html[data-theme="dark"]) .integration-list code { color: #c0c8d4; background: #222b37; }
+:where(html[data-theme="dark"]) .integration-list small { color: #a4abb9; }
+:where(html[data-theme="dark"]) .integration-list .secondary-button.danger { color: #d98b82; }
 html[data-theme="dark"] { --canvas: #0d141f; }
 :where(html[data-theme="dark"]) body { background: #0d141f; }
