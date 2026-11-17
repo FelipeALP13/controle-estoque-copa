@@ -4,6 +4,7 @@ import CalendarClock from "lucide-react/icons/calendar-clock";
 import FileDown from "lucide-react/icons/file-down";
 import PackageCheck from "lucide-react/icons/package-check";
 import ShoppingCart from "lucide-react/icons/shopping-cart";
+import ShoppingBasket from "lucide-react/icons/shopping-basket";
 import { COVER_OPTIONS, daysLeftLabel, shoppingMessage, type ShoppingLine } from "./stock-forecast";
 import { downloadXlsx } from "./xlsx-writer";
 
@@ -35,12 +36,13 @@ export function downloadShoppingList(lines: readonly ShoppingLine[], coverDays: 
 }
 
 /** Lista de compras completa, no Planejamento. */
-export function ShoppingPanel({ lines, upcoming, coverDays, onCoverDays, appName, today }: { lines: ShoppingLine[]; upcoming: (ShoppingLine | (Omit<ShoppingLine, "buy" | "reason">))[]; coverDays: number; onCoverDays: (days: number) => void; appName: string; today: string }) {
+export function ShoppingPanel({ lines, upcoming, coverDays, onCoverDays, appName, today, onTrip }: { lines: ShoppingLine[]; upcoming: (ShoppingLine | (Omit<ShoppingLine, "buy" | "reason">))[]; coverDays: number; onCoverDays: (days: number) => void; appName: string; today: string; onTrip?: () => void }) {
   return <section className="shopping-panel">
     <div className="shopping-head">
       <div><span className="insight-icon"><ShoppingCart /></span><div><h3>Lista de compras automática</h3><p>Montada pelo saldo, pelo estoque mínimo e pelo ritmo de consumo de cada item.</p></div></div>
       <div className="shopping-tools">
         <label>Comprar para <select value={coverDays} onChange={(event) => onCoverDays(Number(event.target.value))}>{COVER_OPTIONS.map((days) => <option key={days} value={days}>{days} dias</option>)}</select></label>
+        {onTrip && <button className="primary-button" onClick={onTrip}><ShoppingBasket size={15} /> Fazer compras</button>}
         {lines.length > 0 && <>
           <a className="secondary-button" href={shoppingWhatsAppUrl(lines, appName, coverDays)} target="_blank" rel="noopener noreferrer">Enviar no WhatsApp</a>
           <button className="secondary-button" onClick={() => downloadShoppingList(lines, coverDays, today)}><FileDown size={15} /> Excel</button>

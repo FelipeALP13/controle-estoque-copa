@@ -49,13 +49,13 @@ export function StockRow({ item, permissions, onAction, onEdit, onDelete }: { it
   );
 }
 
-export function PlanningView({ items, loading, shopping, upcoming, coverDays, onCoverDays, today }: { items: Item[]; loading: boolean; shopping: ReturnType<typeof shoppingList>; upcoming: ReturnType<typeof comingUp>; coverDays: number; onCoverDays: (days: number) => void; today: string }) {
+export function PlanningView({ items, loading, shopping, upcoming, coverDays, onCoverDays, today, onTrip }: { items: Item[]; loading: boolean; shopping: ReturnType<typeof shoppingList>; upcoming: ReturnType<typeof comingUp>; coverDays: number; onCoverDays: (days: number) => void; today: string; onTrip?: () => void }) {
   if (loading) return <LoadingRows />;
   const measured = items.filter((item) => item.analytics.averageDurationDays !== null);
   const monthlyTotal = measured.reduce((sum, item) => sum + (item.analytics.monthlyRecommendation ?? 0), 0);
   return (
     <>
-      <ShoppingPanel lines={shopping} upcoming={upcoming} coverDays={coverDays} onCoverDays={onCoverDays} appName={APP_NAME} today={today} />
+      <ShoppingPanel lines={shopping} upcoming={upcoming} coverDays={coverDays} onCoverDays={onCoverDays} appName={APP_NAME} today={today} onTrip={onTrip} />
       <div className="planning-summary">
         <article><span className="stat-icon blue"><CalendarClock /></span><div><small>Itens com média calculada</small><strong>{measured.length} de {items.length}</strong><p>Após um ciclo completo de uso</p></div></article>
         <article><span className="stat-icon amber"><ShoppingCart /></span><div><small>Compra estimada por mês</small><strong>{monthlyTotal}</strong><p>Soma dos itens já medidos</p></div></article>

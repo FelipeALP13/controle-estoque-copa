@@ -253,6 +253,13 @@
       "when": 1794854287588,
       "tag": "0035_pins_goal_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794920209850,
+      "tag": "0036_copa_requests",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { createSession, getSessionMember, hashPassword, normalizeUsername, passwordPolicyError, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
 import { inventoryLocks, items, members, movements, openBatches, projectPeople, sessions, supportTeams, supportWeeks, taskPeople, tickets } from "../../../db/schema";
@@ -9,6 +9,8 @@ import { hasTrustedOrigin } from "../../request-security";
 import { hasPermission, resolvePermissions, type MemberPermissions, type MemberRole } from "../../member-permissions";
 import { findOverlappingWeek, generateRotation, isIsoDate, isSupportTeamColor, normalizeTeamMembers, parseTeamMembers, weekRangeError } from "../../support-schedule";
 import { readJsonBody } from "../../api-input";
+import { crossedLow, parseTripLines } from "../../copa-tools";
+import { alertLowStock } from "../../copa-alerts";
 
 type MovementType = "purchase" | "open" | "consume" | "adjust";
 
@@ -489,6 +491,25 @@ export async function POST(request: Request) {
       return Response.json({ item: deleted });
     }
 
+    // Volta do mercado: todas as compras marcadas de uma vez (soma no saldo fechado de cada item).
+    if (action === "purchaseBatch") {
+      if (!hasPermission(currentMember, "registerPurchases")) return Response.json({ error: "Você não tem permissão para registrar compras." }, { status: 403 });
+      const { lines, error } = parseTripLines(body.lines);
+      if (error) return Response.json({ error }, { status: 400 });
+      const note = String(body.note ?? "").replace(/\s+/g, " ").trim().slice(0, 200) || "Compra no mercado";
+      const found = await db.select({ id: items.id, name: items.name, unit: items.unit }).from(items).where(inArray(items.id, lines.map((line) => line.itemId)));
+      if (found.length !== lines.length) return Response.json({ error: "Algum item da lista foi excluído. Atualize a página e confira." }, { status: 404 });
+      const timestamp = new Date().toISOString();
+      const statements = lines.flatMap((line) => [
+        db.update(items).set({ unopenedQty: sql`${items.unopenedQty} + ${line.quantity}`, updatedAt: timestamp }).where(eq(items.id, line.itemId)),
+        db.insert(movements).values({ itemId: line.itemId, type: "purchase", quantity: line.quantity, note, createdByUserId: currentMember.userId, createdByName: currentMember.name, createdAt: timestamp }),
+      ]);
+      await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+      const summary = lines.map((line) => { const item = found.find((entry) => entry.id === line.itemId)!; return `${line.quantity} ${item.unit} de ${item.name}`; }).join(", ");
+      await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "stock_purchase_batch", targetType: "item", details: `${lines.length} ${lines.length === 1 ? "item" : "itens"}: ${summary}`.slice(0, 500) });
+      return Response.json({ ok: true, registered: lines.length });
+    }
+
     if (action === "movement") {
       const itemId = number(body.itemId);
       const type = String(body.type ?? "") as MovementType;
@@ -631,6 +652,10 @@ export async function POST(request: Request) {
             createdAt: movementTimestamp,
           }),
         ]);
+        // Caiu para o mínimo (ou acabou) com este lançamento: avisa quem cuida das compras.
+        const before = current.unopenedQty + current.openedQty;
+        const after = unopenedQty + openedQty;
+        if (crossedLow(before, after, current.minimumQty)) await alertLowStock(db, [{ item: current, available: Math.max(0, after) }], { id: currentMember.id, name: currentMember.name });
         await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: `stock_${type}`, targetType: "item", targetId: itemId, details: `${movementQuantity} ${current.unit}${retroactiveOccurredAt ? ` · movimentação em ${retroactiveOccurredAt}` : ""}` });
         return Response.json({ ok: true });
       } finally {

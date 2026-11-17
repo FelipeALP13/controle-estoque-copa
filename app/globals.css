@@ -3229,3 +3229,101 @@ html[data-theme="dark"] .community {
   .community .cv-thread-compose { padding: 8px 12px 12px; }
   .community .cv-compose-hint { display: none; }
 }
+
+/* Copa: modo "fazer compras" */
+.trip-layer { padding: 16px; }
+.modal.trip { display: flex; flex-direction: column; width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: hidden; }
+.trip-head { padding: 20px 20px 14px; }
+.trip-progress { display: grid; gap: 7px; padding: 12px 20px; border-bottom: 1px solid var(--line); color: #475467; font-size: 13px; }
+.trip-progress b { color: #172033; font-size: 15px; }
+.trip-bar { height: 6px; overflow: hidden; border-radius: 999px; background: #edf1f6; }
+.trip-bar i { display: block; height: 100%; border-radius: inherit; background: #287a4b; transition: width .25s ease; }
+.trip-list { flex: 1; min-height: 0; margin: 0; padding: 4px 12px; overflow-y: auto; list-style: none; }
+.trip-list li { display: grid; grid-template-columns: 34px 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 64px; padding: 8px; border-bottom: 1px solid #eef1f5; }
+.trip-list li:last-child { border-bottom: 0; }
+.trip-list li.done .trip-name strong { color: #667085; text-decoration: line-through; text-decoration-color: #98a2b3; }
+.trip-list li.trip-empty { display: block; min-height: 0; padding: 22px 8px; color: #667085; font-size: 13px; text-align: center; }
+.trip-check { display: grid; width: 34px; height: 34px; place-items: center; border: 2px solid #cfd7e3; border-radius: 10px; color: #ffffff; background: #ffffff; cursor: pointer; }
+.trip-check[aria-checked="true"] { border-color: #287a4b; background: #287a4b; }
+.trip-check:disabled { cursor: not-allowed; opacity: .45; }
+.trip-list .item-avatar { width: 34px; height: 34px; }
+.trip-name { display: grid; min-width: 0; gap: 2px; }
+.trip-name strong { overflow: hidden; color: #172033; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.trip-name small { color: #667085; font-size: 11px; }
+.trip-qty { display: flex; align-items: center; gap: 4px; }
+.trip-qty button { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #dbe1ea; border-radius: 8px; color: #344054; background: #ffffff; }
+.trip-qty button:disabled { opacity: .4; }
+.trip-qty input { width: 48px; height: 32px; padding: 0 4px; border: 1px solid #dbe1ea; border-radius: 8px; color: #172033; background: #ffffff; font: inherit; font-size: 14px; font-weight: 700; text-align: center; }
+.trip-qty span { min-width: 44px; overflow: hidden; color: #667085; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.trip-add { display: flex; align-items: center; gap: 8px; margin: 6px 20px 12px; padding: 0 10px; border: 1px dashed #cfd7e3; border-radius: 10px; color: #2f6fed; }
+.trip-add select { flex: 1; min-height: 42px; border: 0; outline: none; color: #2357bd; background: transparent; font: inherit; font-size: 13px; font-weight: 700; }
+.trip-actions { align-items: center; }
+.trip-actions .primary-button { min-height: 44px; }
+.insight-head .trip-start { color: #287a4b; }
+@media (max-width: 640px) {
+  .trip-layer { padding: 0; place-items: stretch; }
+  .modal.trip { width: 100%; max-height: 100vh; height: 100%; border-radius: 0; }
+  .trip-list li { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .trip-list .item-avatar { display: none; }
+  .trip-qty span { display: none; }
+  .trip-actions .primary-button { flex: 1; justify-content: center; }
+}
+
+/* Copa: pedidos da equipe */
+.copa-requests { display: grid; gap: 16px; max-width: 920px; }
+.copa-ask { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: #ffffff; }
+.copa-ask-head { display: flex; align-items: flex-start; gap: 12px; }
+.copa-ask-head > div { flex: 1; }
+.copa-ask-head h2 { margin: 2px 0 4px; font-size: 18px; letter-spacing: -.02em; }
+.copa-ask-head p { margin: 0; color: #667085; font-size: 13px; line-height: 1.5; }
+.copa-ask-head .secondary-button { flex: 0 0 auto; }
+.copa-ask-form { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 8px; margin-top: 16px; }
+.copa-ask-form input, .copa-filter, .copa-channel select { min-height: 42px; padding: 0 12px; border: 1px solid #dbe1ea; border-radius: 9px; outline: none; color: #172033; background: #ffffff; font: inherit; font-size: 13px; }
+.copa-ask-form input:focus, .copa-filter:focus, .copa-channel select:focus { border-color: #2f6fed; box-shadow: 0 0 0 3px #edf3ff; }
+.copa-board { padding: 6px 20px 10px; border: 1px solid var(--line); border-radius: 14px; background: #ffffff; }
+.copa-board h3 { display: flex; align-items: center; gap: 8px; margin: 12px 0 6px; color: #172033; font-size: 14px; }
+.copa-board h3 b { padding: 1px 8px; border-radius: 999px; color: #2357bd; background: #edf3ff; font-size: 11px; }
+.copa-muted { margin: 8px 0 14px; color: #667085; font-size: 13px; }
+.copa-list { margin: 0; padding: 0; list-style: none; }
+.copa-list li { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid #eef1f5; transition: background .3s ease; }
+.copa-list li:last-child { border-bottom: 0; }
+.copa-list li.flash { border-radius: 10px; background: #edf3ff; }
+.copa-vote { display: grid; flex: 0 0 auto; width: 52px; height: 56px; place-items: center; align-content: center; gap: 2px; border: 1px solid #dbe1ea; border-radius: 11px; color: #475467; background: #ffffff; cursor: pointer; }
+.copa-vote b { font-size: 15px; }
+.copa-vote.on { border-color: #2f6fed; color: #2f6fed; background: #edf3ff; }
+.copa-vote:disabled { cursor: default; }
+.copa-vote:not(:disabled):hover { border-color: #2f6fed; }
+.copa-body { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.copa-body strong { color: #172033; font-size: 14px; }
+.copa-body p { margin: 0; color: #475467; font-size: 13px; line-height: 1.45; }
+.copa-body small { color: #667085; font-size: 11px; }
+.copa-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.copa-actions .secondary-button { min-height: 34px; padding: 0 11px; font-size: 12px; }
+.copa-icon { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid transparent; border-radius: 8px; color: #98a2b3; background: transparent; }
+.copa-icon:hover { border-color: #f1d4d0; color: #b44437; background: #fbedeb; }
+.copa-status { flex: 0 0 auto; min-width: 74px; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; text-align: center; }
+.copa-status.approved { color: #1f613b; background: #eaf5ed; }
+.copa-status.declined { color: #475467; background: #f2f4f7; }
+.copa-votes-static { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; color: #98a2b3; font-size: 12px; }
+.copa-board.decided .copa-body strong { color: #344054; font-weight: 700; }
+.copa-settings { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: #ffffff; }
+.copa-settings h3 { margin: 0 0 4px; font-size: 15px; }
+.copa-settings p { margin: 0; color: #667085; font-size: 13px; line-height: 1.5; }
+.copa-people { display: flex; flex-wrap: wrap; gap: 6px; max-height: 190px; overflow-y: auto; }
+.copa-people label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #dbe1ea; border-radius: 999px; color: #344054; background: #ffffff; font-size: 12px; cursor: pointer; }
+.copa-people label.on { border-color: #2f6fed; color: #2357bd; background: #edf3ff; }
+.copa-people input { margin: 0; accent-color: #2f6fed; }
+.copa-channel { display: grid; gap: 6px; max-width: 420px; }
+.copa-channel span { color: #344054; font-size: 12px; font-weight: 700; }
+.copa-channel small { color: #667085; font-size: 11px; }
+.copa-settings .modal-error { margin: 0; }
+.copa-settings-actions { display: flex; justify-content: flex-end; }
+.copa-link-choice { display: flex; flex-wrap: wrap; gap: 16px; }
+.form-grid .copa-link-choice label { flex-direction: row; align-items: center; gap: 7px; color: #344054; font-size: 13px; font-weight: 700; cursor: pointer; }
+.form-grid .copa-link-choice input { width: auto; min-height: 0; margin: 0; accent-color: #2f6fed; }
+@media (max-width: 720px) {
+  .copa-ask-head { flex-wrap: wrap; }
+  .copa-ask-form { grid-template-columns: 1fr; }
+  .copa-list li { flex-wrap: wrap; }
+  .copa-actions { width: 100%; justify-content: flex-end; }
+}

@@ -33,6 +33,7 @@ Roda como um Cloudflare Worker publicado pelo **Sites**, com banco D1 (SQLite) e
 | Painel da liderança, relatório do mês e qualidade | `app/leadership-*.tsx`, `app/monthly-report*.ts(x)`, `app/support-quality*.ts(x)` |
 | Modo escuro | `app/theme*.ts(x)`, `app/dark-theme.css` (gerado) |
 | Estoque da copa (saldos, lista de compras automática, previsão de consumo) | `app/stock-views.tsx`, `app/stock-forecast.ts`, `app/shopping-list.tsx`, `app/api/inventory/` |
+| Copa: modo "fazer compras" (marca no mercado e registra tudo de uma vez), aviso de estoque baixo (sino e canal do chat) e pedidos da equipe com apoio | `app/shopping-trip.tsx`, `app/copa-requests-view.tsx`, `app/copa-tools.ts`, `app/copa-alerts.ts`, `app/api/copa/` |
 | Usuários, permissões, histórico e cópia de segurança | `app/team-view.tsx`, `app/admin-view.tsx`, `app/api/admin/` |
 | Sino de avisos (som, aviso na tela e no sistema) | `app/notifications-bell.tsx`, `app/notify-sound.ts` |
 | Login e sessões (renovação, 7 dias sem uso, encerrar aparelhos) | `app/auth-session.ts`, `app/session-policy.ts`, `app/sessions-panel.tsx` |

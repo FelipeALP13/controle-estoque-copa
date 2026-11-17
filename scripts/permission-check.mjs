@@ -162,6 +162,17 @@ try {
   await expectStatus("buscar GIFs sem login", null, "GET", "/api/gifs?q=oi", null, 401);
   for (const who of ["viewer", "member"]) await expectStatus("configurar a chave dos GIFs", who, "POST", "/api/gifs", { action: "saveKey", key: "abcdefghijklmnop1234" }, 403);
 
+  // Copa: compras em lote, pedidos e avisos.
+  await expectStatus("ler pedidos da Copa sem login", null, "GET", "/api/copa", null, 401);
+  await expectStatus("ler pedidos da Copa (somente leitura)", "viewer", "GET", "/api/copa", null, 200);
+  await expectStatus("registrar compras em lote (somente leitura)", "viewer", "POST", "/api/inventory", { action: "purchaseBatch", lines: [{ itemId: 1, quantity: 1 }] }, 403);
+  await expectStatus("pedir item da Copa (somente leitura)", "viewer", "POST", "/api/copa", { action: "createRequest", title: MARK }, 403);
+  await expectStatus("apoiar pedido (somente leitura)", "viewer", "POST", "/api/copa", { action: "vote", requestId: 1, on: true }, 403);
+  for (const who of ["viewer", "member"]) {
+    await expectStatus("decidir pedido da Copa", who, "POST", "/api/copa", { action: "decide", requestId: 1, decision: "approve" }, 403);
+    await expectStatus("configurar quem cuida das compras", who, "POST", "/api/copa", { action: "saveAlerts", memberIds: [], channelId: null }, 403);
+  }
+
   // Senha de um acesso de outro time: membro fora do time não vê.
   const [{ results: [client] }] = sql("select id from clients limit 1;");
   const [{ results: [team] }] = sql("select id from teams limit 1;");
