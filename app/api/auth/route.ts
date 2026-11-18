@@ -6,7 +6,7 @@ import { loginChallenges, loginPlaces, members, notifications } from "../../../d
 import { sealSecret, openSecret } from "../../secret-key";
 import { deviceLabel } from "../../session-policy";
 import { isNewPlace, loginPlace, looksLikeRecoveryCode, newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUri, verifyTotp } from "../../totp";
-import { APP_NAME } from "../../brand";
+import { loadBrand } from "../../brand-store";
 import { writeAudit } from "../../audit";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import {
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
         if (member.totpEnabledAt) return Response.json({ error: "A verificação já está ligada. Desligue antes para trocar de aparelho." }, { status: 409 });
         const secret = newTotpSecret();
         await db.update(members).set({ totpSecret: await sealSecret(secret) }).where(eq(members.id, member.id));
-        return Response.json({ secret, uri: otpauthUri(secret, member.username ?? member.email, APP_NAME) });
+        return Response.json({ secret, uri: otpauthUri(secret, member.username ?? member.email, (await loadBrand(db)).name) });
       }
       if (action === "totpEnable") {
         if (member.totpEnabledAt) return Response.json({ error: "A verificação já está ligada." }, { status: 409 });

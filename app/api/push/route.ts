@@ -7,7 +7,7 @@ import { readJsonBody } from "../../api-input";
 import { notificationText, type NotificationKind } from "../../notifications";
 import { deviceLabel } from "../../session-policy";
 import { isPushEndpoint, sendWake, vapidKeys, PUSH_MAX_AGE_MS } from "../../web-push";
-import { APP_NAME } from "../../brand";
+import { loadBrand } from "../../brand-store";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -23,6 +23,7 @@ export async function GET(request: Request) {
 
     // O aparelho acordou com um aviso: busca o texto do mais recente (só quem está logado).
     if (params.get("latest")) {
+      const APP_NAME = (await loadBrand(db)).name;
       if (!member?.active) return json({ title: APP_NAME, body: "Você tem avisos novos. Abra o Portal para ver.", url: "/painel" });
       const [latest] = await db.select().from(notifications).where(and(eq(notifications.memberId, member.id), isNull(notifications.readAt))).orderBy(desc(notifications.id)).limit(1);
       if (!latest || Date.now() - Date.parse(latest.createdAt) > PUSH_MAX_AGE_MS * 3) return json({ title: APP_NAME, body: "Avisos no celular ligados. ✓", url: "/painel", tag: "portal-test" });

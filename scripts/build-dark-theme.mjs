@@ -109,6 +109,8 @@ function emit(rules) {
       const prop = entry.slice(0, colon).trim();
       const value = entry.slice(colon + 1).trim();
       if (!COLOR_PROPS.test(prop) || !/#[0-9a-fA-F]{3,8}\b|\bwhite\b|rgba?\(/i.test(value)) return null;
+      // Cores da marca para o menu lateral e o login: já são para fundo escuro, ficam iguais.
+      if (/^--brand-(ink|on-dark|deep)$/.test(prop)) return null;
       // Tokens de texto (--text-*, --*-text, --on-*, --ink, --muted) clareiam no escuro como um texto, não como um fundo.
       const role = /^--(text|ink|muted|on-)|-text$/.test(prop) ? "color" : prop;
       const next = convertValue(value, role);

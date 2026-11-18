@@ -8,10 +8,11 @@ import UserRound from "lucide-react/icons/user-round";
 import UsersRound from "lucide-react/icons/users-round";
 import Check from "lucide-react/icons/check";
 import { useRouter } from "next/navigation";
-import { APP_NAME, APP_TAGLINE } from "./brand";
+import { BrandLogo, useBrand } from "./brand-context";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { brand } = useBrand();
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -73,7 +74,7 @@ export default function LoginScreen() {
     <main className="login-page">
       <section className="login-layout">
         <div className="login-welcome">
-          <div className="login-brand"><span><UsersRound /></span><div><strong>{APP_NAME}</strong><small>{APP_TAGLINE}</small></div></div>
+          <div className="login-brand"><span className={brand.logoUrl ? "has-logo" : undefined}><BrandLogo fallback={<UsersRound />} /></span><div><strong>{brand.name}</strong>{brand.tagline && <small>{brand.tagline}</small>}</div></div>
           
           <h1>{setupRequired ? "Vamos criar o primeiro acesso" : "Tudo da equipe em um só lugar"}</h1>
           <p>{setupRequired ? "Cadastre o administrador. Depois você poderá criar os usuários da equipe e definir cada permissão." : "Demandas, chamados entre os times, escala e estoque da copa, sem depender de planilhas e grupos separados."}</p>

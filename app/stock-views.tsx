@@ -1,6 +1,6 @@
 "use client";
 
-import { APP_NAME } from "./brand";
+import { useBrand } from "./brand-context";
 import { comingUp, daysLeftLabel, forecastItem, shoppingList } from "./stock-forecast";
 import { ShoppingPanel, urgencyLabel } from "./shopping-list";
 import BarChart3 from "lucide-react/icons/bar-chart-3";
@@ -50,12 +50,13 @@ export function StockRow({ item, permissions, onAction, onEdit, onDelete }: { it
 }
 
 export function PlanningView({ items, loading, shopping, upcoming, coverDays, onCoverDays, today, onTrip }: { items: Item[]; loading: boolean; shopping: ReturnType<typeof shoppingList>; upcoming: ReturnType<typeof comingUp>; coverDays: number; onCoverDays: (days: number) => void; today: string; onTrip?: () => void }) {
+  const { brand } = useBrand();
   if (loading) return <LoadingRows />;
   const measured = items.filter((item) => item.analytics.averageDurationDays !== null);
   const monthlyTotal = measured.reduce((sum, item) => sum + (item.analytics.monthlyRecommendation ?? 0), 0);
   return (
     <>
-      <ShoppingPanel lines={shopping} upcoming={upcoming} coverDays={coverDays} onCoverDays={onCoverDays} appName={APP_NAME} today={today} onTrip={onTrip} />
+      <ShoppingPanel lines={shopping} upcoming={upcoming} coverDays={coverDays} onCoverDays={onCoverDays} appName={brand.name} today={today} onTrip={onTrip} />
       <div className="planning-summary">
         <article><span className="stat-icon blue"><CalendarClock /></span><div><small>Itens com média calculada</small><strong>{measured.length} de {items.length}</strong><p>Após um ciclo completo de uso</p></div></article>
         <article><span className="stat-icon amber"><ShoppingCart /></span><div><small>Compra estimada por mês</small><strong>{monthlyTotal}</strong><p>Soma dos itens já medidos</p></div></article>

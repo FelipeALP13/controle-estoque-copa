@@ -81,6 +81,8 @@ const actions: Record<string, { label: string; group: AuditGroup; sensitive?: bo
   integration_key_revoked: { label: "Revogou chave de integração", group: "integration", sensitive: true },
   spreadsheets_imported: { label: "Importou planilhas de demandas", group: "data", sensitive: true },
   backup_downloaded: { label: "Baixou a cópia de segurança", group: "data", sensitive: true },
+  brand_updated: { label: "Mudou a marca do Portal", group: "data", sensitive: true },
+  brand_logo_updated: { label: "Mudou o logo do Portal", group: "data", sensitive: true },
   audit_exported: { label: "Exportou o histórico de ações", group: "data" },
 };
 

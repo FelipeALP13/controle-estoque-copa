@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Star from "lucide-react/icons/star";
 import CheckCircle from "lucide-react/icons/circle-check";
 import { MAX_RATING_COMMENT, RATING_LABELS } from "./ticket-rating";
-import { APP_NAME } from "./brand";
+import { useBrand } from "./brand-context";
 
 type Info = { code: string; title: string; state: "open" | "pending" | "done"; rating: number | null };
 
@@ -17,6 +17,7 @@ export default function SurveyClient({ token }: { token: string }) {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const { brand } = useBrand();
 
   useEffect(() => {
     void (async () => {
@@ -72,6 +73,6 @@ export default function SurveyClient({ token }: { token: string }) {
 
   return <main className="survey-page">
     <section className="survey-card">{content}</section>
-    <footer>{APP_NAME}</footer>
+    <footer>{brand.name}</footer>
   </main>;
 }

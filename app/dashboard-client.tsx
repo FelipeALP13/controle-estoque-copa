@@ -16,7 +16,7 @@ import MessagesSquare from "lucide-react/icons/messages-square";
 import ClipboardCheck from "lucide-react/icons/clipboard-check";
 import Building2 from "lucide-react/icons/building-2";
 import CalendarRange from "lucide-react/icons/calendar-range";
-import { APP_NAME, APP_TAGLINE } from "./brand";
+import { BrandLogo, useBrand } from "./brand-context";
 import LayoutDashboard from "lucide-react/icons/layout-dashboard";
 import UserCog from "lucide-react/icons/user-cog";
 import PeopleView from "./people-view";
@@ -258,12 +258,13 @@ export default function Home() {
 
   // Lista de compras automática: acabou, está no mínimo ou acaba em até 7 dias pelo ritmo de consumo.
   const [coverDays, setCoverDays] = useState(DEFAULT_COVER_DAYS);
+  const { brand } = useBrand();
   const stockToday = isoDateInSaoPaulo();
   const shopping = useMemo(() => shoppingList(items.map(toForecast), stockToday, coverDays), [items, stockToday, coverDays]);
   const upcomingStock = useMemo(() => comingUp(items.map(toForecast), stockToday), [items, stockToday]);
   const shoppingIds = useMemo(() => new Set(shopping.map((line) => line.id)), [shopping]);
   const lowItems = items.filter((item) => shoppingIds.has(item.id));
-  const whatsappRestockUrl = shoppingWhatsAppUrl(shopping, APP_NAME, coverDays);
+  const whatsappRestockUrl = shoppingWhatsAppUrl(shopping, brand.name, coverDays);
   const openItems = items.filter((item) => item.openedQty > 0);
   const totalUnits = items.reduce((sum, item) => sum + item.unopenedQty + item.openedQty, 0);
   const measuredItems = items.filter((item) => item.analytics.averageDurationDays !== null);
@@ -330,7 +331,7 @@ export default function Home() {
       <aside className={`sidebar ${mobileMenu ? "open" : ""} ${sidebarOpen ? "expanded" : ""}`}
         onMouseEnter={expandSidebar} onMouseLeave={collapseSidebar}
         onFocus={expandSidebar} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) collapseSidebar(); }}>
-        <div className="brand"><span className="brand-mark"><Users size={21} /></span><div><strong>{APP_NAME}</strong><small>{APP_TAGLINE}</small></div></div>
+        <div className="brand"><span className={brand.logoUrl ? "brand-mark has-logo" : "brand-mark"}><BrandLogo fallback={<Users size={21} />} /></span><div><strong>{brand.name}</strong>{brand.tagline && <small>{brand.tagline}</small>}</div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <SidebarNav activeKey={tab} expanded={sidebarOpen} sections={[
           { items: [
@@ -364,7 +365,7 @@ export default function Home() {
           ] },
           { label: "Administração", items: isAdmin ? [
             { key: "team", label: "Usuários", icon: <UserCog />, onClick: () => go("team") },
-            { key: "admin", label: "Histórico e cópias", icon: <ShieldCheck />, onClick: () => go("admin") },
+            { key: "admin", label: "Marca e segurança", icon: <ShieldCheck />, onClick: () => go("admin") },
           ] : [] },
         ]} />
         <div className="sidebar-user">
@@ -376,7 +377,7 @@ export default function Home() {
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu /></button>
-          <div><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Histórico e cópia de segurança" : tab === "calendar" ? "Calendário" : tab === "agenda" ? "Minha agenda" : tab === "clients" ? "Clientes e sistemas" : tab === "reviews" ? "Avaliações e metas" : tab === "community" ? "Chat da equipe" : tab === "sprints" ? "Sprints e retrospectivas" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "requests" ? "Pedidos da Copa" : tab === "maintenance" ? "Manutenção do escritório" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
+          <div><h1>{tab === "hub" ? "Visão geral" : tab === "stock" ? "Estoque" : tab === "schedule" ? "Escala de atendimento" : tab === "tasks" ? "Demandas" : tab === "projects" ? "Projetos grandes" : tab === "panel" ? "Painel da liderança" :tab === "tickets" ? "Chamados internos" : tab === "knowledge" ? "Base de conhecimento" : tab === "admin" ? "Marca, histórico e cópia de segurança" : tab === "calendar" ? "Calendário" : tab === "agenda" ? "Minha agenda" : tab === "clients" ? "Clientes e sistemas" : tab === "reviews" ? "Avaliações e metas" : tab === "community" ? "Chat da equipe" : tab === "sprints" ? "Sprints e retrospectivas" :tab === "people" ? "Pessoas e times" :tab === "planning" ? "Planejamento do estoque" : tab === "requests" ? "Pedidos da Copa" : tab === "maintenance" ? "Manutenção do escritório" : tab === "reports" ? "Relatórios" : tab === "team" ? "Usuários e permissões" : "Histórico do estoque"}</h1></div>
           <div className="topbar-actions">{currentUser?.active && currentUser.role !== "viewer" && <TimerBadge onOpenTask={openTask} />}<CommandSearch onPick={openSearchHit} />{currentUser?.active && tab !== "community" && <ChatPanelButton unread={navCounts?.chat ?? 0} direct={navCounts?.chatDirect ?? 0} active={chatPanel} onClick={() => setChatPanel((value) => !value)} />}<NotificationsBell onOpenTask={openTask} onOpenTicket={openTicket} onOpenEvent={openAgenda} onOpenView={(view) => openView(view)} />{tab === "stock" && (isAdmin || permissions.manageItems) ? <button className="primary-button" onClick={() => setModal({ kind: "item" })}><Plus size={18} /> Novo item</button> : tab === "team" && isAdmin ? <button className="primary-button" onClick={() => setModal({ kind: "member" })}><UserPlus size={18} /> Adicionar membro</button> : <span className="role-chip">{currentUser ? roleLabel(currentUser.role) : "Carregando"}</span>}</div>
         </header>
 

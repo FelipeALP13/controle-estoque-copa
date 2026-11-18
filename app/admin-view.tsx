@@ -10,6 +10,7 @@ import { downloadXlsx, type SheetData } from "./xlsx-writer";
 import { IntegrationsPanel } from "./integrations-panel";
 import ExportPanel from "./export-panel";
 import { AiSettingsPanel } from "./ai-panels";
+import { BrandPanel } from "./brand-panel";
 
 type Entry = { id: number; actorName: string; action: string; label: string; group: AuditGroup; sensitive: boolean; targetType: string; targetId: string | null; details: string; createdAt: string };
 
@@ -112,6 +113,7 @@ export default function AdminView() {
       <button className="primary-button" onClick={downloadBackup} disabled={backingUp}><Download size={15} /> {backingUp ? "Gerando..." : "Baixar cópia"}</button>
     </section>
 
+    <BrandPanel />
     <IntegrationsPanel />
     <ExportPanel />
     <AiSettingsPanel />

@@ -118,7 +118,17 @@ node scripts/build-dark-theme.mjs
 
 As cores, raios, sombras e tamanhos ficam num lugar só: o bloco `:root` no início de `app/globals.css`.
 
-- **Marca:** `--brand`, `--brand-hover`, `--brand-text`, `--brand-soft`, `--brand-softer`, `--brand-muted`, `--brand-border`, `--on-brand`. Para mudar a cor da empresa (white label), troque só estes.
+- **Marca:** `--brand`, `--brand-hover`, `--brand-text`, `--brand-soft`, `--brand-softer`, `--brand-muted`, `--brand-border`, `--on-brand`, e para o menu lateral e o login (escuros nos dois temas) `--brand-ink`, `--brand-on-dark`, `--brand-deep`.
+
+### White label (Marca e segurança → Marca do Portal)
+
+O administrador muda o nome, o nome curto, a frase, o logo e a cor sem publicar de novo. Fica em `app_settings` (`brand`); o logo, no armazenamento de arquivos (`media/brand/...`).
+
+- `app/brand-theme.ts`: regras puras. A partir de uma cor gera todos os tokens `--brand-*` (claro e escuro, com contraste mínimo garantido). Com a cor padrão não injeta nada, e o visual fica idêntico ao original.
+- `app/layout.tsx`: carrega a marca no servidor e injeta `<style id="brand-theme">` antes de desenhar (sem piscar), além do título, do ícone da aba e da cor da barra do celular.
+- `app/brand-context.tsx`: `useBrand()` nas telas e `BrandLogo`. Ao salvar, tudo muda na hora, para quem está com o Portal aberto.
+- `app/api/brand`: leitura pública (o login precisa dela; só serve o logo configurado) e alteração só por administradores, com registro no histórico. O manifesto do app sai de `/api/manifest`.
+- Os ícones de instalação no celular (`public/icon-*.png`) continuam os padrões.
 - **Textos:** `--text`, `--text-secondary`, `--text-tertiary`, `--text-muted`, `--text-faint`, `--text-placeholder`.
 - **Superfícies e bordas:** `--surface`, `--surface-alt`, `--surface-sunken`, `--canvas`, `--border`, `--border-subtle`, `--border-strong`.
 - **Estados:** `--success-*`, `--warning-*`, `--danger-*`, `--purple-*` (variações `-solid`, `-text`, `-soft`...).
