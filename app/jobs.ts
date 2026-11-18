@@ -15,6 +15,27 @@ import { syncDue } from "./jira-sync";
 import { recurringTasksJob } from "./task-recurrence-job";
 import { isTicketLate, ticketCode } from "./tickets";
 import { deliverScheduled } from "./chat-scheduled";
+import { chatScheduled, loginChallenges } from "../db/schema";
+
+/**
+ * Faxina (uma vez por dia): avisos do sino lidos há mais de 90 dias (e qualquer um com mais de 1 ano),
+ * telas de código vencidas e mensagens agendadas já enviadas há mais de 30 dias.
+ * Evita que as tabelas cresçam sem fim e deixem o Portal lento com o tempo.
+ */
+export async function housekeepingJob(db: Db, now: Date) {
+  const day = isoToLocal(now.toISOString()).day;
+  const stamp = now.toISOString();
+  const claimed = await db.insert(celebrationAlerts).values({ key: `housekeeping:${day}`, sentAt: stamp }).onConflictDoNothing().returning({ key: celebrationAlerts.key });
+  if (!claimed.length) return { skipped: true };
+  const ago = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
+  await db.batch([
+    db.delete(notifications).where(and(isNotNull(notifications.readAt), lte(notifications.createdAt, ago(90)))),
+    db.delete(notifications).where(lte(notifications.createdAt, ago(365))),
+    db.delete(loginChallenges).where(lte(loginChallenges.expiresAt, stamp)),
+    db.delete(chatScheduled).where(and(isNotNull(chatScheduled.sentAt), lte(chatScheduled.sentAt, ago(30)))),
+  ]);
+  return { done: true };
+}
 
 type Db = ReturnType<typeof getDb>;
 
@@ -195,7 +216,7 @@ export async function peopleJob(db: Db, now: Date) {
 /** Uma rodada completa. Cada parte é independente: o erro de uma não impede as outras. */
 export async function runJobs(db: Db, options: { now?: Date; includeJira?: boolean } = {}) {
   const now = options.now ?? new Date();
-  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; monitor: unknown; reviews: unknown; people: unknown; scheduled: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, monitor: null, reviews: null, people: null, scheduled: null, errors: [] };
+  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; monitor: unknown; reviews: unknown; people: unknown; scheduled: unknown; housekeeping: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, monitor: null, reviews: null, people: null, scheduled: null, housekeeping: null, errors: [] };
   if (options.includeJira !== false) {
     try {
       result.jira = (await syncDue(db, false, now)).map((entry) => ({ name: entry.name, created: entry.created, updated: entry.updated, comments: entry.comments, error: entry.error }));
@@ -210,6 +231,7 @@ export async function runJobs(db: Db, options: { now?: Date; includeJira?: boole
   try { result.reviews = await reviewsJob(db, now); } catch (error) { result.errors.push(`Avaliações: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.people = await peopleJob(db, now); } catch (error) { result.errors.push(`Pessoas: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.scheduled = await deliverScheduled(db, now); } catch (error) { result.errors.push(`Mensagens agendadas: ${error instanceof Error ? error.message : "erro"}`); }
+  try { result.housekeeping = await housekeepingJob(db, now); } catch (error) { result.errors.push(`Faxina: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.monitor = await monitorJob(db, now); } catch (error) { result.errors.push(`Monitor: ${error instanceof Error ? error.message : "erro"}`); }
   return result;
 }

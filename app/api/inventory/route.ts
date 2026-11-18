@@ -76,9 +76,24 @@ function errorMessage(error: unknown) {
   return "Não foi possível concluir esta operação agora.";
 }
 
-async function removeMedia(key: string | null | undefined) {
-  if (!key?.startsWith("media/")) return;
+/**
+ * Caminho de imagem aceito vindo da tela: só o formato que a rota de envio cria (media/<pasta>/<uuid>.<ext>),
+ * ou o mesmo que já estava salvo. Qualquer outro valor vira null (não aponta para arquivos de outras pastas).
+ */
+function mediaKeyFrom(value: unknown, folder: "profiles" | "items", current: string | null = null) {
+  if (!value) return null;
+  const key = String(value);
+  if (key === current) return key;
+  return new RegExp(`^media/${folder}/[0-9a-f-]{36}\\.(png|jpg|gif|webp)$`).test(key) ? key : null;
+}
+
+/** Apaga a imagem antiga, mas só se nenhuma pessoa ou item ainda usa o mesmo arquivo. */
+async function removeMedia(db: Db, key: string | null | undefined) {
+  if (!key || !/^media\/(profiles|items)\//.test(key)) return;
   try {
+    const [person] = await db.select({ id: members.id }).from(members).where(eq(members.avatarKey, key)).limit(1);
+    const [item] = await db.select({ id: items.id }).from(items).where(eq(items.imageKey, key)).limit(1);
+    if (person || item) return;
     const bucket = (env as unknown as { BUCKET?: R2Bucket }).BUCKET;
     await bucket?.delete(key);
   } catch (error) {
@@ -220,7 +235,7 @@ export async function POST(request: Request) {
       const password = String(body.password ?? "");
       const currentPassword = String(body.currentPassword ?? "");
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
-      const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      const avatarKey = mediaKeyFrom(body.avatarKey, "profiles", currentMember.avatarKey);
       if (!name) return Response.json({ error: "Informe seu nome." }, { status: 400 });
       if (!email.includes("@")) return Response.json({ error: "Informe um e-mail válido." }, { status: 400 });
       if (username.length < 3) return Response.json({ error: "O usuário precisa ter pelo menos 3 caracteres." }, { status: 400 });
@@ -237,7 +252,7 @@ export async function POST(request: Request) {
         await db.delete(sessions).where(eq(sessions.memberId, currentMember.id));
         await createSession(currentMember.id, db);
       }
-      if (currentMember.avatarKey && currentMember.avatarKey !== avatarKey) await removeMedia(currentMember.avatarKey);
+      if (currentMember.avatarKey && currentMember.avatarKey !== avatarKey) await removeMedia(db, currentMember.avatarKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: name, action: credentials ? "profile_and_password_updated" : "profile_updated", targetType: "member", targetId: currentMember.id });
       return Response.json({ member: safeMember(updated) });
     }
@@ -272,7 +287,7 @@ export async function POST(request: Request) {
       const emailExisting = await db.select({ id: members.id }).from(members).where(eq(members.email, email)).limit(1);
       if (emailExisting.length) return Response.json({ error: "Este e-mail já pertence a outro usuário." }, { status: 409 });
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
-      const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      const avatarKey = mediaKeyFrom(body.avatarKey, "profiles");
       const permissions = permissionJson(role, body.permissions);
       const credentials = await hashPassword(password);
       const [member] = await db.insert(members).values({ userId: `member:${crypto.randomUUID()}`, name, email, username, passwordHash: credentials.hash, passwordSalt: credentials.salt, role, permissions, active: true, avatarIcon, avatarKey }).returning();
@@ -289,7 +304,7 @@ export async function POST(request: Request) {
       const password = String(body.password ?? "");
       const role = String(body.role ?? "member") as MemberRole;
       const avatarIcon = String(body.avatarIcon ?? "👤").trim().slice(0, 8) || "👤";
-      const avatarKey = body.avatarKey ? String(body.avatarKey) : null;
+      const rawAvatarKey = body.avatarKey;
       const permissions = permissionJson(role, body.permissions);
       if (!targetUserId || !name || !email.includes("@") || username.length < 3 || !["admin", "member", "viewer"].includes(role)) return Response.json({ error: "Dados do membro inválidos." }, { status: 400 });
       const passwordError = password ? passwordPolicyError(password) : null;
@@ -297,6 +312,7 @@ export async function POST(request: Request) {
       if (targetUserId === currentMember.userId) return Response.json({ error: "Edite seus dados em Meu perfil." }, { status: 400 });
       const [target] = await db.select().from(members).where(eq(members.userId, targetUserId)).limit(1);
       if (!target) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      const avatarKey = mediaKeyFrom(rawAvatarKey, "profiles", target.avatarKey);
       const duplicate = await db.select({ userId: members.userId }).from(members).where(eq(members.username, username)).limit(1);
       if (duplicate.length && duplicate[0].userId !== targetUserId) return Response.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
       const duplicateEmail = await db.select({ userId: members.userId }).from(members).where(eq(members.email, email)).limit(1);
@@ -305,7 +321,7 @@ export async function POST(request: Request) {
       const [updated] = await db.update(members).set({ name, email, username, role, permissions, active: body.active !== false, avatarIcon, avatarKey, ...(credentials ? { passwordHash: credentials.hash, passwordSalt: credentials.salt } : {}) }).where(eq(members.userId, targetUserId)).returning();
       if (!updated) return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
       if (credentials || !updated.active) await db.delete(sessions).where(eq(sessions.memberId, updated.id));
-      if (target.avatarKey && target.avatarKey !== avatarKey) await removeMedia(target.avatarKey);
+      if (target.avatarKey && target.avatarKey !== avatarKey) await removeMedia(db, target.avatarKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: credentials ? "member_updated_and_password_reset" : "member_updated", targetType: "member", targetId: updated.id, details: `Usuário ${username} atualizado` });
       return Response.json({ member: safeMember(updated) });
     }
@@ -339,7 +355,7 @@ export async function POST(request: Request) {
         return Response.json({ error: `${target.name} tem ${parts} no histórico. Para não apagar esses registros, desative o acesso em vez de excluir.` }, { status: 409 });
       }
       await db.delete(members).where(eq(members.id, target.id));
-      await removeMedia(target.avatarKey);
+      await removeMedia(db, target.avatarKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "member_deleted", targetType: "member", targetId: target.id, details: `${target.name} (${target.username || target.email})` });
       return Response.json({ ok: true });
     }
@@ -437,7 +453,7 @@ export async function POST(request: Request) {
       const minimumQty = Math.max(0, number(body.minimumQty, 1));
       const scanCode = String(body.scanCode ?? "").trim() || null;
       const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
-      const imageKey = body.imageKey ? String(body.imageKey) : null;
+      const imageKey = mediaKeyFrom(body.imageKey, "items");
       if (!name) return Response.json({ error: "Informe o nome do item." }, { status: 400 });
       const [item] = await db.insert(items).values({ name, category, unit, minimumQty, scanCode, icon, imageKey }).returning();
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_created", targetType: "item", targetId: item.id, details: item.name });
@@ -469,13 +485,13 @@ export async function POST(request: Request) {
       const minimumQty = Math.max(0, number(body.minimumQty, 1));
       const scanCode = String(body.scanCode ?? "").trim() || null;
       const icon = String(body.icon ?? "📦").trim().slice(0, 8) || "📦";
-      const imageKey = body.imageKey ? String(body.imageKey) : null;
       if (!itemId || !name) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [previous] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
       if (!previous) return Response.json({ error: "Item não encontrado." }, { status: 404 });
+      const imageKey = mediaKeyFrom(body.imageKey, "items", previous.imageKey);
       // O campo de código saiu da tela: sem ele no pedido, o código já salvo continua guardado.
       const [item] = await db.update(items).set({ name, category, unit, minimumQty, scanCode: body.scanCode === undefined ? previous.scanCode : scanCode, icon, imageKey, updatedAt: new Date().toISOString() }).where(eq(items.id, itemId)).returning();
-      if (previous.imageKey && previous.imageKey !== imageKey) await removeMedia(previous.imageKey);
+      if (previous.imageKey && previous.imageKey !== imageKey) await removeMedia(db, previous.imageKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_updated", targetType: "item", targetId: item.id, details: item.name });
       return Response.json({ item });
     }
@@ -486,7 +502,7 @@ export async function POST(request: Request) {
       if (!itemId) return Response.json({ error: "Item inválido." }, { status: 400 });
       const [deleted] = await db.delete(items).where(eq(items.id, itemId)).returning();
       if (!deleted) return Response.json({ error: "Item não encontrado." }, { status: 404 });
-      await removeMedia(deleted.imageKey);
+      await removeMedia(db, deleted.imageKey);
       await safeAudit(db, { actorUserId: currentMember.userId, actorName: currentMember.name, action: "item_deleted", targetType: "item", targetId: deleted.id, details: deleted.name });
       return Response.json({ item: deleted });
     }

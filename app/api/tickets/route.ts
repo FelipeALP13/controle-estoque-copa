@@ -75,10 +75,10 @@ export async function GET(request: Request) {
       db.select().from(tickets).orderBy(desc(tickets.createdAt)).limit(3000),
       db.select({ id: members.id, name: members.name, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey }).from(members).where(eq(members.active, true)).orderBy(asc(members.name)),
       db.select({ id: teams.id, name: teams.name, color: teams.color }).from(teams).orderBy(asc(teams.name)),
-      db.select({ ticketId: ticketEvents.ticketId }).from(ticketEvents).where(eq(ticketEvents.kind, "comment")),
+      // O banco já devolve a contagem por chamado (não lê todos os comentários).
+      db.select({ ticketId: ticketEvents.ticketId, count: sql<number>`count(*)` }).from(ticketEvents).where(eq(ticketEvents.kind, "comment")).groupBy(ticketEvents.ticketId),
     ]);
-    const commentCount = new Map<number, number>();
-    for (const row of commentRows) commentCount.set(row.ticketId, (commentCount.get(row.ticketId) ?? 0) + 1);
+    const commentCount = new Map<number, number>(commentRows.map((row) => [row.ticketId, Number(row.count)]));
     // Respostas prontas (vazio se a migração ainda não foi aplicada).
     let replies: { id: number; title: string; body: string; teamId: number | null; createdByName: string; canEdit: boolean }[] = [];
     try {

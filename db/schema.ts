@@ -76,6 +76,8 @@ export const members = sqliteTable("members", {
   totpEnabledAt: text("totp_enabled_at"),
   // Códigos de recuperação (JSON com os resumos SHA-256; cada um vale uma vez).
   totpRecovery: text("totp_recovery").notNull().default("[]"),
+  // Último passo de 30 s aceito: o mesmo código não serve duas vezes.
+  totpLastStep: integer("totp_last_step"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -498,7 +500,7 @@ export const notifications = sqliteTable("notifications", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   // Quando o aviso foi mandado para o celular (null = ainda não).
   pushedAt: text("pushed_at"),
-});
+}, (table) => [index("notifications_member_idx").on(table.memberId, table.createdAt), index("notifications_unread_idx").on(table.memberId, table.readAt), index("notifications_push_idx").on(table.pushedAt, table.createdAt)]);
 
 export const auditLogs = sqliteTable("audit_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),

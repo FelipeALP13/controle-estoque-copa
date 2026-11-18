@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, lt } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { headers } from "next/headers";
 import { getDb } from "../../../db";
 import { loginChallenges, loginPlaces, members, notifications } from "../../../db/schema";
@@ -110,7 +110,11 @@ async function checkSecondFactor(db: Db, member: Member, code: string) {
     await db.update(members).set({ totpRecovery: JSON.stringify(list.filter((item) => item !== hash)) }).where(eq(members.id, member.id));
     return true;
   }
-  return (await verifyTotp(await openSecret(member.totpSecret), code)) !== null;
+  const step = await verifyTotp(await openSecret(member.totpSecret), code);
+  // Cada código vale uma vez: um passo igual ou anterior ao último aceito é recusado (evita reaproveitar um código visto).
+  if (step === null || (member.totpLastStep !== null && step <= member.totpLastStep)) return false;
+  const claimed = await db.update(members).set({ totpLastStep: step }).where(and(eq(members.id, member.id), or(isNull(members.totpLastStep), lt(members.totpLastStep, step)))).returning({ id: members.id });
+  return claimed.length > 0;
 }
 
 export async function POST(request: Request) {
@@ -183,7 +187,7 @@ export async function POST(request: Request) {
         if ((await verifyTotp(await openSecret(member.totpSecret), String(body.code ?? ""))) === null) return Response.json({ error: "Código incorreto. Confira se o relógio do celular está certo e digite o código que aparece agora." }, { status: 400 });
         const codes = newRecoveryCodes();
         const hashes = await Promise.all(codes.map((code) => hashToken(`recovery:${normalizeRecoveryCode(code)}`)));
-        await db.update(members).set({ totpEnabledAt: now, totpRecovery: JSON.stringify(hashes) }).where(eq(members.id, member.id));
+        await db.update(members).set({ totpEnabledAt: now, totpRecovery: JSON.stringify(hashes), totpLastStep: null }).where(eq(members.id, member.id));
         await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "totp_enabled", targetType: "member", targetId: member.id }).catch((error) => console.error("audit log failed", error));
         // Única vez em que os códigos de recuperação saem do servidor.
         return Response.json({ ok: true, recoveryCodes: codes });
@@ -191,7 +195,7 @@ export async function POST(request: Request) {
       if (action === "totpDisable") {
         if (!member.totpEnabledAt) return Response.json({ ok: true });
         if (!(await checkSecondFactor(db, member, String(body.code ?? "").trim()))) return Response.json({ error: "Para desligar, digite um código do aplicativo (ou um código de recuperação)." }, { status: 400 });
-        await db.update(members).set({ totpSecret: null, totpEnabledAt: null, totpRecovery: "[]" }).where(eq(members.id, member.id));
+        await db.update(members).set({ totpSecret: null, totpEnabledAt: null, totpRecovery: "[]", totpLastStep: null }).where(eq(members.id, member.id));
         await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "totp_disabled", targetType: "member", targetId: member.id }).catch((error) => console.error("audit log failed", error));
         return Response.json({ ok: true });
       }
@@ -200,7 +204,7 @@ export async function POST(request: Request) {
       const targetId = Number(body.memberId);
       const [target] = Number.isInteger(targetId) && targetId > 0 ? await db.select({ id: members.id, name: members.name }).from(members).where(eq(members.id, targetId)).limit(1) : [];
       if (!target) return Response.json({ error: "Pessoa não encontrada." }, { status: 404 });
-      await db.update(members).set({ totpSecret: null, totpEnabledAt: null, totpRecovery: "[]" }).where(eq(members.id, target.id));
+      await db.update(members).set({ totpSecret: null, totpEnabledAt: null, totpRecovery: "[]", totpLastStep: null }).where(eq(members.id, target.id));
       await writeAudit(db, { actorUserId: member.userId, actorName: member.name, action: "totp_reset_by_admin", targetType: "member", targetId: target.id, details: target.name }).catch((error) => console.error("audit log failed", error));
       await securityAlert(db, target.id, `${member.name} desligou a verificação em duas etapas de ${target.name}. Ligue de novo no seu perfil.`, now);
       return Response.json({ ok: true });
@@ -257,6 +261,10 @@ export async function POST(request: Request) {
     const password = String(body.password ?? "");
     if (!username || !password) return Response.json({ error: "Informe o usuário e a senha." }, { status: 400 });
     const limitKey = await rateLimitKey("login", username, clientIp(request));
+    // Também por conta, de qualquer IP: quem troca de IP para tentar a mesma conta esbarra aqui.
+    const accountKey = await rateLimitKey("login-account", username, "any");
+    const accountLimit = await checkRateLimit(accountKey, db);
+    if (accountLimit.blocked) return Response.json({ error: "Muitas tentativas nesta conta. Aguarde alguns minutos e tente novamente." }, { status: 429, headers: { "Retry-After": String(accountLimit.retryAfterSeconds) } });
     const limit = await checkRateLimit(limitKey, db);
     if (limit.blocked) return Response.json({ error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
     const [member] = await db.select().from(members).where(eq(members.username, username)).limit(1);
@@ -266,6 +274,7 @@ export async function POST(request: Request) {
       : (await verifyPassword(password, "0".repeat(64), "usuario-inexistente"), false);
     if (!member || !valid) {
       const failure = await recordRateLimitFailure(limitKey, { maxAttempts: 5, windowMinutes: 15, blockMinutes: 15 }, db);
+      await recordRateLimitFailure(accountKey, { maxAttempts: 30, windowMinutes: 60, blockMinutes: 15 }, db);
       // Registra a tentativa (usuário digitado e IP), nunca a senha.
       await writeAudit(db, { actorUserId: member?.userId ?? null, actorName: member?.name ?? `Usuário “${username.slice(0, 40)}”`, action: failure.blocked ? "login_blocked" : "login_failed", targetType: "session", targetId: member?.id ?? null, details: `IP ${clientIp(request)}${member ? "" : " · usuário inexistente"}` }).catch((error) => console.error("audit log failed", error));
       if (failure.blocked) {
@@ -275,6 +284,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Usuário ou senha incorretos." }, { status: 401 });
     }
     if (!member.active) return Response.json({ error: "Este acesso está desativado. Fale com um administrador." }, { status: 403 });
+    await clearRateLimit(accountKey, db);
     // Com a verificação em duas etapas ligada, a senha certa só libera a tela do código (vale 5 minutos).
     if (member.totpEnabledAt && member.totpSecret) {
       const token = createSecureToken();

@@ -274,6 +274,13 @@
       "when": 1794941288556,
       "tag": "0038_team_extras",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1795009033395,
+      "tag": "0039_hardening",
+      "breakpoints": true
     }
   ]
 }
