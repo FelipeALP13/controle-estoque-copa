@@ -60,7 +60,18 @@ export default function PushPanel() {
     if (permission !== "granted") throw new Error("O navegador bloqueou os avisos. Libere nas configurações do site (ícone do cadeado) e tente de novo.");
     const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
     await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: toKey(publicKey) });
+    let subscription: PushSubscription;
+    try {
+      subscription = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: toKey(publicKey) });
+    } catch (err) {
+      // O Brave (e alguns navegadores com bloqueios) não deixa falar com o serviço de avisos do Google.
+      const brave = Boolean((navigator as unknown as { brave?: unknown }).brave);
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError") throw new Error("O navegador bloqueou os avisos. Libere nas configurações do site (ícone do cadeado) e tente de novo.");
+      throw new Error(brave
+        ? "O Brave vem com os avisos push desligados. Abra brave://settings/privacy, ligue “Usar os serviços do Google para mensagens push”, reinicie o Brave e tente de novo. (Ou use o Chrome ou o Edge.)"
+        : "O navegador não conseguiu falar com o serviço de avisos. Confira se nenhuma extensão ou bloqueio está impedindo, tente de novo ou use o Chrome ou o Edge.");
+    }
     await call({ action: "subscribe", endpoint: subscription.endpoint });
     try { window.localStorage.setItem(PUSH_ON_KEY, "1"); } catch { /* sem armazenamento */ }
     await load();
