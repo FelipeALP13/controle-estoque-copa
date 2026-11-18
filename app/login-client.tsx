@@ -23,6 +23,8 @@ export default function LoginScreen() {
   // Segunda etapa: depois da senha certa, o código do aplicativo autenticador.
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  // Hospedagem própria: código secreto de instalação, exigido só para criar o primeiro administrador.
+  const [setupToken, setSetupToken] = useState("");
 
   useEffect(() => {
     fetch("/api/auth", { cache: "no-store" })
@@ -46,7 +48,7 @@ export default function LoginScreen() {
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(challenge ? { action: "login2fa", challenge, code } : { action: setupRequired ? "setup" : "login", name, email, username, password }),
+        body: JSON.stringify(challenge ? { action: "login2fa", challenge, code } : { action: setupRequired ? "setup" : "login", name, email, username, password, ...(setupRequired ? { setupToken } : {}) }),
       });
       const data = await response.json() as { error?: string; twoFactor?: boolean; challenge?: string; restart?: boolean };
       if (!response.ok) {
@@ -87,6 +89,7 @@ export default function LoginScreen() {
           {setupRequired && <>
             <label><span>Nome completo</span><input autoFocus required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Felipe Almeida" /></label>
             <label><span>E-mail</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@empresa.com" /></label>
+            <label><span>Código de instalação</span><input autoComplete="off" spellCheck={false} value={setupToken} onChange={(event) => setSetupToken(event.target.value)} placeholder="O código definido na hospedagem" /></label>
           </>}
           {challenge ? <>
             <label><span>Código do aplicativo autenticador</span><div className="login-input"><LockKeyhole /><input autoFocus required inputMode="numeric" autoComplete="one-time-code" maxLength={11} value={code} onChange={(event) => setCode(event.target.value)} placeholder="6 números (ou um código de recuperação)" /></div></label>

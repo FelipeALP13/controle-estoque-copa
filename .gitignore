@@ -37,6 +37,10 @@ yarn-error.log*
 *.xls
 *.csv
 
+# Cópias do banco de produção (dados da empresa)
+/backups/
+*.sql.gz
+
 # Checkout-local tool state
 /.wrangler/
 /.sites-runtime/

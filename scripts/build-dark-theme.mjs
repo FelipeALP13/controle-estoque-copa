@@ -103,13 +103,15 @@ function emit(rules) {
     if (rule.at) { const inner = emit(rule.rules); if (inner.length) lines.push(`${rule.at} {`, ...inner.map((line) => `  ${line}`), "}"); continue; }
     // O menu lateral, e a tela de login já foram desenhados para fundo escuro/colorido.
     if (/\.sidebar|\.brand|\.nav-|\.login-|\.hero-status|\.overview-hero|\.community/.test(rule.selector)) continue;
-    const declarations = rule.body.split(";").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    const declarations = rule.body.replace(/\/\*[\s\S]*?\*\//g, "").split(";").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
       const colon = entry.indexOf(":");
       if (colon < 0) return null;
       const prop = entry.slice(0, colon).trim();
       const value = entry.slice(colon + 1).trim();
       if (!COLOR_PROPS.test(prop) || !/#[0-9a-fA-F]{3,8}\b|\bwhite\b|rgba?\(/i.test(value)) return null;
-      const next = convertValue(value, prop);
+      // Tokens de texto (--text-*, --*-text, --on-*, --ink, --muted) clareiam no escuro como um texto, não como um fundo.
+      const role = /^--(text|ink|muted|on-)|-text$/.test(prop) ? "color" : prop;
+      const next = convertValue(value, role);
       return next === value ? null : `${prop}: ${next}`;
     }).filter(Boolean);
     if (declarations.length) lines.push(`${prefix(rule.selector)} { ${declarations.join("; ")}; }`);

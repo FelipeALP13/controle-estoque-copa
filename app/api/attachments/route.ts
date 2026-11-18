@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { and, asc, count, eq } from "drizzle-orm";
+import { fileStore } from "../../file-store";
 import { getDb } from "../../../db";
 import { attachments, tasks, tickets } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
@@ -14,11 +14,7 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-function bucket() {
-  const value = (env as unknown as { BUCKET?: R2Bucket }).BUCKET;
-  if (!value) throw new Error("O armazenamento de arquivos ainda não está disponível.");
-  return value;
-}
+const bucket = () => fileStore();
 
 function failure(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -116,7 +112,7 @@ export async function POST(request: Request) {
     const extension = extensionOf(fileName);
     if (!contentMatches(extension, bytes)) return json({ error: "O conteúdo do arquivo não corresponde ao tipo indicado." }, 400);
     const storageKey = `attachments/${ownerType}/${ownerId}/${crypto.randomUUID()}.${extension}`;
-    await bucket().put(storageKey, bytes, { httpMetadata: { contentType: ATTACHMENT_TYPES[extension].mime } });
+    await bucket().put(storageKey, bytes, ATTACHMENT_TYPES[extension].mime);
     const [row] = await db.insert(attachments).values({ ownerType, ownerId, storageKey, fileName, contentType: ATTACHMENT_TYPES[extension].mime, size: bytes.length, uploadedById: member.id, uploadedByName: member.name }).returning();
     return json({ attachment: publicRow(row) }, 201);
   } catch (error) {

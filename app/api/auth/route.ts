@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { headers } from "next/headers";
+import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { loginChallenges, loginPlaces, members, notifications } from "../../../db/schema";
 import { sealSecret, openSecret } from "../../secret-key";
@@ -40,11 +41,23 @@ function publicMember(member: typeof members.$inferSelect) {
   };
 }
 
-async function setupIsAllowed() {
-  // Atalho só para o ambiente de desenvolvimento; no site publicado vale o login do proprietário.
+async function setupIsAllowed(setupToken: string) {
+  // Atalho só para o ambiente de desenvolvimento; no site publicado vale o código de instalação.
   const host = (await headers()).get("host") ?? "";
   if (import.meta.env?.DEV && (host.startsWith("127.0.0.1") || host.startsWith("localhost"))) return true;
+  // Hospedagem própria (Cloudflare): o código secreto definido com "wrangler secret put SETUP_TOKEN".
+  const expected = (env as unknown as { SETUP_TOKEN?: string }).SETUP_TOKEN ?? "";
+  if (expected.length >= 24 && setupToken && await sameSecret(setupToken, expected)) return true;
   return Boolean(await getChatGPTUser());
+}
+
+/** Compara dois segredos pelo resumo (tempo igual, sem revelar onde diferem). */
+async function sameSecret(given: string, expected: string) {
+  const digest = async (value: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+  const [a, b] = await Promise.all([digest(given), digest(expected)]);
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) diff |= a[index] ^ b[index];
+  return diff === 0;
 }
 
 export async function GET() {
@@ -233,7 +246,16 @@ export async function POST(request: Request) {
     if (action === "setup") {
       const [credentialed] = await db.select({ id: members.id }).from(members).where(isNotNull(members.passwordHash)).limit(1);
       if (credentialed) return Response.json({ error: "O administrador inicial já foi configurado." }, { status: 409 });
-      if (!(await setupIsAllowed())) return Response.json({ error: "A configuração inicial precisa ser feita pelo proprietário do Site." }, { status: 403 });
+      if (!(await setupIsAllowed(String(body.setupToken ?? "").trim()))) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const configured = ((env as unknown as { SETUP_TOKEN?: string }).SETUP_TOKEN ?? "").length;
+        const error = configured === 0
+          ? "Nenhum código de instalação foi definido na hospedagem."
+          : configured < 24
+            ? "O código definido na hospedagem é curto demais: use pelo menos 24 caracteres e defina de novo."
+            : "Código de instalação incorreto.";
+        return Response.json({ error }, { status: 403 });
+      }
 
       const name = String(body.name ?? "").trim();
       const email = String(body.email ?? "").trim().toLocaleLowerCase("pt-BR");

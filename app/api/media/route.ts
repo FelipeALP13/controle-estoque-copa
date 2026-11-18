@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
+import { fileStore } from "../../file-store";
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 
@@ -15,11 +15,7 @@ async function hasAccess() {
   return Boolean(member?.active);
 }
 
-function getBucket() {
-  const bucket = (env as unknown as { BUCKET?: R2Bucket }).BUCKET;
-  if (!bucket) throw new Error("O armazenamento de imagens ainda não está disponível.");
-  return bucket;
-}
+const getBucket = () => fileStore("O armazenamento de imagens ainda não está disponível.");
 
 export async function GET(request: Request) {
   if (!(await hasAccess())) return Response.json({ error: "Faça login para visualizar esta imagem." }, { status: 401 });
@@ -29,10 +25,10 @@ export async function GET(request: Request) {
   if (!object) return Response.json({ error: "Imagem não encontrada." }, { status: 404 });
   return new Response(object.body, {
     headers: {
-      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      "Content-Type": object.contentType ?? "application/octet-stream",
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=3600",
-      "ETag": object.httpEtag,
+      ...(object.etag ? { ETag: object.etag } : {}),
     },
   });
 }
@@ -51,6 +47,6 @@ export async function POST(request: Request) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!imageType.valid(bytes)) return Response.json({ error: "O conteúdo do arquivo não corresponde a uma imagem válida." }, { status: 400 });
   const key = `media/${kind}/${crypto.randomUUID()}.${imageType.extension}`;
-  await getBucket().put(key, bytes, { httpMetadata: { contentType: file.type } });
+  await getBucket().put(key, bytes, file.type);
   return Response.json({ imageKey: key, imageUrl: `/api/media?key=${encodeURIComponent(key)}` }, { status: 201 });
 }

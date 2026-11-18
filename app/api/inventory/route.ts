@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { fileStoreOrNull } from "../../file-store";
 import { createSession, getSessionMember, hashPassword, normalizeUsername, passwordPolicyError, verifyPassword } from "../../auth-session";
 import { getDb } from "../../../db";
 import { inventoryLocks, items, members, movements, openBatches, projectPeople, sessions, supportTeams, supportWeeks, taskPeople, tickets } from "../../../db/schema";
@@ -94,8 +94,7 @@ async function removeMedia(db: Db, key: string | null | undefined) {
     const [person] = await db.select({ id: members.id }).from(members).where(eq(members.avatarKey, key)).limit(1);
     const [item] = await db.select({ id: items.id }).from(items).where(eq(items.imageKey, key)).limit(1);
     if (person || item) return;
-    const bucket = (env as unknown as { BUCKET?: R2Bucket }).BUCKET;
-    await bucket?.delete(key);
+    await fileStoreOrNull()?.delete(key);
   } catch (error) {
     console.error("media cleanup failed", error);
   }

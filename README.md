@@ -2,7 +2,17 @@
 
 Sistema interno da equipe (Suporte, Desenvolvimento e Liderança): demandas, chamados entre os times, agenda, escala de atendimento, projetos, base de conhecimento, estoque da copa e diretório de pessoas.
 
-Roda como um Cloudflare Worker publicado pelo **Sites**, com banco D1 (SQLite) e armazenamento R2. Cada pessoa entra com o próprio usuário e senha.
+Roda como um Cloudflare Worker na **conta Cloudflare da empresa**, com banco D1 (SQLite) e armazenamento R2. Cada pessoa entra com o próprio usuário e senha.
+
+## Hospedagem própria (Cloudflare)
+
+Tudo pelo `scripts/cloudflare.mjs`. Os nomes do banco e do armazenamento ficam em `cloudflare.config.json` (sem segredos). Opcional: `"customDomain": "portal.suaempresa.com.br"`, para um domínio que já esteja na mesma conta Cloudflare.
+
+1. Uma vez: `node node_modules/wrangler/bin/wrangler.js login` (abre o navegador para entrar na Cloudflare).
+2. Uma vez: `node scripts/cloudflare.mjs criar` (cria o banco D1 e o armazenamento R2).
+3. A cada versão nova: `node scripts/cloudflare.mjs publicar` (build, migrações novas no banco de produção, publicação).
+4. Primeiro acesso: defina um código de instalação com `wrangler secret put SETUP_TOKEN --name portaldaequipe` (24+ caracteres). Sem ele, ninguém consegue criar o administrador. Depois de criar, apague com `wrangler secret delete SETUP_TOKEN --name portaldaequipe`.
+5. Backup completo: `node scripts/cloudflare.mjs backup` (arquivo `.sql` em `backups/`, que não vai para o Git). No painel da Cloudflare (D1 → Time Travel) dá para voltar o banco a qualquer momento dos últimos 7 dias (plano gratuito) ou 30 dias (plano pago), e o Console roda SQL direto.
 
 ## O que tem
 
@@ -103,3 +113,19 @@ node scripts/build-dark-theme.mjs
 - Chamados novos caem na fila do time escolhido, sem responsável: quem atende clica em "Assumir". A escala do Suporte (desenvolvedores que apoiam o Suporte em questões de código) não recebe chamados automaticamente; os nomes da escala são ligados às pessoas do Portal pelo nome só para a passagem de plantão.
 - O link da agenda para o Outlook é pessoal e secreto; o banco guarda só o resumo (hash). Desligar ou gerar outro link na Agenda invalida o anterior.
 - Detalhes técnicos do ambiente Sites (perfis de execução, pré-visualização, publicação) estão em `docs/ambiente-sites.md`.
+
+## Sistema visual (tokens)
+
+As cores, raios, sombras e tamanhos ficam num lugar só: o bloco `:root` no início de `app/globals.css`.
+
+- **Marca:** `--brand`, `--brand-hover`, `--brand-text`, `--brand-soft`, `--brand-softer`, `--brand-muted`, `--brand-border`, `--on-brand`. Para mudar a cor da empresa (white label), troque só estes.
+- **Textos:** `--text`, `--text-secondary`, `--text-tertiary`, `--text-muted`, `--text-faint`, `--text-placeholder`.
+- **Superfícies e bordas:** `--surface`, `--surface-alt`, `--surface-sunken`, `--canvas`, `--border`, `--border-subtle`, `--border-strong`.
+- **Estados:** `--success-*`, `--warning-*`, `--danger-*`, `--purple-*` (variações `-solid`, `-text`, `-soft`...).
+- **Formas:** `--radius-sm`, `--radius`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-pill`, `--shadow-sm/md/lg`, `--focus-ring`, `--control-h`.
+
+Regras:
+
+1. Em CSS novo, use os tokens (`var(--text-muted)`), não cores fixas.
+2. O tema escuro é gerado: depois de mexer em cores, rode `node scripts/build-dark-theme.mjs`. Tokens cujo nome tem `text` (ou começa com `--on-`) clareiam como texto; os demais escurecem como fundo.
+3. Os componentes base (botões, campos, cartões, janelas, alertas) estão no fim de `globals.css`, na seção "Sistema visual: componentes base".
