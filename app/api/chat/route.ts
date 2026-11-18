@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { absences, chatChannels, chatMessages, chatPresence, chatReactions, chatReminders, chatScheduled, chatTopicReads, chatTopics, members, notifications, polls, tasks, teamMembers, teams } from "../../../db/schema";
 import { loadPolls } from "../../poll-store";
@@ -33,6 +33,10 @@ const canSee = (channel: Channel, memberId: number) => channel.kind === "channel
 
 const PAGE = 60;
 const MAX_PINS = 25;
+/** Mesma mensagem repetida dentro deste tempo conta como clique duplo, não como mensagem nova. */
+const DUPLICATE_WINDOW_MS = 8000;
+/** Mensagens diretas seguidas, ainda não vistas, dentro deste tempo viram um aviso só no sino. */
+const DM_NOTIFY_GROUP_MS = 10 * 60 * 1000;
 /** Texto da busca para LIKE: sem curingas digitados pela pessoa. */
 const likeTerm = (value: string) => `%${value.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 const todayInSaoPaulo = (now: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
@@ -152,6 +156,11 @@ export async function GET(request: Request) {
       if (!before && lastId) {
         await db.insert(chatTopicReads).values({ topicId: topic.id, memberId: member.id, lastReadId: lastId })
           .onConflictDoUpdate({ target: [chatTopicReads.topicId, chatTopicReads.memberId], set: { lastReadId: sql`max(${chatTopicReads.lastReadId}, ${lastId})` } });
+        // Abriu a conversa direta: o aviso do sino dessa pessoa já foi visto.
+        if (channel.kind === "dm") {
+          const peers = [...new Set(result.messages.filter((message) => message.memberId !== member.id).map((message) => message.authorName))];
+          if (peers.length) await db.update(notifications).set({ readAt: stamp }).where(and(eq(notifications.memberId, member.id), eq(notifications.kind, "chat_message"), isNull(notifications.readAt), inArray(notifications.actorName, peers))).catch((error) => console.error("chat notification read failed", error));
+        }
       }
       await touchPresence(db, member.id, stamp);
       const typingSince = new Date(now.getTime() - TYPING_MS).toISOString();
@@ -280,12 +289,18 @@ export async function POST(request: Request) {
     };
 
     /** Grava a mensagem no assunto e avisa quem foi mencionado. */
-    async function post(topic: Topic, channel: Channel, text: string, attachments: ChatAttachment[], replyToId: number | null) {
+    async function post(topic: Topic, channel: Channel, text: string, attachments: ChatAttachment[], replyToId: number | null, skipDuplicates = true) {
       let reply = replyToId;
       if (reply) {
         const [target] = await db.select({ topicId: chatMessages.topicId }).from(chatMessages).where(eq(chatMessages.id, reply)).limit(1);
         if (target?.topicId !== topic.id) reply = null;
       }
+      // Envio repetido (dois cliques, Enter duas vezes, internet lenta): a mesma mensagem da mesma pessoa,
+      // na mesma conversa, em poucos segundos, não é gravada de novo.
+      const attachmentsJson = JSON.stringify(attachments);
+      const [last] = await db.select({ id: chatMessages.id, body: chatMessages.body, attachments: chatMessages.attachments, replyToId: chatMessages.replyToId, createdAt: chatMessages.createdAt })
+        .from(chatMessages).where(and(eq(chatMessages.topicId, topic.id), eq(chatMessages.memberId, member!.id))).orderBy(desc(chatMessages.id)).limit(1);
+      if (skipDuplicates && last && last.body === text && last.attachments === attachmentsJson && (last.replyToId ?? null) === reply && Date.parse(now) - Date.parse(last.createdAt) < DUPLICATE_WINDOW_MS) return last.id;
       const [message] = await db.insert(chatMessages).values({ channelId: channel.id, topicId: topic.id, memberId: member!.id, authorName: member!.name, body: text, attachments: JSON.stringify(attachments), replyToId: reply, createdAt: now }).returning({ id: chatMessages.id });
       await db.batch([
         db.update(chatChannels).set({ lastMessageAt: now }).where(eq(chatChannels.id, channel.id)),
@@ -299,6 +314,22 @@ export async function POST(request: Request) {
       if (mentioned.length) {
         const where = channel.kind === "dm" ? "na conversa direta" : `em #${channel.name}`;
         await db.insert(notifications).values(mentioned.map((id) => ({ memberId: id, kind: "chat_mention" as const, actorName: member!.name, body: `${where}: ${snippet(text, 100)}`.slice(0, 140), createdAt: now }))).catch((error) => console.error("chat notification failed", error));
+      }
+      // Conversa direta: a outra pessoa recebe aviso no sino (com som, aviso na tela e no celular).
+      // Várias mensagens seguidas da mesma pessoa viram um aviso só, com o texto da última.
+      if (channel.kind === "dm") {
+        const preview = (text ? snippet(text, 110) : attachments.length > 1 ? `📷 ${attachments.length} imagens` : "📷 Imagem").slice(0, 140);
+        const since = new Date(Date.parse(now) - DM_NOTIFY_GROUP_MS).toISOString();
+        for (const id of dmMembers(channel.dmKey).filter((person) => person !== member!.id && !mentioned.includes(person))) {
+          try {
+            const [open] = await db.select({ id: notifications.id }).from(notifications)
+              .where(and(eq(notifications.memberId, id), eq(notifications.kind, "chat_message"), eq(notifications.actorName, member!.name), isNull(notifications.readAt), gt(notifications.createdAt, since))).limit(1);
+            if (open) await db.update(notifications).set({ body: preview }).where(eq(notifications.id, open.id));
+            else await db.insert(notifications).values({ memberId: id, kind: "chat_message", actorName: member!.name, body: preview, createdAt: now });
+          } catch (error) {
+            console.error("chat dm notification failed", error);
+          }
+        }
       }
       return message.id;
     }
@@ -327,7 +358,7 @@ export async function POST(request: Request) {
       const closesAt = pollClosesAt(body.duration, new Date(now));
       if (closesAt === undefined) return json({ error: "Escolha até quando a enquete fica aberta." }, 400);
       const [poll] = await db.insert(polls).values({ question, options: JSON.stringify(options), multiple: body.multiple === true, anonymous: body.anonymous === true, channelId: found.channel.id, createdById: member.id, createdByName: member.name, closesAt, createdAt: now }).returning({ id: polls.id });
-      const id = await post(found.topic, found.channel, `📊 Enquete: ${question}`, [], null);
+      const id = await post(found.topic, found.channel, `📊 Enquete: ${question}`, [], null, false);
       await db.update(chatMessages).set({ pollId: poll.id }).where(eq(chatMessages.id, id));
       return json({ id }, 201);
     }

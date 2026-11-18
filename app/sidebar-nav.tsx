@@ -31,7 +31,8 @@ export function useNavCounts(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     const first = window.setTimeout(() => { void load(); }, 800);
-    const interval = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60000);
+    // A cada 15 s: o número de mensagens não lidas do chat aparece logo.
+    const interval = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 15000);
     const refresh = () => { void load(); };
     window.addEventListener(TICKETS_CHANGED, refresh);
     window.addEventListener(CHAT_CHANGED, refresh);

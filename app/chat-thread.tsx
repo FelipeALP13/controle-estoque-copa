@@ -290,6 +290,7 @@ export function Composer({ people, placeholder, onSend, onTyping, pending, setPe
   const ref = inputRef ?? ownRef;
   const fileRef = useRef<HTMLInputElement>(null);
   const lastTyping = useRef(0);
+  const sending = useRef(false);
 
   async function addFiles(files: File[]) {
     const images = files.filter((file) => file.type.startsWith("image/")).slice(0, MAX_ATTACHMENTS - pending.length);
@@ -308,13 +309,21 @@ export function Composer({ people, placeholder, onSend, onTyping, pending, setPe
   async function submit(gif: Gif | null = null) {
     const body = text.trim();
     if (!gif && ((!body && !pending.length) || uploading)) return;
+    // Um envio por vez: com a internet lenta, Enter de novo ou clique em "Enviar" não duplica a mensagem.
+    if (sending.current) return;
+    sending.current = true;
     setError("");
+    // O campo esvazia na hora; se o envio falhar, o texto volta.
+    const files = pending;
+    if (!gif) { setText(""); setPending(() => []); }
+    setPopover(null);
     try {
-      await onSend(gif ? "" : body, gif ? [] : pending, gif);
-      if (!gif) { setText(""); setPending(() => []); }
-      setPopover(null);
+      await onSend(gif ? "" : body, gif ? [] : files, gif);
     } catch (err) {
+      if (!gif) { setText((current) => current || body); setPending((current) => (current.length ? current : files)); }
       setError(err instanceof Error ? err.message : "Não foi possível enviar.");
+    } finally {
+      sending.current = false;
     }
   }
   async function schedule(at: string) {
@@ -384,6 +393,8 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const [showScheduled, setShowScheduled] = useState(false);
   const [pollModal, setPollModal] = useState(false);
   const [error, setError] = useState("");
+  // Mensagens que acabaram de sair do campo e ainda estão a caminho do servidor (aparecem na hora, "enviando").
+  const [outbox, setOutbox] = useState<{ key: number; body: string; images: number }[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottom = useRef(true);
@@ -430,7 +441,28 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
     if (!box) return;
     if (keepOffset.current !== null) { box.scrollTop = box.scrollHeight - keepOffset.current; keepOffset.current = null; return; }
     if (stickToBottom.current) box.scrollTop = box.scrollHeight;
-  }, [messages, typing.length]);
+  }, [messages, typing.length, outbox.length]);
+
+  // Abrir a conversa já na última mensagem: imagens que terminam de carregar depois aumentam a altura,
+  // então a lista continua colada no fim enquanto a pessoa não rolar para cima.
+  useEffect(() => {
+    const box = listRef.current;
+    if (!box) return;
+    const onScroll = () => { stickToBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 160; };
+    const onLoad = () => { if (stickToBottom.current) box.scrollTop = box.scrollHeight; };
+    box.addEventListener("scroll", onScroll, { passive: true });
+    box.addEventListener("load", onLoad, true);
+    return () => { box.removeEventListener("scroll", onScroll); box.removeEventListener("load", onLoad, true); };
+  }, []);
+
+  // Ao abrir a conversa, o cursor já fica no campo de escrever (no computador; no celular não abre o teclado sozinho).
+  useEffect(() => {
+    if (!loaded || channel?.archived) return;
+    stickToBottom.current = true;
+    const box = listRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
+    if (window.matchMedia("(pointer: fine)").matches) inputRef.current?.focus({ preventScroll: true });
+  }, [loaded, topicId, channel?.archived]);
 
   async function loadOlder() {
     const first = messages[0]?.id;
@@ -569,6 +601,14 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
           </div>
         </Fragment>;
       })}
+      {outbox.length > 0 && <div className="cv-post-group mine cv-outbox">
+        <div className="cv-post-stack">
+          {outbox.map((item) => <div key={item.key} className="cv-post-line sending">
+            {item.body ? <div className="cv-text"><Markdown text={item.body} people={people} /></div> : <p className="cv-text"><em>{item.images > 1 ? `${item.images} imagens` : "Imagem"}</em></p>}
+            <time className="cv-meta">Enviando…</time>
+          </div>)}
+        </div>
+      </div>}
       {typing.length > 0 && <p className="cv-typing"><span className="dots"><i /><i /><i /></span> {typingText(typing)}</p>}
     </div>
 
@@ -587,7 +627,22 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
         onSend={async (body, files, gif) => {
           const reply = replyTo;
           setReplyTo(null); setNewSince(null);
-          await act({ action: "send", topicId, body, replyToId: reply?.id ?? null, attachments: gif ? [{ kind: "gif", url: gif.url, width: gif.width, height: gif.height }] : files.map((file) => ({ kind: "upload", key: file.key })) });
+          // Aparece na hora como "Enviando…"; some quando a mensagem de verdade chega do servidor.
+          const key = Date.now() + Math.random();
+          const drop = () => setOutbox((current) => current.filter((item) => item.key !== key));
+          stickToBottom.current = true;
+          setOutbox((current) => [...current, { key, body, images: gif ? 1 : files.length }]);
+          try {
+            // A falha volta para o campo de mensagem (o texto não se perde).
+            await call("/api/chat", { action: "send", topicId, body, replyToId: reply?.id ?? null, attachments: gif ? [{ kind: "gif", url: gif.url, width: gif.width, height: gif.height }] : files.map((file) => ({ kind: "upload", key: file.key })) });
+          } catch (err) {
+            drop();
+            setReplyTo(reply);
+            throw err;
+          }
+          // O campo já está livre para a próxima mensagem; a lista atualiza em seguida.
+          void load().finally(drop);
+          onChanged?.();
         }} />
     </div>}
     <DropHint />

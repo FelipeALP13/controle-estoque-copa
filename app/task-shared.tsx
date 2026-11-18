@@ -225,7 +225,8 @@ export function MentionTextarea({ value, onChange, members, onSubmit, placeholde
         // Atalhos de quem usa o campo (ex.: seta para cima edita a última mensagem no chat).
         if (onKey?.(event)) return;
         // No chat, Enter envia e Shift + Enter quebra a linha; nos comentários, Ctrl + Enter envia.
-        if (event.key === "Enter" && (enterSends ? !event.shiftKey : event.ctrlKey || event.metaKey)) { event.preventDefault(); onSubmit(); }
+        // (isComposing: Enter que só confirma acento/sugestão do teclado não envia; repeat: tecla segurada não envia de novo.)
+        if (event.key === "Enter" && (enterSends ? !event.shiftKey : event.ctrlKey || event.metaKey)) { event.preventDefault(); if (!event.nativeEvent.isComposing && !event.repeat) onSubmit(); }
       }} />
     {suggestions.length > 0 && <ul className="mention-menu" role="listbox" aria-label="Mencionar">
       {suggestions.map((member, index) => <li key={member.id} role="option" aria-selected={index === active}>

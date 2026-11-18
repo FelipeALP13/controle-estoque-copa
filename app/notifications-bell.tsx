@@ -47,7 +47,7 @@ type DueTask = { id: number; title: string; dueDate: string };
 type Data = { items: Item[]; unread: number; due: DueTask[] };
 
 
-const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star, task_unblocked: Unlock, handoff: Repeat, celebration: PartyPopper, system_down: ServerCrash, system_up: ServerCog, onboarding: Sprout, review_open: ClipboardCheck, review_reminder: ClipboardCheck, goal_update: Target, one_on_one: Handshake, dev_action: Handshake, pulse_open: Smile, announcement: Megaphone, incident: Siren, asset_expiring: Laptop, chat_mention: MessagesSquare, chat_reminder: AlarmClock, stock_low: PackageMinus, copa_request: HandPlatter, kudos: Award, poll: Vote, maintenance: Wrench, security_alert: ShieldAlert } as const;
+const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star, task_unblocked: Unlock, handoff: Repeat, celebration: PartyPopper, system_down: ServerCrash, system_up: ServerCog, onboarding: Sprout, review_open: ClipboardCheck, review_reminder: ClipboardCheck, goal_update: Target, one_on_one: Handshake, dev_action: Handshake, pulse_open: Smile, announcement: Megaphone, incident: Siren, asset_expiring: Laptop, chat_mention: MessagesSquare, chat_message: MessageSquare, chat_reminder: AlarmClock, stock_low: PackageMinus, copa_request: HandPlatter, kudos: Award, poll: Vote, maintenance: Wrench, security_alert: ShieldAlert } as const;
 
 function subject(item: Item) {
   if (item.ticketId) return `${ticketCode(item.ticketId)} · ${item.ticketTitle ?? "Chamado"}`;
@@ -65,7 +65,7 @@ function subject(item: Item) {
   if (item.kind === "announcement") return "Mural de avisos";
   if (item.kind === "incident") return "Incidentes";
   if (item.kind === "asset_expiring") return "Equipamentos e licenças";
-  if (item.kind === "chat_mention" || item.kind === "chat_reminder") return "Chat";
+  if (item.kind === "chat_mention" || item.kind === "chat_message" || item.kind === "chat_reminder") return "Chat";
   if (item.kind === "stock_low") return "Estoque da Copa";
   if (item.kind === "copa_request") return "Pedidos da Copa";
   if (item.kind === "kudos") return "Elogios";
@@ -158,7 +158,7 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
     else if (item.kind === "announcement") onOpenView("hub");
     else if (item.kind === "incident") onOpenView("incidents");
     else if (item.kind === "asset_expiring") onOpenView("assets");
-    else if (item.kind === "chat_mention" || item.kind === "chat_reminder") onOpenView("chat");
+    else if (item.kind === "chat_mention" || item.kind === "chat_message" || item.kind === "chat_reminder") onOpenView("chat");
     else if (item.kind === "stock_low") onOpenView("stock");
     else if (item.kind === "copa_request") onOpenView("requests");
     else if (item.kind === "kudos") onOpenView("hub");

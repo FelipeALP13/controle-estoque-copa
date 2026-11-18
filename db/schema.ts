@@ -490,7 +490,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_reminder", "stock_low", "copa_request", "kudos", "poll", "maintenance", "security_alert"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_message", "chat_reminder", "stock_low", "copa_request", "kudos", "poll", "maintenance", "security_alert"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),

@@ -83,6 +83,9 @@ function deployConfig() {
     workers_dev: true,
     // Um endereço só: sem links extras de prévia por versão.
     preview_urls: false,
+    // Smart Placement: o Portal roda perto do banco (cada tela faz várias consultas seguidas),
+    // em vez de atravessar o continente a cada consulta. Incluído no plano gratuito.
+    placement: { mode: "smart" },
   };
   if (config.customDomain) deploy.routes = [{ pattern: config.customDomain, custom_domain: true }];
   writeFileSync(DEPLOY, JSON.stringify(deploy));
