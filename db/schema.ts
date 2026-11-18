@@ -71,6 +71,11 @@ export const members = sqliteTable("members", {
   birthday: text("birthday"),
   /** Data de entrada na empresa (AAAA-MM-DD), para o tempo de casa. */
   startedOn: text("started_on"),
+  // Verificação em duas etapas: segredo do aplicativo autenticador (criptografado) e quando foi ligada.
+  totpSecret: text("totp_secret"),
+  totpEnabledAt: text("totp_enabled_at"),
+  // Códigos de recuperação (JSON com os resumos SHA-256; cada um vale uma vez).
+  totpRecovery: text("totp_recovery").notNull().default("[]"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -379,7 +384,11 @@ export const tickets = sqliteTable("tickets", {
   rating: integer("rating"),
   ratingComment: text("rating_comment").notNull().default(""),
   ratedAt: text("rated_at"),
-}, (table) => [uniqueIndex("tickets_jira_key_unique").on(table.jiraConnectionId, table.externalKey)]);
+  // Quem deu a nota: "client" (cliente, pelo link de avaliação) ou "" (quem abriu, na equipe).
+  ratedBy: text("rated_by").notNull().default(""),
+  // Código do link de avaliação enviado ao cliente (criado quando alguém pede o link).
+  surveyToken: text("survey_token"),
+}, (table) => [uniqueIndex("tickets_jira_key_unique").on(table.jiraConnectionId, table.externalKey), uniqueIndex("tickets_survey_token_unique").on(table.surveyToken)]);
 
 /** Agenda pessoal: anotações com horário e reuniões (com convidados da equipe). */
 export const agendaEvents = sqliteTable("agenda_events", {
@@ -479,7 +488,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_reminder", "stock_low", "copa_request"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_reminder", "stock_low", "copa_request", "kudos", "poll", "maintenance", "security_alert"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),
@@ -487,6 +496,8 @@ export const notifications = sqliteTable("notifications", {
   body: text("body").notNull().default(""),
   readAt: text("read_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  // Quando o aviso foi mandado para o celular (null = ainda não).
+  pushedAt: text("pushed_at"),
 });
 
 export const auditLogs = sqliteTable("audit_logs", {
@@ -912,6 +923,8 @@ export const chatMessages = sqliteTable("chat_messages", {
   // Fixada no topo da conversa.
   pinnedAt: text("pinned_at"),
   pinnedByName: text("pinned_by_name"),
+  // Enquete publicada nesta mensagem.
+  pollId: integer("poll_id"),
   createdAt: text("created_at").notNull(),
 }, (table) => [index("chat_messages_channel_idx").on(table.channelId, table.id), index("chat_messages_topic_idx").on(table.topicId, table.id)]);
 
@@ -970,7 +983,8 @@ export const chatTopics = sqliteTable("chat_topics", {
 export const integrationKeys = sqliteTable("integration_keys", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
-  kind: text("kind", { enum: ["atendechat"] }).notNull().default("atendechat"),
+  // "atendechat" (agente N1) ou "export" (leitura dos dados pelo Power BI/Excel).
+  kind: text("kind", { enum: ["atendechat", "export"] }).notNull().default("atendechat"),
   keyHash: text("key_hash").notNull(),
   keyPrefix: text("key_prefix").notNull(),
   // Time que recebe os chamados abertos pela integração.
@@ -1010,3 +1024,128 @@ export const chatTopicReads = sqliteTable("chat_topic_reads", {
   memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   lastReadId: integer("last_read_id").notNull().default(0),
 }, (table) => [primaryKey({ columns: [table.topicId, table.memberId] })]);
+
+/** Entregas (marcos) de um projeto, mostradas como losangos na linha do tempo. */
+export const projectMilestones = sqliteTable("project_milestones", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  date: text("date").notNull(),
+  done: integer("done", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("project_milestones_project_idx").on(table.projectId, table.date)]);
+
+/** Dependência entre projetos: o projeto (projectId) só começa depois que o outro (dependsOnId) terminar. */
+export const projectDependencies = sqliteTable("project_dependencies", {
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  dependsOnId: integer("depends_on_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.projectId, table.dependsOnId] })]);
+
+/** Enquete rápida no chat (channelId) ou no mural (channelId null). Opções em JSON. */
+export const polls = sqliteTable("polls", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  question: text("question").notNull(),
+  options: text("options").notNull().default("[]"),
+  multiple: integer("multiple", { mode: "boolean" }).notNull().default(false),
+  anonymous: integer("anonymous", { mode: "boolean" }).notNull().default(false),
+  channelId: integer("channel_id").references(() => chatChannels.id, { onDelete: "cascade" }),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  closesAt: text("closes_at"),
+  closedAt: text("closed_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("polls_channel_idx").on(table.channelId, table.createdAt)]);
+
+export const pollVotes = sqliteTable("poll_votes", {
+  pollId: integer("poll_id").notNull().references(() => polls.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  option: integer("option").notNull(),
+}, (table) => [primaryKey({ columns: [table.pollId, table.memberId, table.option] })]);
+
+/** Elogio público a um colega: aparece no mural, no perfil e na avaliação. */
+export const kudos = sqliteTable("kudos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fromId: integer("from_id").references(() => members.id, { onDelete: "set null" }),
+  fromName: text("from_name").notNull().default("Equipe"),
+  toId: integer("to_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  value: text("value").notNull().default(""),
+  message: text("message").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("kudos_to_idx").on(table.toId, table.createdAt), index("kudos_created_idx").on(table.createdAt)]);
+
+/** Mensagem do chat escrita agora para sair depois ("segunda às 9h"). */
+export const chatScheduled = sqliteTable("chat_scheduled", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  channelId: integer("channel_id").notNull().references(() => chatChannels.id, { onDelete: "cascade" }),
+  topicId: integer("topic_id").references(() => chatTopics.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  sendAt: text("send_at").notNull(),
+  sentAt: text("sent_at"),
+  messageId: integer("message_id"),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("chat_scheduled_due_idx").on(table.sentAt, table.sendAt), index("chat_scheduled_member_idx").on(table.memberId)]);
+
+/** Pedido de manutenção do escritório ("ar-condicionado pingando"), com acompanhamento. */
+export const maintenanceRequests = sqliteTable("maintenance_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  location: text("location").notNull().default(""),
+  category: text("category").notNull().default("other"),
+  priority: text("priority", { enum: ["low", "normal", "high", "urgent"] }).notNull().default("normal"),
+  status: text("status", { enum: ["open", "in_progress", "waiting", "done", "canceled"] }).notNull().default("open"),
+  createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default("Equipe"),
+  assigneeId: integer("assignee_id").references(() => members.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  resolvedAt: text("resolved_at"),
+}, (table) => [index("maintenance_status_idx").on(table.status, table.createdAt)]);
+
+export const maintenanceUpdates = sqliteTable("maintenance_updates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  requestId: integer("request_id").notNull().references(() => maintenanceRequests.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  byName: text("by_name").notNull().default("Equipe"),
+  at: text("at").notNull(),
+}, (table) => [index("maintenance_updates_request_idx").on(table.requestId)]);
+
+/** Aparelhos que recebem avisos no celular/computador (Web Push). */
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  device: text("device").notNull().default(""),
+  failCount: integer("fail_count").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  lastOkAt: text("last_ok_at"),
+}, (table) => [uniqueIndex("push_subscriptions_endpoint_unique").on(table.endpoint), index("push_subscriptions_member_idx").on(table.memberId)]);
+
+/** Segunda etapa do login: depois da senha certa, falta o código do celular (vale 5 minutos). */
+export const loginChallenges = sqliteTable("login_challenges", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("login_challenges_token_unique").on(table.tokenHash)]);
+
+/** Lugares (país/cidade + navegador) de onde cada pessoa já entrou, para avisar de acesso de um lugar novo. */
+export const loginPlaces = sqliteTable("login_places", {
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  place: text("place").notNull(),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.memberId, table.place] })]);
+
+/** Resumo automático (IA) de um chamado, guardado para não gerar de novo sem necessidade. */
+export const ticketSummaries = sqliteTable("ticket_summaries", {
+  ticketId: integer("ticket_id").primaryKey().references(() => tickets.id, { onDelete: "cascade" }),
+  summary: text("summary").notNull(),
+  // Quantos registros (comentários e mudanças) o chamado tinha quando o resumo foi feito.
+  basedOn: integer("based_on").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});

@@ -20,6 +20,9 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Segunda etapa: depois da senha certa, o código do aplicativo autenticador.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState("");
 
   useEffect(() => {
     fetch("/api/auth", { cache: "no-store" })
@@ -43,10 +46,19 @@ export default function LoginScreen() {
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: setupRequired ? "setup" : "login", name, email, username, password }),
+        body: JSON.stringify(challenge ? { action: "login2fa", challenge, code } : { action: setupRequired ? "setup" : "login", name, email, username, password }),
       });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error || "Não foi possível entrar.");
+      const data = await response.json() as { error?: string; twoFactor?: boolean; challenge?: string; restart?: boolean };
+      if (!response.ok) {
+        if (data.restart) { setChallenge(null); setCode(""); setPassword(""); }
+        throw new Error(data.error || "Não foi possível entrar.");
+      }
+      if (data.twoFactor && data.challenge) {
+        setChallenge(data.challenge);
+        setPassword("");
+        setLoading(false);
+        return;
+      }
       router.push("/painel");
       router.refresh();
     } catch (reason) {
@@ -76,10 +88,15 @@ export default function LoginScreen() {
             <label><span>Nome completo</span><input autoFocus required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Felipe Almeida" /></label>
             <label><span>E-mail</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@empresa.com" /></label>
           </>}
+          {challenge ? <>
+            <label><span>Código do aplicativo autenticador</span><div className="login-input"><LockKeyhole /><input autoFocus required inputMode="numeric" autoComplete="one-time-code" maxLength={11} value={code} onChange={(event) => setCode(event.target.value)} placeholder="6 números (ou um código de recuperação)" /></div></label>
+            <p className="login-2fa-hint">Abra o aplicativo (Google Authenticator, Microsoft Authenticator…) e digite o código do Portal. Perdeu o celular? Use um dos códigos de recuperação.</p>
+          </> : <>
           <label><span>Usuário</span><div className="login-input"><UserRound /><input autoFocus={!setupRequired} required autoCapitalize="none" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Ex.: felipe" /></div></label>
           <label><span>Senha</span><div className="login-input"><LockKeyhole /><input required minLength={setupRequired ? 8 : 1} type={showPassword ? "text" : "password"} autoComplete={setupRequired ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={setupRequired ? "8+ caracteres, letras e números" : "Digite sua senha"} /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
+          </>}
           {error && <p className="login-error">{error}</p>}
-          <button className="login-submit" disabled={loading || setupRequired === null}>{loading ? "Aguarde..." : setupRequired === null ? "Verificando..." : setupRequired ? "Criar acesso e entrar" : "Entrar"}<span>→</span></button>
+          <button className="login-submit" disabled={loading || setupRequired === null}>{loading ? "Aguarde..." : setupRequired === null ? "Verificando..." : setupRequired ? "Criar acesso e entrar" : challenge ? "Confirmar código" : "Entrar"}<span>→</span></button>
           <small className="login-note">As senhas são protegidas e nunca aparecem para outros usuários.</small>
         </form>
       </section>

@@ -1,6 +1,9 @@
 import { and, desc, eq, gt, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { absences, chatChannels, chatMessages, chatPresence, chatReactions, chatReminders, chatTopicReads, chatTopics, members, notifications, tasks, teamMembers, teams } from "../../../db/schema";
+import { absences, chatChannels, chatMessages, chatPresence, chatReactions, chatReminders, chatScheduled, chatTopicReads, chatTopics, members, notifications, polls, tasks, teamMembers, teams } from "../../../db/schema";
+import { loadPolls } from "../../poll-store";
+import { deliverScheduled, MAX_SCHEDULED_PER_MEMBER, scheduleError } from "../../chat-scheduled";
+import { cleanPollOptions, MAX_POLL_QUESTION, pollClosesAt, pollError } from "../../wall-tools";
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { readJsonBody } from "../../api-input";
@@ -53,18 +56,20 @@ const previewText = (row: { body: string; attachments: string }) => {
   return files.some((file) => file.kind === "gif" || file.key.endsWith(".gif")) ? "GIF" : files.length ? "Imagem" : "";
 };
 
-async function messagesOf(db: Db, topicId: number, meId: number, before: number | null) {
+async function messagesOf(db: Db, topicId: number, meId: number, before: number | null, isAdmin = false) {
   const rows = await db.select().from(chatMessages).where(before ? and(eq(chatMessages.topicId, topicId), lt(chatMessages.id, before)) : eq(chatMessages.topicId, topicId)).orderBy(desc(chatMessages.id)).limit(PAGE);
   rows.reverse();
   const ids = rows.map((row) => row.id);
   const replyIds = [...new Set(rows.map((row) => row.replyToId).filter((id): id is number => Boolean(id)))];
   const taskIds = [...new Set(rows.map((row) => row.taskId).filter((id): id is number => Boolean(id)))];
-  const [reactions, replies, people, linked, reminders] = await Promise.all([
+  const pollIds = [...new Set(rows.map((row) => row.pollId).filter((id): id is number => Boolean(id)))];
+  const [reactions, replies, people, linked, reminders, pollViews] = await Promise.all([
     ids.length ? db.select().from(chatReactions).where(inArray(chatReactions.messageId, ids)) : Promise.resolve([]),
     replyIds.length ? db.select({ id: chatMessages.id, authorName: chatMessages.authorName, body: chatMessages.body, attachments: chatMessages.attachments, deleted: chatMessages.deleted }).from(chatMessages).where(inArray(chatMessages.id, replyIds)) : Promise.resolve([]),
     db.select({ id: members.id, name: members.name }).from(members),
     taskIds.length ? db.select({ id: tasks.id, title: tasks.title, status: tasks.status }).from(tasks).where(inArray(tasks.id, taskIds)) : Promise.resolve([]),
     ids.length ? db.select({ messageId: chatReminders.messageId, remindAt: chatReminders.remindAt }).from(chatReminders).where(and(eq(chatReminders.memberId, meId), inArray(chatReminders.messageId, ids), sql`${chatReminders.firedAt} is null`)) : Promise.resolve([]),
+    loadPolls(db, pollIds, meId, isAdmin).catch(() => []),
   ]);
   const nameOf = (id: number) => people.find((person) => person.id === id)?.name ?? "Alguém";
   return {
@@ -75,6 +80,7 @@ async function messagesOf(db: Db, topicId: number, meId: number, before: number 
         body: row.deleted ? "" : row.body,
         attachments: row.deleted ? [] : parseAttachments(row.attachments).map(viewAttachment),
         replyToId: row.replyToId,
+        poll: !row.deleted && row.pollId ? pollViews.find((poll) => poll.id === row.pollId) ?? null : null,
         pinned: !row.deleted && Boolean(row.pinnedAt),
         task: (() => { const task = row.taskId ? linked.find((entry) => entry.id === row.taskId) : null; return task ? { id: task.id, code: taskCode(task.id), title: task.title, done: task.status === "done" || task.status === "canceled" } : null; })(),
         ...(() => { const at = reminders.find((entry) => entry.messageId === row.id)?.remindAt ?? null; return { reminderAt: at, reminderLabel: at ? untilText(at, new Date()) : null }; })(),
@@ -138,7 +144,9 @@ export async function GET(request: Request) {
       if (!topic || !channel) return json({ error: "Conversa não encontrada." }, 404);
       if (!canSee(channel, member.id)) return json({ error: "Esta conversa é privada." }, 403);
       const before = Number(params.get("before")) || null;
-      const result = await messagesOf(db, topic.id, member.id, before);
+      // Mensagens agendadas que já passaram da hora saem agora (de qualquer pessoa).
+      if (!before) await deliverScheduled(db, now).catch((error) => console.error("scheduled delivery failed", error));
+      const result = await messagesOf(db, topic.id, member.id, before, member.role === "admin");
       const lastId = result.messages[result.messages.length - 1]?.id ?? 0;
       const [read] = await db.select({ lastReadId: chatTopicReads.lastReadId }).from(chatTopicReads).where(and(eq(chatTopicReads.topicId, topic.id), eq(chatTopicReads.memberId, member.id))).limit(1);
       if (!before && lastId) {
@@ -159,6 +167,8 @@ export async function GET(request: Request) {
         })(),
         lastReadId: read?.lastReadId ?? 0,
         typing: typing.map((row) => row.name),
+        scheduled: (await db.select({ id: chatScheduled.id, body: chatScheduled.body, sendAt: chatScheduled.sendAt }).from(chatScheduled)
+          .where(and(eq(chatScheduled.memberId, member.id), eq(chatScheduled.channelId, channel.id), sql`${chatScheduled.sentAt} is null`)).orderBy(chatScheduled.sendAt).catch(() => [])),
         pinned: (await db.select({ id: chatMessages.id, authorName: chatMessages.authorName, body: chatMessages.body, attachments: chatMessages.attachments, pinnedAt: chatMessages.pinnedAt, pinnedByName: chatMessages.pinnedByName })
           .from(chatMessages).where(and(eq(chatMessages.topicId, topic.id), isNotNull(chatMessages.pinnedAt), eq(chatMessages.deleted, false))).orderBy(desc(chatMessages.pinnedAt)).limit(MAX_PINS))
           .map((row) => ({ id: row.id, authorName: row.authorName, text: previewText(row), pinnedAt: row.pinnedAt, pinnedByName: row.pinnedByName })),
@@ -211,6 +221,7 @@ export async function GET(request: Request) {
       return status ? { ...status, untilLabel: status.until ? untilText(status.until, now) : null } : null;
     };
     await touchPresence(db, member.id, stamp);
+    await deliverScheduled(db, now).catch((error) => console.error("scheduled delivery failed", error));
     const visible = channels.filter((channel) => canSee(channel, member.id));
     const visibleIds = visible.map((channel) => channel.id);
     const nameOf = (id: number) => people.find((person) => person.id === id)?.name ?? "Pessoa";
@@ -301,6 +312,44 @@ export async function POST(request: Request) {
       if (!text && !attachments.length) return json({ error: "Escreva a mensagem ou envie uma imagem." }, 400);
       const id = await post(found.topic, found.channel, text, attachments, Number(body.replyToId) || null);
       return json({ id }, 201);
+    }
+
+    // Enquete na conversa: vira uma mensagem com os botões de voto.
+    if (action === "createPoll") {
+      const found = await topicFor(body.topicId);
+      if (!found) return json({ error: "Conversa não encontrada." }, 404);
+      if (found.channel.archived) return json({ error: "Este canal foi arquivado." }, 400);
+      if (member.role === "viewer") return json({ error: "Seu perfil pode apenas visualizar." }, 403);
+      const question = String(body.question ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_POLL_QUESTION);
+      const options = cleanPollOptions(body.options);
+      const pollProblem = pollError(question, options);
+      if (pollProblem) return json({ error: pollProblem }, 400);
+      const closesAt = pollClosesAt(body.duration, new Date(now));
+      if (closesAt === undefined) return json({ error: "Escolha até quando a enquete fica aberta." }, 400);
+      const [poll] = await db.insert(polls).values({ question, options: JSON.stringify(options), multiple: body.multiple === true, anonymous: body.anonymous === true, channelId: found.channel.id, createdById: member.id, createdByName: member.name, closesAt, createdAt: now }).returning({ id: polls.id });
+      const id = await post(found.topic, found.channel, `📊 Enquete: ${question}`, [], null);
+      await db.update(chatMessages).set({ pollId: poll.id }).where(eq(chatMessages.id, id));
+      return json({ id }, 201);
+    }
+
+    // Mensagem agendada: escreve agora, sai na hora marcada.
+    if (action === "schedule") {
+      const found = await topicFor(body.topicId);
+      if (!found) return json({ error: "Conversa não encontrada." }, 404);
+      if (found.channel.archived) return json({ error: "Este canal foi arquivado." }, 400);
+      const text = cleanMultiline(body.body, MAX_MESSAGE);
+      if (!text) return json({ error: "Escreva a mensagem antes de agendar." }, 400);
+      const problem = scheduleError(body.at, new Date(now));
+      if (problem) return json({ error: problem }, 400);
+      const mine = await db.select({ id: chatScheduled.id }).from(chatScheduled).where(and(eq(chatScheduled.memberId, member.id), sql`${chatScheduled.sentAt} is null`));
+      if (mine.length >= MAX_SCHEDULED_PER_MEMBER) return json({ error: `Você já tem ${MAX_SCHEDULED_PER_MEMBER} mensagens agendadas. Envie ou cancele alguma antes.` }, 400);
+      const [created] = await db.insert(chatScheduled).values({ memberId: member.id, channelId: found.channel.id, topicId: found.topic.id, body: text, sendAt: new Date(String(body.at)).toISOString(), createdAt: now }).returning({ id: chatScheduled.id });
+      return json({ id: created.id }, 201);
+    }
+
+    if (action === "cancelScheduled") {
+      const removed = await db.delete(chatScheduled).where(and(eq(chatScheduled.id, Number(body.scheduledId)), eq(chatScheduled.memberId, member.id), sql`${chatScheduled.sentAt} is null`)).returning({ id: chatScheduled.id });
+      return removed.length ? json({ ok: true }) : json({ error: "Esta mensagem já foi enviada ou não existe mais." }, 404);
     }
 
     // "Fulano está digitando…": vale por alguns segundos (a tela manda de novo enquanto a pessoa digita).

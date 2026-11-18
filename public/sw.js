@@ -13,13 +13,26 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(fetch(event.request).catch(() => new Response(OFFLINE_PAGE, { headers: { "Content-Type": "text/html; charset=utf-8" } })));
 });
 
+// Aviso no celular com o Portal fechado: o push chega sem conteúdo e o texto é buscado aqui, já logado.
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let note = { title: "Portal da Equipe", body: "Você tem avisos novos. Abra o Portal para ver.", url: "/painel", tag: "portal" };
+    try {
+      const response = await fetch("/api/push?latest=1", { credentials: "include", cache: "no-store" });
+      if (response.ok) note = { ...note, ...(await response.json()) };
+    } catch { /* sem internet: mostra o texto padrão */ }
+    await self.registration.showNotification(note.title, { body: note.body, tag: note.tag, icon: "/icon-192.png", badge: "/icon-192.png", data: { url: note.url } });
+  })());
+});
+
 // Clique no aviso do sistema: volta para o Portal aberto (ou abre um).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/painel";
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
     if (open) return open.focus();
-    return self.clients.openWindow("/painel");
+    return self.clients.openWindow(target.startsWith("/") ? target : "/painel");
   })());
 });

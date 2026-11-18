@@ -8,6 +8,8 @@ import { marketCategories, marketUnits } from "./inventory-standards";
 import { parseMovementDate } from "./movement-policy";
 import { TeamChip } from "./tasks-view";
 import SessionsPanel from "./sessions-panel";
+import TwoFactorPanel from "./two-factor-panel";
+import PushPanel from "./push-panel";
 import { addDays, findOverlappingWeek, generateRotation, normalizeTeamMembers, supportTeamColorLabels, supportTeamColors, weekRangeError, type SupportTeamColor } from "./support-schedule";
 import Trash2 from "lucide-react/icons/trash-2";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
@@ -247,6 +249,8 @@ export function Modal({ state, items, schedule, currentUser, saving, onClose, on
           </>}
           <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : "Mínimo de 8 caracteres, com letras e números."}</small></label></div></div>
           <ThemePicker />
+          <PushPanel />
+          <TwoFactorPanel />
           <SessionsPanel />
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>
         </> : state.kind === "member" ? memberTab === "general" ? <>

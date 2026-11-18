@@ -1,4 +1,5 @@
 "use client";
+import { PersonKudos } from "./team-wall";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Building2 from "lucide-react/icons/building-2";
@@ -230,13 +231,14 @@ function ResultsTab() {
     {loadError && <div className="alert error"><span>{loadError}</span></div>}
     {!current ? <div className="loading-list"><span /></div> : groups.map((group) => group.rows.length > 0 && <section key={group.title} className="client-section">
       <header><h3>{group.title}</h3></header>
-      <div className="result-grid">{group.rows.map((row) => <ResultCard key={row.target} row={row} minAnswers={current.minAnswers} />)}</div>
+      <div className="result-grid">{group.rows.map((row) => <ResultCard key={row.target} row={row} minAnswers={current.minAnswers} cycle={closed.find((cycle) => cycle.id === selected) ?? null} />)}</div>
     </section>)}
   </div>;
 }
 
-function ResultCard({ row, minAnswers }: { row: Result; minAnswers: number }) {
+function ResultCard({ row, minAnswers, cycle }: { row: Result; minAnswers: number; cycle: Cycle | null }) {
   const [open, setOpen] = useState(false);
+  const person = /^member:(\d+)$/.exec(row.target);
   const notes = row.notes ?? [];
   const total = row.comments.length + notes.reduce((sum, group) => sum + group.comments.length, 0);
   return <article className="result-card">
@@ -250,6 +252,7 @@ function ResultCard({ row, minAnswers }: { row: Result; minAnswers: number }) {
         {row.comments.length > 0 && <section><h4>Comentário geral</h4><ul className="result-comments">{row.comments.map((comment, index) => <li key={index}>“{comment}”</li>)}</ul></section>}
       </div>}
     </>}
+    {person && cycle && <PersonKudos memberId={Number(person[1])} from={cycle.startDate} to={cycle.endDate} suffix=" no período" />}
   </article>;
 }
 

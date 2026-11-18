@@ -14,6 +14,12 @@ export const auditGroupLabels: Record<AuditGroup, string> = {
 
 const actions: Record<string, { label: string; group: AuditGroup; sensitive?: boolean }> = {
   login: { label: "Entrou no sistema", group: "access" },
+  login_new_place: { label: "Entrou de um lugar novo", group: "access", sensitive: true },
+  totp_enabled: { label: "Ligou a verificação em duas etapas", group: "access" },
+  totp_disabled: { label: "Desligou a verificação em duas etapas", group: "access", sensitive: true },
+  totp_reset_by_admin: { label: "Desligou a verificação em duas etapas de outra pessoa", group: "access", sensitive: true },
+  ai_key_saved: { label: "Mudou a chave da IA (Claude)", group: "integration", sensitive: true },
+  kudos_deleted: { label: "Apagou o elogio de outra pessoa", group: "people" },
   system_password_viewed: { label: "Viu a senha de um sistema de cliente", group: "access", sensitive: true },
   system_password_copied: { label: "Copiou a senha de um sistema de cliente", group: "access", sensitive: true },
   system_saved: { label: "Cadastrou ou editou um acesso de sistema", group: "access", sensitive: true },

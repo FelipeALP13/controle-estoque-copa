@@ -5,6 +5,7 @@ import { MyTasksPanel } from "./tasks-view";
 import { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import NoticeBoard from "./notice-board";
+import TeamWall from "./team-wall";
 import CelebrationsCard from "./celebrations-card";
 import { OnboardingCard, useOnboardings } from "./onboarding-view";
 import { shoppingList } from "./stock-forecast";
@@ -77,6 +78,7 @@ export function HubView({ onOpenReviews, onOpenPulse, items, movements, schedule
     <HubPulse enabled={Boolean(currentUser?.active)} onOpen={onOpenPulse} />
 
     <NoticeBoard />
+    <TeamWall />
 
     <HubAgenda events={agenda} today={today} onOpen={onOpenAgenda} />
 

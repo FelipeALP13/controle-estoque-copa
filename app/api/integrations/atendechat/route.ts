@@ -35,7 +35,7 @@ async function authenticate(db: Db, request: Request): Promise<Key | null> {
   const key = bearerKey(request.headers.get("Authorization"));
   if (!key) return null;
   const hash = await hashIntegrationKey(key);
-  const [row] = await db.select().from(integrationKeys).where(and(eq(integrationKeys.keyHash, hash), isNull(integrationKeys.revokedAt))).limit(1);
+  const [row] = await db.select().from(integrationKeys).where(and(eq(integrationKeys.keyHash, hash), eq(integrationKeys.kind, "atendechat"), isNull(integrationKeys.revokedAt))).limit(1);
   if (!row) return null;
   const now = new Date();
   if (!row.lastUsedAt || now.getTime() - Date.parse(row.lastUsedAt) > 60000) {

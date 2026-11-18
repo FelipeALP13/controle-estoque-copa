@@ -7,7 +7,7 @@ import KeyRound from "lucide-react/icons/key-round";
 import Plus from "lucide-react/icons/plus";
 import X from "lucide-react/icons/x";
 
-type Key = { id: number; name: string; prefix: string; teamId: number | null; teamName: string | null; kbTag: string; createdByName: string; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; articles: number };
+type Key = { id: number; name: string; kind?: string; prefix: string; teamId: number | null; teamName: string | null; kbTag: string; createdByName: string; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; articles: number };
 type Team = { id: number; name: string };
 
 const when = (value: string | null) => value ? new Date(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "nunca";
@@ -34,7 +34,7 @@ export function IntegrationsPanel() {
       const response = await fetch("/api/integrations/keys", { cache: "no-store" });
       const data = await response.json() as { keys?: Key[]; teams?: Team[]; error?: string };
       if (!response.ok || !data.keys) throw new Error(data.error || "Não foi possível carregar as integrações.");
-      setKeys(data.keys);
+      setKeys(data.keys.filter((key) => (key.kind ?? "atendechat") === "atendechat"));
       setTeams(data.teams ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar as integrações.");

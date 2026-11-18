@@ -14,6 +14,7 @@ import { dueStages, isoToLocal, occurrences, reminderKey, reminderText, START_GR
 import { syncDue } from "./jira-sync";
 import { recurringTasksJob } from "./task-recurrence-job";
 import { isTicketLate, ticketCode } from "./tickets";
+import { deliverScheduled } from "./chat-scheduled";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -194,7 +195,7 @@ export async function peopleJob(db: Db, now: Date) {
 /** Uma rodada completa. Cada parte é independente: o erro de uma não impede as outras. */
 export async function runJobs(db: Db, options: { now?: Date; includeJira?: boolean } = {}) {
   const now = options.now ?? new Date();
-  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; monitor: unknown; reviews: unknown; people: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, monitor: null, reviews: null, people: null, errors: [] };
+  const result: { jira: { name: string; created: number; updated: number; comments: number; error: string | null }[]; late: unknown; agenda: unknown; recurring: unknown; celebrations: unknown; monitor: unknown; reviews: unknown; people: unknown; scheduled: unknown; errors: string[] } = { jira: [], late: null, agenda: null, recurring: null, celebrations: null, monitor: null, reviews: null, people: null, scheduled: null, errors: [] };
   if (options.includeJira !== false) {
     try {
       result.jira = (await syncDue(db, false, now)).map((entry) => ({ name: entry.name, created: entry.created, updated: entry.updated, comments: entry.comments, error: entry.error }));
@@ -208,6 +209,7 @@ export async function runJobs(db: Db, options: { now?: Date; includeJira?: boole
   try { result.celebrations = await celebrationsJob(db, now); } catch (error) { result.errors.push(`Comemorações: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.reviews = await reviewsJob(db, now); } catch (error) { result.errors.push(`Avaliações: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.people = await peopleJob(db, now); } catch (error) { result.errors.push(`Pessoas: ${error instanceof Error ? error.message : "erro"}`); }
+  try { result.scheduled = await deliverScheduled(db, now); } catch (error) { result.errors.push(`Mensagens agendadas: ${error instanceof Error ? error.message : "erro"}`); }
   try { result.monitor = await monitorJob(db, now); } catch (error) { result.errors.push(`Monitor: ${error instanceof Error ? error.message : "erro"}`); }
   return result;
 }

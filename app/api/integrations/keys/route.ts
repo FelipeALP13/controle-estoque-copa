@@ -41,7 +41,7 @@ export async function GET() {
     ]);
     return json({
       keys: keys.map((key) => ({
-        id: key.id, name: key.name, prefix: key.keyPrefix, teamId: key.teamId, kbTag: key.kbTag,
+        id: key.id, name: key.name, kind: key.kind, prefix: key.keyPrefix, teamId: key.teamId, kbTag: key.kbTag,
         teamName: teamRows.find((team) => team.id === key.teamId)?.name ?? null,
         createdByName: key.createdByName, createdAt: key.createdAt, lastUsedAt: key.lastUsedAt, revokedAt: key.revokedAt,
         // Quantos artigos o N1 consegue ler com esta etiqueta.
@@ -76,17 +76,18 @@ export async function POST(request: Request) {
     if (action === "createKey") {
       const name = String(body.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
       if (!name) return json({ error: "Dê um nome para a chave (ex.: AtendeChat produção)." }, 400);
-      const { teamId, error } = await teamFor(body.teamId);
+      const kind = body.kind === "export" ? "export" as const : "atendechat" as const;
+      const { teamId, error } = kind === "export" ? { teamId: null, error: null } : await teamFor(body.teamId);
       if (error) return json({ error }, 400);
-      if (!teamId) return json({ error: "Escolha o time que recebe os chamados abertos pelo N1." }, 400);
+      if (kind === "atendechat" && !teamId) return json({ error: "Escolha o time que recebe os chamados abertos pelo N1." }, 400);
       const active = (await db.select({ id: integrationKeys.id, revokedAt: integrationKeys.revokedAt }).from(integrationKeys)).filter((key) => !key.revokedAt);
       if (active.length >= MAX_ACTIVE_KEYS) return json({ error: `Já existem ${MAX_ACTIVE_KEYS} chaves ativas. Revogue alguma antes.` }, 409);
       const key = generateIntegrationKey();
       const [created] = await db.insert(integrationKeys).values({
-        name, kind: "atendechat", keyHash: await hashIntegrationKey(key), keyPrefix: keyPrefix(key),
+        name, kind, keyHash: await hashIntegrationKey(key), keyPrefix: keyPrefix(key),
         teamId, kbTag: normalizeKbTag(body.kbTag), createdByName: member.name, createdAt: now,
       }).returning({ id: integrationKeys.id });
-      await audit("integration_key_created", created.id, name);
+      await audit("integration_key_created", created.id, kind === "export" ? `${name} (leitura de dados)` : name);
       // Única vez em que a chave sai do servidor.
       return json({ id: created.id, key }, 201);
     }
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
       const [current] = await db.select().from(integrationKeys).where(eq(integrationKeys.id, id)).limit(1);
       if (!current) return json({ error: "Chave não encontrada." }, 404);
       if (current.revokedAt) return json({ error: "Chave revogada não pode ser alterada." }, 409);
+      if (current.kind !== "atendechat") return json({ error: "Esta chave não tem o que ajustar." }, 400);
       const { teamId, error } = await teamFor(body.teamId);
       if (error) return json({ error }, 400);
       if (!teamId) return json({ error: "Escolha o time que recebe os chamados abertos pelo N1." }, 400);

@@ -29,12 +29,13 @@ export type MemberPermissions = {
   viewPlanning: boolean;
   viewHistory: boolean;
   manageSchedule: boolean;
+  manageOffice: boolean;
 };
 
 export const permissionPresets: Record<MemberRole, MemberPermissions> = {
-  admin: { manageItems: true, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: true, viewPlanning: true, viewHistory: true, manageSchedule: true },
-  member: { manageItems: false, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: false, viewPlanning: true, viewHistory: true, manageSchedule: false },
-  viewer: { manageItems: false, registerPurchases: false, openItems: false, consumeItems: false, adjustStock: false, viewPlanning: true, viewHistory: true, manageSchedule: false },
+  admin: { manageItems: true, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: true, viewPlanning: true, viewHistory: true, manageSchedule: true, manageOffice: true },
+  member: { manageItems: false, registerPurchases: true, openItems: true, consumeItems: true, adjustStock: false, viewPlanning: true, viewHistory: true, manageSchedule: false, manageOffice: false },
+  viewer: { manageItems: false, registerPurchases: false, openItems: false, consumeItems: false, adjustStock: false, viewPlanning: true, viewHistory: true, manageSchedule: false, manageOffice: false },
 };
 
 export const permissionOptions: { key: keyof MemberPermissions; label: string; description: string }[] = [
@@ -46,6 +47,7 @@ export const permissionOptions: { key: keyof MemberPermissions; label: string; d
   { key: "viewPlanning", label: "Ver planejamento", description: "Consultar duração e previsão de compras" },
   { key: "viewHistory", label: "Ver histórico", description: "Consultar movimentações da equipe" },
   { key: "manageSchedule", label: "Editar escala", description: "Alterar equipes e semanas de atendimento" },
+  { key: "manageOffice", label: "Cuidar da manutenção", description: "Atender os pedidos de manutenção do escritório" },
 ];
 
 export type Member = {

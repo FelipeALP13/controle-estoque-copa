@@ -1,6 +1,8 @@
 "use client";
 
 import { endMemberSessions } from "./sessions-panel";
+import { resetMemberTwoFactor } from "./two-factor-panel";
+import ShieldOff from "lucide-react/icons/shield-off";
 import LogOut from "lucide-react/icons/log-out";
 import Pencil from "lucide-react/icons/pencil";
 import Trash2 from "lucide-react/icons/trash-2";
@@ -32,7 +34,10 @@ export function TeamView({ members, currentUser, saving, onAddMember, onEditMemb
             <div className="member-actions"><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={async () => {
               if (!window.confirm(`Desconectar ${member.name} de todos os aparelhos? A pessoa vai precisar entrar de novo com a senha.`)) return;
               try { const ended = await endMemberSessions(member.id); window.alert(ended ? `${member.name} foi desconectado(a) de ${ended} ${ended === 1 ? "aparelho" : "aparelhos"}.` : `${member.name} não estava conectado(a) em nenhum aparelho.`); } catch (err) { window.alert(err instanceof Error ? err.message : "Não foi possível desconectar."); }
-            }} aria-label={`Desconectar ${member.name} de todos os aparelhos`} title="Desconectar de todos os aparelhos"><LogOut size={15} /></button><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button><button className="member-delete" disabled={member.userId === currentUser?.userId} onClick={() => onDeleteMember(member)} aria-label={`Excluir ${member.name}`} title="Excluir membro"><Trash2 size={15} /></button></div>
+            }} aria-label={`Desconectar ${member.name} de todos os aparelhos`} title="Desconectar de todos os aparelhos"><LogOut size={15} /></button><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={async () => {
+              if (!window.confirm(`Desligar a verificação em duas etapas de ${member.name}? Use só se a pessoa perdeu o celular e os códigos de recuperação. Ela entra só com a senha até ligar de novo.`)) return;
+              try { await resetMemberTwoFactor(member.id); window.alert(`Verificação em duas etapas de ${member.name} desligada. A pessoa foi avisada.`); } catch (err) { window.alert(err instanceof Error ? err.message : "Não foi possível desligar."); }
+            }} aria-label={`Desligar a verificação em duas etapas de ${member.name}`} title="Desligar a verificação em duas etapas (perdeu o celular)"><ShieldOff size={15} /></button><button className="member-edit" disabled={member.userId === currentUser?.userId} onClick={() => onEditMember(member)} aria-label={`Editar ${member.name}`} title={member.userId === currentUser?.userId ? "Use Meu perfil" : "Editar membro"}><Pencil size={15} /></button><button className="member-delete" disabled={member.userId === currentUser?.userId} onClick={() => onDeleteMember(member)} aria-label={`Excluir ${member.name}`} title="Excluir membro"><Trash2 size={15} /></button></div>
           </div>)}
         </div>
         <p className="team-access-note">O usuário e a senha dão acesso ao sistema. As permissões são verificadas novamente pelo servidor em cada operação.</p>

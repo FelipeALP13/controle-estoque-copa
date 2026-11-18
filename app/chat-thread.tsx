@@ -4,6 +4,9 @@
 // formatação, emojis, GIFs e anexos.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import AlarmClock from "lucide-react/icons/alarm-clock";
+import CalendarClock from "lucide-react/icons/calendar-clock";
+import Vote from "lucide-react/icons/vote";
+import { PollCard, PollModal, type PollItem } from "./team-wall";
 import ArrowLeft from "lucide-react/icons/arrow-left";
 import Hash from "lucide-react/icons/hash";
 import ImagePlus from "lucide-react/icons/image-plus";
@@ -34,7 +37,20 @@ export type Person = { id: number; name: string; jobTitle?: string; avatarIcon: 
 export type Reaction = { emoji: string; count: number; mine: boolean; names: string[] };
 export type Me = { id: number; isAdmin: boolean; canCreateTasks?: boolean; status?: Status | null };
 type Attachment = { url: string; gif: boolean; width: number; height: number };
-type Message = { id: number; memberId: number | null; authorName: string; createdAt: string; editedAt: string | null; deleted: boolean; body: string; attachments: Attachment[]; replyToId: number | null; reply: { authorName: string; body: string } | null; reactions: Reaction[]; pinned: boolean; task: { id: number; code: string; title: string; done: boolean } | null; reminderAt: string | null; reminderLabel: string | null };
+type Message = { id: number; memberId: number | null; authorName: string; createdAt: string; editedAt: string | null; deleted: boolean; body: string; attachments: Attachment[]; replyToId: number | null; reply: { authorName: string; body: string } | null; reactions: Reaction[]; pinned: boolean; task: { id: number; code: string; title: string; done: boolean } | null; reminderAt: string | null; reminderLabel: string | null; poll?: PollItem | null };
+type Scheduled = { id: number; body: string; sendAt: string };
+
+/** Menu "Agendar envio": atalhos (daqui a 1 h, amanhã 9h, segunda 9h) ou dia e hora escolhidos. */
+function ScheduleMenu({ onPick, onClose }: { onPick: (at: string) => void; onClose: () => void }) {
+  const [custom, setCustom] = useState("");
+  const presets = reminderPresets(new Date()).filter((preset) => !preset.label.startsWith("Em 20"));
+  return <div className="cv-popover cv-schedule" role="dialog" aria-label="Agendar envio">
+    <p>Enviar a mensagem…</p>
+    {presets.map((preset) => <button key={preset.label} type="button" onClick={() => onPick(preset.at)}>{preset.label.replace(/^Em /, "Daqui a ")}</button>)}
+    <label><span>Outro dia e hora</span><input type="datetime-local" value={custom} onChange={(event) => setCustom(event.target.value)} /></label>
+    <div className="cv-schedule-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button type="button" className="primary-button" disabled={!localInputToIso(custom)} onClick={() => { const at = localInputToIso(custom); if (at) onPick(at); }}>Agendar</button></div>
+  </div>;
+}
 export type ChannelInfo = { id: number; kind: "channel" | "dm"; name: string; description: string; archived: boolean; peerId: number | null; canManage: boolean };
 type Gif = { id: string; title: string; url: string; preview: string; width: number; height: number };
 export type Pending = { key: string; url: string };
@@ -261,12 +277,13 @@ export function GifPicker({ onPick, onClose }: { onPick: (gif: Gif) => void; onC
 }
 
 /** Campo de mensagem: texto com @menção, anexos (clipe, colar, arrastar), emoji, GIF e enviar. */
-export function Composer({ people, placeholder, onSend, onTyping, pending, setPending, compact, inputRef, onArrowUp, extra, submitLabel = "Enviar" }: {
+export function Composer({ people, placeholder, onSend, onTyping, pending, setPending, compact, inputRef, onArrowUp, extra, submitLabel = "Enviar", onPoll, onSchedule }: {
   people: Person[]; placeholder: string; onSend: (body: string, files: Pending[], gif: Gif | null) => Promise<void>; onTyping?: () => void;
   pending: Pending[]; setPending: (update: (current: Pending[]) => Pending[]) => void; compact?: boolean; inputRef?: React.RefObject<HTMLTextAreaElement | null>; onArrowUp?: () => boolean; extra?: React.ReactNode; submitLabel?: string;
+  onPoll?: () => void; onSchedule?: (body: string, at: string) => Promise<void>;
 }) {
   const [text, setText] = useState("");
-  const [popover, setPopover] = useState<"emoji" | "gif" | null>(null);
+  const [popover, setPopover] = useState<"emoji" | "gif" | "schedule" | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const ownRef = useRef<HTMLTextAreaElement>(null);
@@ -300,6 +317,12 @@ export function Composer({ people, placeholder, onSend, onTyping, pending, setPe
       setError(err instanceof Error ? err.message : "Não foi possível enviar.");
     }
   }
+  async function schedule(at: string) {
+    const body = text.trim();
+    if (!body || !onSchedule) return;
+    setError("");
+    try { await onSchedule(body, at); setText(""); setPopover(null); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível agendar."); }
+  }
   function insertEmoji(emoji: string) {
     const input = ref.current;
     const start = input?.selectionStart ?? text.length;
@@ -326,8 +349,11 @@ export function Composer({ people, placeholder, onSend, onTyping, pending, setPe
       <button className="cv-icon-button" onClick={() => fileRef.current?.click()} disabled={pending.length >= MAX_ATTACHMENTS} aria-label="Anexar imagem ou GIF" title="Anexar imagem ou GIF (também dá para colar ou arrastar)"><Paperclip size={17} /></button>
       <button className={`cv-icon-button ${popover === "emoji" ? "active" : ""}`} onClick={() => setPopover(popover === "emoji" ? null : "emoji")} aria-label="Emojis" title="Emojis"><Smile size={17} /></button>
       <button className={`cv-icon-button ${popover === "gif" ? "active" : ""}`} onClick={() => setPopover(popover === "gif" ? null : "gif")} aria-label="GIFs" title="GIFs"><b className="gif-badge">GIF</b></button>
+      {onPoll && <button className="cv-icon-button" onClick={onPoll} aria-label="Criar enquete" title="Criar enquete"><Vote size={17} /></button>}
       {!compact && <span className="cv-compose-hint">Enter envia · Shift + Enter quebra a linha</span>}
+      {onSchedule && <button className={`cv-icon-button ${popover === "schedule" ? "active" : ""}`} onClick={() => setPopover(popover === "schedule" ? null : "schedule")} disabled={!text.trim() || pending.length > 0} aria-label="Agendar envio" title={pending.length ? "Mensagens com imagem não podem ser agendadas" : "Agendar envio (escreva a mensagem primeiro)"}><CalendarClock size={17} /></button>}
       <button className="cv-send" onClick={() => void submit()} disabled={(!text.trim() && !pending.length) || uploading}><SendHorizontal size={16} /> {submitLabel}</button>
+      {popover === "schedule" && <ScheduleMenu onClose={() => setPopover(null)} onPick={(at) => void schedule(at)} />}
       {popover === "emoji" && <EmojiPicker className="composer" onClose={() => setPopover(null)} onPick={insertEmoji} />}
       {popover === "gif" && <GifPicker onClose={() => setPopover(null)} onPick={(gif) => void submit(gif)} />}
     </div>
@@ -354,6 +380,9 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const [reactingTo, setReactingTo] = useState<number | null>(null);
   const [reminding, setReminding] = useState<{ id: number; presets: { label: string; at: string }[] } | null>(null);
   const [makingTask, setMakingTask] = useState<Message | null>(null);
+  const [scheduled, setScheduled] = useState<Scheduled[]>([]);
+  const [showScheduled, setShowScheduled] = useState(false);
+  const [pollModal, setPollModal] = useState(false);
   const [error, setError] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -373,7 +402,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/chat?topic=${topicId}`, { cache: "no-store" });
-      const json = await response.json() as { messages: Message[]; hasMore: boolean; lastReadId: number; typing: string[]; channel: ChannelInfo; pinned?: PinnedMessage[]; error?: string };
+      const json = await response.json() as { messages: Message[]; hasMore: boolean; lastReadId: number; typing: string[]; channel: ChannelInfo; pinned?: PinnedMessage[]; scheduled?: Scheduled[]; error?: string };
       if (!response.ok) throw new Error(json.error || "Não foi possível carregar as mensagens.");
       const box = listRef.current;
       stickToBottom.current = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 160;
@@ -381,6 +410,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
       setChannel(json.channel);
       setTyping(json.typing ?? []);
       setPinned(json.pinned ?? []);
+      setScheduled(json.scheduled ?? []);
       if (!loaded) { setHasMore(json.hasMore); setNewSince(json.lastReadId || null); setLoaded(true); }
       const newest = json.messages[json.messages.length - 1]?.id ?? 0;
       if (newest > lastSeen.current) { lastSeen.current = newest; window.dispatchEvent(new Event(CHAT_CHANGED)); onChanged?.(); }
@@ -507,6 +537,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
                       onSubmit={() => void act({ action: "edit", messageId: message.id, body: editing.text.trim() }).then(() => setEditing(null))} />
                     <small>Enter salva · Esc cancela</small>
                   </div> : message.deleted ? <p className="cv-text"><em>Mensagem apagada</em></p> : message.body && <div className="cv-text"><Markdown text={message.body} people={people} /></div>}
+                  {message.poll && <PollCard poll={message.poll} compact onChanged={load} />}
                   {message.attachments.length > 0 && <div className="cv-attachments">{message.attachments.map((file) => <AttachmentImage key={file.url} file={file} />)}</div>}
                   {editing?.id !== message.id && <time className="cv-meta" title={new Date(message.createdAt).toLocaleString("pt-BR")}>{message.pinned && <Pin size={10} aria-label="Fixada" />}{message.editedAt && !message.deleted ? "editada · " : ""}{isoToLocal(message.createdAt).time}</time>}
                   {!message.deleted && <Reactions reactions={message.reactions} onToggle={(emoji) => void act({ action: "react", messageId: message.id, emoji })} />}
@@ -545,7 +576,12 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
     {channel?.archived ? <p className="cv-archived">Este canal foi arquivado: dá para ler o histórico, mas não escrever.</p> : channel && <div className="cv-thread-compose">
       <Composer people={people} compact={compact} inputRef={inputRef} pending={pending} setPending={setPending}
         placeholder={`Mensagem para ${where}`}
-        extra={replyTo && <p className="cv-replying"><Reply size={14} /><span>Respondendo a <b>{replyTo.authorName}</b>: {replyTo.body ? replyTo.body.slice(0, 80) : "Imagem"}</span><button onClick={() => setReplyTo(null)} aria-label="Cancelar resposta"><X size={14} /></button></p>}
+        onPoll={me.canCreateTasks === false ? undefined : () => setPollModal(true)}
+        onSchedule={async (body, at) => { await call("/api/chat", { action: "schedule", topicId, body, at }); setShowScheduled(true); await load(); }}
+        extra={<>{scheduled.length > 0 && <div className="cv-scheduled">
+          <button type="button" className="cv-scheduled-toggle" onClick={() => setShowScheduled(!showScheduled)}><CalendarClock size={13} /> {scheduled.length} {scheduled.length === 1 ? "mensagem agendada" : "mensagens agendadas"} {showScheduled ? "▴" : "▾"}</button>
+          {showScheduled && <ul>{scheduled.map((item) => <li key={item.id}><span><b>{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(item.sendAt))}</b> {item.body.slice(0, 90)}</span><button type="button" onClick={() => { if (window.confirm("Cancelar o envio desta mensagem?")) void act({ action: "cancelScheduled", scheduledId: item.id }); }} aria-label="Cancelar envio" title="Cancelar envio"><X size={13} /></button></li>)}</ul>}
+        </div>}{replyTo && <p className="cv-replying"><Reply size={14} /><span>Respondendo a <b>{replyTo.authorName}</b>: {replyTo.body ? replyTo.body.slice(0, 80) : "Imagem"}</span><button onClick={() => setReplyTo(null)} aria-label="Cancelar resposta"><X size={14} /></button></p>}</>}
         onTyping={() => void call("/api/chat", { action: "typing", topicId }).catch(() => undefined)}
         onArrowUp={() => { const mine = [...messages].reverse().find((message) => message.memberId === me.id && !message.deleted && message.body); if (mine) { setEditing({ id: mine.id, text: mine.body }); return true; } return false; }}
         onSend={async (body, files, gif) => {
@@ -555,6 +591,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
         }} />
     </div>}
     <DropHint />
+    {pollModal && <PollModal where="nesta conversa" onClose={() => setPollModal(false)} onSave={async (payload) => { await call("/api/chat", { action: "createPoll", topicId, ...payload }); setPollModal(false); await load(); }} />}
     {makingTask && <TaskFromMessage message={makingTask} where={where} people={people} me={me} onClose={() => setMakingTask(null)} onDone={() => { setMakingTask(null); void load(); }} />}
   </div>;
 }

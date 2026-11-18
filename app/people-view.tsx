@@ -18,6 +18,7 @@ import OnboardingView from "./onboarding-view";
 import AssetsView from "./assets-view";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
+import { PersonKudos } from "./team-wall";
 
 export type Person = { id: number; name: string; email: string; role: "admin" | "member" | "viewer"; active: boolean; avatarIcon: string; avatarKey: string | null; jobTitle: string; phone: string; birthday?: string | null; startedOn?: string | null };
 
@@ -48,6 +49,12 @@ export default function PeopleView({ initialSearch = "", initialTab = "people" }
   const [search, setSearch] = useState(initialSearch);
   const [teamFilter, setTeamFilter] = useState("");
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+  const [kudosCounts, setKudosCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/wall?counts=1", { cache: "no-store" }).then(async (response) => { if (response.ok && !cancelled) setKudosCounts(((await response.json()) as { counts: Record<string, number> }).counts); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const [editingTeam, setEditingTeam] = useState<Team | "new" | null>(null);
 
   const load = useCallback(async () => {
@@ -117,6 +124,7 @@ export default function PeopleView({ initialSearch = "", initialTab = "people" }
               <a href={`mailto:${person.email}`}><Mail size={13} />{person.email}</a>
               {person.phone && <a href={`tel:${person.phone.replace(/[^\d+]/g, "")}`}><Phone size={13} />{person.phone}</a>}
             </div>
+            {kudosCounts[person.id] > 0 && <PersonKudos memberId={person.id} count={kudosCounts[person.id]} />}
             {(person.birthday || person.startedOn) && <p className="person-dates">{person.birthday && <span><Cake size={12} /> {birthdayLabel(person.birthday)}</span>}{person.startedOn && <span><BriefcaseBusiness size={12} /> {(() => { const years = yearsSince(person.startedOn, today); return years >= 1 ? `${years} ${years === 1 ? "ano" : "anos"} de casa` : "Chegou este ano"; })()}</span>}</p>}
           </article>;
         })}

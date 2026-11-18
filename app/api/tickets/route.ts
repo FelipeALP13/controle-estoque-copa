@@ -10,7 +10,7 @@ import { sendJiraComment, transitionJira } from "../../jira-sync";
 import { canHandleTicket, isTicketStatus, isTicketType, isTicketUrgency, requesterCanSetStatus, ticketCode, ticketStatusLabels, type TicketUrgency } from "../../tickets";
 import { readJsonBody } from "../../api-input";
 import { removeAttachmentsOf } from "../../attachments-store";
-import { canRate, isRating, MAX_RATING_COMMENT, RATING_LABELS, stars } from "../../ticket-rating";
+import { canRate, isRating, MAX_RATING_COMMENT, newSurveyToken, RATING_LABELS, stars, surveyUrl } from "../../ticket-rating";
 import { MAX_REPLY_BODY, MAX_REPLY_TITLE } from "../../team-tools";
 
 type Db = ReturnType<typeof getDb>;
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
       console.error("ticket replies load failed", error);
     }
 
-    return json({ tickets: ticketRows.map((ticket) => ({ ...ticket, commentCount: commentCount.get(ticket.id) ?? 0 })), members: memberRows, teams: teamRows, me: viewer, replies });
+    return json({ tickets: ticketRows.map((ticket) => ({ ...ticket, surveyToken: undefined, commentCount: commentCount.get(ticket.id) ?? 0 })), members: memberRows, teams: teamRows, me: viewer, replies });
   } catch (error) {
     return failure(error);
   }
@@ -184,6 +184,20 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
 
+    // Link para o cliente avaliar o atendimento (cria o código na primeira vez; depois devolve o mesmo).
+    if (action === "surveyLink") {
+      if (!current) return json({ error: "Chamado não encontrado." }, 404);
+      if (!viewer.isAdmin && !canHandleTicket(viewer, current.teamId) && current.assigneeId !== member.id) return json({ error: "Só quem atende o chamado gera o link de avaliação." }, 403);
+      let token = current.surveyToken;
+      if (!token) {
+        token = newSurveyToken();
+        await db.update(tickets).set({ surveyToken: token }).where(and(eq(tickets.id, current.id), sql`${tickets.surveyToken} IS NULL`));
+        const [saved] = await db.select({ surveyToken: tickets.surveyToken }).from(tickets).where(eq(tickets.id, current.id)).limit(1);
+        token = saved?.surveyToken ?? token;
+      }
+      return json({ url: surveyUrl(new URL(request.url).origin, token!) });
+    }
+
     if (action === "updateTicket") {
       if (!current) return json({ error: "Chamado não encontrado." }, 404);
       const handler = canHandleTicket(viewer, current.teamId);
@@ -204,7 +218,7 @@ export async function POST(request: Request) {
           const askRating = body.status === "resolved" && current.source === "portal" && current.requesterId && current.requesterId !== member.id;
           if (current.requesterId) alerts.push({ memberId: current.requesterId, kind: askRating ? "ticket_rate" : "ticket_status", body: askRating ? current.title.slice(0, 140) : label });
           // Reaberto: a avaliação anterior deixa de valer (avalia de novo quando resolver).
-          if (current.status === "resolved" && body.status !== "resolved") Object.assign(changes, { rating: null, ratingComment: "", ratedAt: null });
+          if (current.status === "resolved" && body.status !== "resolved") Object.assign(changes, { rating: null, ratingComment: "", ratedAt: null, ratedBy: "" });
           if (current.assigneeId) alerts.push({ memberId: current.assigneeId, kind: "ticket_status", body: label });
         }
       }

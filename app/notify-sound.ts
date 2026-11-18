@@ -61,8 +61,11 @@ export function playChime(strong = false, force = false) {
 }
 
 /** Aviso do sistema (fora do navegador), só se a pessoa permitiu e a aba não está à vista. */
+/** Este aparelho recebe avisos pelo push (aí o aviso da aba escondida seria repetido). */
+export const PUSH_ON_KEY = "portal.push.on";
 export function desktopNotify(title: string, body: string) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted" || document.visibilityState === "visible") return;
+  try { if (window.localStorage.getItem(PUSH_ON_KEY) === "1") return; } catch { /* sem armazenamento: mostra */ }
   const options = { body, tag: `portal-${title}-${body}`.slice(0, 120), icon: "/icon-192.png", badge: "/icon-192.png" };
   // No celular (e no app instalado) o aviso precisa sair pelo service worker.
   const viaWorker = "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().then((registration) => (registration ? registration.showNotification(title, options).then(() => true) : false)).catch(() => false) : Promise.resolve(false);

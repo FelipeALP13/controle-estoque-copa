@@ -1,7 +1,7 @@
 // Linha do tempo dos projetos (estilo Gantt): regras puras das posições das barras.
 
 const DAY = 86400000;
-const isDay = (value: string | null | undefined): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+export const isDay = (value: string | null | undefined): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 const time = (day: string) => Date.parse(`${day}T12:00:00Z`);
 const monthStart = (day: string) => `${day.slice(0, 7)}-01`;
 const addMonths = (day: string, months: number) => { const date = new Date(time(monthStart(day))); date.setUTCMonth(date.getUTCMonth() + months); return date.toISOString().slice(0, 10); };
@@ -29,7 +29,54 @@ export function timelineRange(projects: readonly TimelineProject[], today: strin
   return { from, to: end, months, todayLeft: ((time(today) - time(from)) / (time(end) - time(from))) * 100 };
 }
 
-/** Posição (em %) da barra de um projeto. null = sem previsão em data (não entra na linha do tempo). */
+/** Dia somado de n dias (AAAA-MM-DD). */
+export const shiftDay = (day: string, days: number) => new Date(time(day) + days * DAY).toISOString().slice(0, 10);
+
+/** Posição (em %) de um dia na linha do tempo. */
+export const dayLeft = (day: string, range: { from: string; to: string }) => ((time(day) - time(range.from)) / (time(range.to) - time(range.from))) * 100;
+
+/** Quantos dias cabem em 1% da largura (para converter o arraste do mouse em dias). */
+export const daysPerPercent = (range: { from: string; to: string }) => (time(range.to) - time(range.from)) / DAY / 100;
+
+/**
+ * Novas datas depois de arrastar a barra: "move" leva as duas juntas, "start"/"end" mexem só numa ponta.
+ * O início nunca passa do fim (a barra tem pelo menos 1 dia).
+ */
+export function dragDates(kind: "move" | "start" | "end", startDate: string, endDate: string, deltaDays: number) {
+  const delta = Math.round(deltaDays);
+  if (kind === "move") return { startDate: shiftDay(startDate, delta), endDate: shiftDay(endDate, delta) };
+  if (kind === "start") { const next = shiftDay(startDate, delta); return { startDate: next > endDate ? endDate : next, endDate }; }
+  const next = shiftDay(endDate, delta);
+  return { startDate, endDate: next < startDate ? startDate : next };
+}
+
+/** Início efetivo da barra (com o início presumido quando não foi informado). */
+export const effectiveStart = (project: { startDate: string | null; endForecast: string | null }) =>
+  isDay(project.startDate) ? project.startDate : isDay(project.endForecast) ? shiftDay(project.endForecast, -ASSUMED_DAYS) : null;
+
+/** Ligar "projectId depende de dependsOnId" criaria um ciclo (A depende de B que depende de A)? */
+export function wouldCreateCycle(edges: readonly { projectId: number; dependsOnId: number }[], projectId: number, dependsOnId: number) {
+  if (projectId === dependsOnId) return true;
+  // Procura um caminho de dependsOnId até projectId seguindo "depende de".
+  const seen = new Set<number>();
+  const stack = [dependsOnId];
+  while (stack.length) {
+    const current = stack.pop()!;
+    if (current === projectId) return true;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    for (const edge of edges) if (edge.projectId === current) stack.push(edge.dependsOnId);
+  }
+  return false;
+}
+
+/** A dependência está em conflito: o projeto começa antes de o outro terminar. */
+export function dependencyConflict(project: { startDate: string | null; endForecast: string | null }, dependsOn: { endForecast: string | null }) {
+  const start = effectiveStart(project);
+  return Boolean(start && isDay(dependsOn.endForecast) && start <= dependsOn.endForecast);
+}
+
+/** Posição (em %) de uma barra de um projeto. null = sem previsão em data (não entra na linha do tempo). */
 export function barFor(project: TimelineProject, range: { from: string; to: string }, today: string) {
   if (!isDay(project.endForecast)) return null;
   const assumed = !isDay(project.startDate);

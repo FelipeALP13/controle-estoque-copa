@@ -1,4 +1,4 @@
-export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late" | "agenda_reminder" | "agenda_invite" | "ticket_rate" | "task_unblocked" | "handoff" | "celebration" | "system_down" | "system_up" | "onboarding" | "review_open" | "review_reminder" | "goal_update" | "one_on_one" | "dev_action" | "pulse_open" | "announcement" | "incident" | "asset_expiring" | "chat_mention" | "chat_reminder" | "stock_low" | "copa_request";
+export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late" | "agenda_reminder" | "agenda_invite" | "ticket_rate" | "task_unblocked" | "handoff" | "celebration" | "system_down" | "system_up" | "onboarding" | "review_open" | "review_reminder" | "goal_update" | "one_on_one" | "dev_action" | "pulse_open" | "announcement" | "incident" | "asset_expiring" | "chat_mention" | "chat_reminder" | "stock_low" | "copa_request" | "kudos" | "poll" | "maintenance" | "security_alert";
 
 type Person = { id: number; name: string };
 
@@ -87,6 +87,9 @@ export function notificationText(kind: NotificationKind, actorName: string, body
   if (kind === "chat_mention") return `${actorName} mencionou você ${body}`;
   if (kind === "chat_reminder") return `Lembrete: mensagem de ${actorName} ${body}`;
   if (kind === "announcement") return `${actorName} publicou um aviso: ${body}`;
+  if (kind === "kudos") return `${actorName} elogiou você: ${body}`;
+  if (kind === "poll") return `${actorName} abriu uma enquete: ${body}`;
+  if (kind === "maintenance" || kind === "security_alert") return body;
   if (kind === "pulse_open" || kind === "incident" || kind === "asset_expiring" || kind === "stock_low" || kind === "copa_request") return body;
   if (kind === "ticket_rate") return `${actorName} resolveu o seu chamado. Como foi o atendimento?`;
   return `${actorName} comentou`;

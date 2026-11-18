@@ -9,6 +9,7 @@ export type MemberPermissions = {
   viewPlanning: boolean;
   viewHistory: boolean;
   manageSchedule: boolean;
+  manageOffice: boolean;
 };
 
 const allPermissions: MemberPermissions = {
@@ -20,6 +21,7 @@ const allPermissions: MemberPermissions = {
   viewPlanning: true,
   viewHistory: true,
   manageSchedule: true,
+  manageOffice: true,
 };
 
 const memberPermissions: MemberPermissions = {
@@ -31,6 +33,7 @@ const memberPermissions: MemberPermissions = {
   viewPlanning: true,
   viewHistory: true,
   manageSchedule: false,
+  manageOffice: false,
 };
 
 const viewerPermissions: MemberPermissions = {
@@ -42,6 +45,7 @@ const viewerPermissions: MemberPermissions = {
   viewPlanning: true,
   viewHistory: true,
   manageSchedule: false,
+  manageOffice: false,
 };
 
 /** Administradores têm acesso total; os demais partem do perfil e aplicam o que foi salvo. */

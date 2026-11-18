@@ -5,6 +5,7 @@ import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
 import { addDays } from "../../support-schedule";
 import { readJsonBody } from "../../api-input";
+import { flushPush } from "../../web-push";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -16,11 +17,13 @@ function todayInSaoPaulo() {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = getDb();
     const member = await getSessionMember(db);
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
+    // Quem está com o Portal aberto "puxa" o envio dos avisos novos para o celular de toda a equipe.
+    await flushPush(db, new URL(request.url).origin).catch((error) => console.error("push flush failed", error));
 
     const tomorrow = addDays(todayInSaoPaulo(), 1);
     const [items, [unread], due] = await Promise.all([

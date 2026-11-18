@@ -8,6 +8,8 @@ import ShieldAlert from "lucide-react/icons/shield-alert";
 import { auditGroupLabels, type AuditGroup } from "./audit-labels";
 import { downloadXlsx, type SheetData } from "./xlsx-writer";
 import { IntegrationsPanel } from "./integrations-panel";
+import ExportPanel from "./export-panel";
+import { AiSettingsPanel } from "./ai-panels";
 
 type Entry = { id: number; actorName: string; action: string; label: string; group: AuditGroup; sensitive: boolean; targetType: string; targetId: string | null; details: string; createdAt: string };
 
@@ -111,6 +113,8 @@ export default function AdminView() {
     </section>
 
     <IntegrationsPanel />
+    <ExportPanel />
+    <AiSettingsPanel />
 
     <section className="report-card">
       <div className="report-card-head report-card-toolbar">

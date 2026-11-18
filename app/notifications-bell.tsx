@@ -32,6 +32,10 @@ import { notificationText, type NotificationKind } from "./notifications";
 import AlarmClock from "lucide-react/icons/alarm-clock";
 import PackageMinus from "lucide-react/icons/package-minus";
 import HandPlatter from "lucide-react/icons/hand-platter";
+import Award from "lucide-react/icons/award";
+import Vote from "lucide-react/icons/vote";
+import Wrench from "lucide-react/icons/wrench";
+import ShieldAlert from "lucide-react/icons/shield-alert";
 import { dueState, taskCode } from "./tasks";
 import { ticketCode } from "./tickets";
 import LifeBuoy from "lucide-react/icons/life-buoy";
@@ -43,7 +47,7 @@ type DueTask = { id: number; title: string; dueDate: string };
 type Data = { items: Item[]; unread: number; due: DueTask[] };
 
 
-const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star, task_unblocked: Unlock, handoff: Repeat, celebration: PartyPopper, system_down: ServerCrash, system_up: ServerCog, onboarding: Sprout, review_open: ClipboardCheck, review_reminder: ClipboardCheck, goal_update: Target, one_on_one: Handshake, dev_action: Handshake, pulse_open: Smile, announcement: Megaphone, incident: Siren, asset_expiring: Laptop, chat_mention: MessagesSquare, chat_reminder: AlarmClock, stock_low: PackageMinus, copa_request: HandPlatter } as const;
+const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star, task_unblocked: Unlock, handoff: Repeat, celebration: PartyPopper, system_down: ServerCrash, system_up: ServerCog, onboarding: Sprout, review_open: ClipboardCheck, review_reminder: ClipboardCheck, goal_update: Target, one_on_one: Handshake, dev_action: Handshake, pulse_open: Smile, announcement: Megaphone, incident: Siren, asset_expiring: Laptop, chat_mention: MessagesSquare, chat_reminder: AlarmClock, stock_low: PackageMinus, copa_request: HandPlatter, kudos: Award, poll: Vote, maintenance: Wrench, security_alert: ShieldAlert } as const;
 
 function subject(item: Item) {
   if (item.ticketId) return `${ticketCode(item.ticketId)} · ${item.ticketTitle ?? "Chamado"}`;
@@ -64,6 +68,10 @@ function subject(item: Item) {
   if (item.kind === "chat_mention" || item.kind === "chat_reminder") return "Chat";
   if (item.kind === "stock_low") return "Estoque da Copa";
   if (item.kind === "copa_request") return "Pedidos da Copa";
+  if (item.kind === "kudos") return "Elogios";
+  if (item.kind === "poll") return "Enquete";
+  if (item.kind === "maintenance") return "Manutenção do escritório";
+  if (item.kind === "security_alert") return "Segurança";
   return "Item excluído";
 }
 
@@ -77,7 +85,7 @@ async function post(payload: Record<string, unknown>) {
   await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 }
 
-export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEvent, onOpenView }: { onOpenTask: (taskId: number) => void; onOpenTicket: (ticketId: number) => void; onOpenEvent: (eventId: number) => void; onOpenView: (view: "schedule" | "hub" | "clients" | "people" | "reviews" | "one_on_ones" | "pulse" | "incidents" | "assets" | "chat" | "stock" | "requests") => void }) {
+export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEvent, onOpenView }: { onOpenTask: (taskId: number) => void; onOpenTicket: (ticketId: number) => void; onOpenEvent: (eventId: number) => void; onOpenView: (view: "schedule" | "hub" | "clients" | "people" | "reviews" | "one_on_ones" | "pulse" | "incidents" | "assets" | "chat" | "stock" | "requests" | "maintenance" | "admin") => void }) {
   const [data, setData] = useState<Data>({ items: [], unread: 0, due: [] });
   const [open, setOpen] = useState(false);
   const [muted, setMutedState] = useState(false);
@@ -153,6 +161,10 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
     else if (item.kind === "chat_mention" || item.kind === "chat_reminder") onOpenView("chat");
     else if (item.kind === "stock_low") onOpenView("stock");
     else if (item.kind === "copa_request") onOpenView("requests");
+    else if (item.kind === "kudos") onOpenView("hub");
+    else if (item.kind === "poll") onOpenView(item.body.startsWith("#") ? "chat" : "hub");
+    else if (item.kind === "maintenance") onOpenView("maintenance");
+    else if (item.kind === "security_alert") onOpenView("admin");
   }
 
   async function markAll() {

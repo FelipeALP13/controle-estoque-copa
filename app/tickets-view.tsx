@@ -26,6 +26,7 @@ import { TICKETS_CHANGED } from "./use-jira-sync";
 import { relatedArticles, similarTickets, type SearchableArticle } from "./knowledge";
 import AttachmentsPanel from "./attachments-panel";
 import TicketRatingCard from "./ticket-rating-card";
+import { TicketAssistant } from "./ai-panels";
 import { canRate } from "./ticket-rating";
 import type { ArticleDraft } from "./knowledge-view";
 import { downloadXlsx } from "./xlsx-writer";
@@ -41,7 +42,7 @@ type Ticket = {
   teamId: number | null; requesterId: number | null; requesterName: string; assigneeId: number | null; taskId: number | null;
   firstResponseAt: string | null; resolvedAt: string | null; createdAt: string; updatedAt: string; commentCount: number;
   source: "portal" | "jira" | "atendechat"; externalKey: string | null; externalUrl: string | null; externalStatus: string | null;
-  rating: number | null; ratingComment: string; ratedAt: string | null;
+  rating: number | null; ratingComment: string; ratedAt: string | null; ratedBy: string;
 };
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null };
 type Team = { id: number; name: string; color: string };
@@ -58,7 +59,7 @@ type Scope = "queue" | "requested" | "assigned" | "all";
 
 async function post(payload: Record<string, unknown>) {
   const response = await fetch("/api/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  const data = await response.json() as { error?: string; ticket?: Ticket; task?: { id: number }; jiraWarning?: string | null };
+  const data = await response.json() as { error?: string; ticket?: Ticket; task?: { id: number }; jiraWarning?: string | null; url?: string };
   if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
   return data;
 }
@@ -480,7 +481,10 @@ function TicketDrawer({ ticket, data, onOpenTicket, onManageReplies, onClose, on
 
           {isActiveTicket(ticket.status) && <SimilarSuggestions title="Pode ajudar: base de conhecimento e chamados parecidos já resolvidos" articles={related} tickets={similar} onOpenArticle={onOpenArticle} onOpenTicket={onOpenTicket} />}
 
-          {ticket.status === "resolved" && <TicketRatingCard ticket={ticket} canRateNow={canRate(ticket, me.id)} onRate={async (rating, text) => { await post({ action: "rateTicket", ticketId: ticket.id, rating, comment: text }); await onReload(); }} />}
+          {events && <TicketAssistant key={ticket.id} ticketId={ticket.id} eventCount={events.length} canReply={Boolean(handler) && isActiveTicket(ticket.status)} onUseReply={(text) => setComment(text)} />}
+
+          {ticket.status === "resolved" && <TicketRatingCard ticket={ticket} canRateNow={canRate(ticket, me.id)} onRate={async (rating, text) => { await post({ action: "rateTicket", ticketId: ticket.id, rating, comment: text }); await onReload(); }}
+            onGetLink={handler ? async () => String((await post({ action: "surveyLink", ticketId: ticket.id })).url ?? "") : undefined} />}
 
           <AttachmentsPanel ownerType="ticket" ownerId={ticket.id} />
 

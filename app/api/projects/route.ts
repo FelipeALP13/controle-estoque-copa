@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { clients, members, projectPeople, projects, tasks } from "../../../db/schema";
+import { clients, members, projectDependencies, projectMilestones, projectPeople, projects, tasks } from "../../../db/schema";
+import { isDay, wouldCreateCycle } from "../../project-timeline";
 import { getSessionMember } from "../../auth-session";
 import { writeAudit } from "../../audit";
 import { isProjectFarol, isProjectPhase, projectCode } from "../../projects";
@@ -35,6 +36,10 @@ export async function GET() {
     const db = getDb();
     const member = await getSessionMember(db);
     if (!member?.active) return json({ error: "Entre com seu usuário e senha para acessar o sistema." }, 401);
+    const [milestoneRows, dependencyRows] = await Promise.all([
+      db.select().from(projectMilestones).orderBy(asc(projectMilestones.date)).catch(() => []),
+      db.select().from(projectDependencies).catch(() => []),
+    ]);
     const [projectRows, peopleRows, taskRows, memberRows, clientRows] = await Promise.all([
       db.select().from(projects).orderBy(asc(projects.name)),
       db.select().from(projectPeople),
@@ -47,6 +52,8 @@ export async function GET() {
         ...project,
         people: peopleRows.filter((row) => row.projectId === project.id).map((row) => row.memberId),
         tasks: taskRows.filter((task) => task.projectId === project.id).map((task) => ({ id: task.id, title: task.title, status: task.status, dueDate: task.dueDate })),
+        milestones: milestoneRows.filter((row) => row.projectId === project.id).map((row) => ({ id: row.id, title: row.title, date: row.date, done: row.done })),
+        dependsOn: dependencyRows.filter((row) => row.projectId === project.id).map((row) => row.dependsOnId),
       })),
       // Demandas sem projeto, para ligar a um projeto.
       unlinked: taskRows.filter((task) => task.projectId === null && task.status !== "done" && task.status !== "canceled").map((task) => ({ id: task.id, title: task.title, status: task.status, clientId: task.clientId })),
@@ -117,6 +124,57 @@ export async function POST(request: Request) {
         if (people.length) await db.insert(projectPeople).values(people.map((memberId) => ({ projectId: project.id, memberId })));
       }
       return json({ project }, projectId ? 200 : 201);
+    }
+
+    // Arrastar a barra na linha do tempo: muda o início e a previsão de término.
+    if (action === "moveProject") {
+      const projectId = Number(body.projectId);
+      const startDate = String(body.startDate ?? "");
+      const endDate = String(body.endDate ?? "");
+      if (!isDay(startDate) || !isDay(endDate)) return json({ error: "Datas inválidas." }, 400);
+      if (endDate < startDate) return json({ error: "O término precisa ser depois do início." }, 400);
+      const [updated] = await db.update(projects).set({ startDate, endForecast: endDate, updatedAt: now }).where(eq(projects.id, projectId)).returning({ id: projects.id });
+      if (!updated) return json({ error: "Projeto não encontrado." }, 404);
+      return json({ ok: true });
+    }
+
+    // Entregas (marcos) do projeto.
+    if (action === "saveMilestone" || action === "deleteMilestone") {
+      const projectId = Number(body.projectId);
+      const [project] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1);
+      if (!project) return json({ error: "Projeto não encontrado." }, 404);
+      const milestoneId = Number(body.milestoneId) || 0;
+      if (action === "deleteMilestone") {
+        await db.delete(projectMilestones).where(and(eq(projectMilestones.id, milestoneId), eq(projectMilestones.projectId, projectId)));
+        return json({ ok: true });
+      }
+      const title = cleanTitle(body.title).slice(0, 80);
+      const date = String(body.date ?? "");
+      if (!title) return json({ error: "Dê um nome para a entrega." }, 400);
+      if (!isDay(date)) return json({ error: "Informe a data da entrega." }, 400);
+      if (milestoneId) await db.update(projectMilestones).set({ title, date, done: body.done === true }).where(and(eq(projectMilestones.id, milestoneId), eq(projectMilestones.projectId, projectId)));
+      else {
+        const count = (await db.select({ id: projectMilestones.id }).from(projectMilestones).where(eq(projectMilestones.projectId, projectId))).length;
+        if (count >= 30) return json({ error: "Um projeto pode ter até 30 entregas." }, 400);
+        await db.insert(projectMilestones).values({ projectId, title, date, done: body.done === true, createdAt: now });
+      }
+      return json({ ok: true });
+    }
+
+    // Dependências entre projetos ("este só começa depois daquele").
+    if (action === "addDependency" || action === "removeDependency") {
+      const projectId = Number(body.projectId);
+      const dependsOnId = Number(body.dependsOnId);
+      if (action === "removeDependency") {
+        await db.delete(projectDependencies).where(and(eq(projectDependencies.projectId, projectId), eq(projectDependencies.dependsOnId, dependsOnId)));
+        return json({ ok: true });
+      }
+      const found = await db.select({ id: projects.id }).from(projects).where(inArray(projects.id, [projectId, dependsOnId]));
+      if (found.length !== 2) return json({ error: "Escolha dois projetos diferentes que existam." }, 400);
+      const edges = await db.select().from(projectDependencies);
+      if (wouldCreateCycle(edges, projectId, dependsOnId)) return json({ error: "Isso criaria um ciclo (um projeto esperando o outro para sempre)." }, 400);
+      await db.insert(projectDependencies).values({ projectId, dependsOnId }).onConflictDoNothing();
+      return json({ ok: true });
     }
 
     if (action === "linkTasks" || action === "unlinkTask") {

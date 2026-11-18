@@ -12,7 +12,7 @@ import X from "lucide-react/icons/x";
 import { isClosedProject, projectCode, projectFarolEmoji, projectFarolLabels, projectFarois, projectPhaseLabels, projectPhases, projectProgress, type ProjectFarol, type ProjectPhase } from "./projects";
 import { AvatarStack, PeoplePicker, StatusIcon } from "./tasks-view";
 import { taskCode, taskStatuses, taskStatusLabels, type TaskStatus } from "./tasks";
-import { barFor, timelineRange } from "./project-timeline";
+import ProjectGantt, { ProjectPlanPanel, type GanttProject, type Milestone } from "./project-gantt";
 import GanttChart from "lucide-react/icons/gantt-chart";
 import LayoutList from "lucide-react/icons/layout-list";
 
@@ -22,6 +22,7 @@ type LinkedTask = { id: number; title: string; status: TaskStatus; dueDate: stri
 type Project = {
   id: number; name: string; description: string; clientId: number | null; status: TaskStatus; farol: ProjectFarol; phase: ProjectPhase;
   deadlineLabel: string; startDate: string | null; endForecast: string; notes: string; updatedAt: string; people: number[]; tasks: LinkedTask[];
+  milestones: Milestone[]; dependsOn: number[];
 };
 type Data = { projects: Project[]; unlinked: (LinkedTask & { clientId: number | null })[]; members: Person[]; clients: Client[]; me: { id: number; canEdit: boolean; isAdmin: boolean } };
 
@@ -168,7 +169,8 @@ export default function ProjectsView({ onOpenTask, openRequest = null, onOpenReq
 
     {error && <div className="alert error"><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16} /></button></div>}
 
-    {visible.length > 0 && view === "timeline" ? <ProjectTimeline projects={visible} clientName={(id) => (id ? clientsById.get(id)?.name ?? "" : "")} onOpen={setOpenId} /> : visible.length === 0 ? <div className="empty-state"><span><FolderKanban /></span><h3>{data.projects.length ? "Nenhum projeto com esses filtros" : "Nenhum projeto ainda"}</h3><p>{data.projects.length ? "Troque os filtros ou a busca." : "Importe a planilha da Liderança em Demandas → Importar planilhas, ou crie o primeiro projeto."}</p></div> : (
+    {visible.length > 0 && view === "timeline" ? <ProjectGantt projects={visible.map((project) => toGantt(project, (id) => (id ? clientsById.get(id)?.name ?? "" : "")))} canEdit={data.me.canEdit} onOpen={setOpenId}
+      onMove={async (id, startDate, endDate) => { setError(""); try { await post({ action: "moveProject", projectId: id, startDate, endDate }); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível mudar as datas."); } await load(); }} /> : visible.length === 0 ? <div className="empty-state"><span><FolderKanban /></span><h3>{data.projects.length ? "Nenhum projeto com esses filtros" : "Nenhum projeto ainda"}</h3><p>{data.projects.length ? "Troque os filtros ou a busca." : "Importe a planilha da Liderança em Demandas → Importar planilhas, ou crie o primeiro projeto."}</p></div> : (
       <div className="project-table">
         <div className="project-head"><span>Projeto</span><span>Fase</span><span>Status</span><span>Prazo</span><span>Demandas</span><span>Responsáveis</span></div>
         {visible.map((project) => {
@@ -189,31 +191,11 @@ export default function ProjectsView({ onOpenTask, openRequest = null, onOpenReq
   </div>;
 }
 
-const monthName = (day: string) => { const name = new Date(`${day}T12:00:00Z`).toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" }).replace(".", ""); return name.charAt(0).toLocaleUpperCase("pt-BR") + name.slice(1); };
-
-/** Linha do tempo: uma barra por projeto, do início à previsão de término, com a linha de hoje. */
-function ProjectTimeline({ projects, clientName, onOpen }: { projects: Project[]; clientName: (id: number | null) => string; onOpen: (id: number) => void }) {
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
-  const items = projects.map((project) => ({ project, timeline: { id: project.id, startDate: project.startDate, endForecast: project.endForecast, closed: isClosedProject(project) } }));
-  const range = timelineRange(items.map((item) => item.timeline), today);
-  const dated = items.map((item) => ({ ...item, bar: barFor(item.timeline, range, today) })).filter((item) => item.bar).sort((a, b) => a.project.endForecast.localeCompare(b.project.endForecast));
-  const undated = items.filter((item) => !barFor(item.timeline, range, today));
-  return <div className="timeline">
-    <div className="timeline-grid">
-      <div className="timeline-head"><span /><div className="timeline-months">{range.months.map((month) => <span key={month.day} style={{ left: `${month.left}%` }}>{monthName(month.day)}{month.day.slice(5, 7) === "01" || month === range.months[0] ? ` ${month.day.slice(2, 4)}` : ""}</span>)}</div></div>
-      {dated.map(({ project, bar }) => <button key={project.id} className="timeline-row" onClick={() => onOpen(project.id)} title={`${project.name}: ${project.startDate ? fullDate(project.startDate) : "início não informado"} a ${fullDate(project.endForecast)}`}>
-        <span className="timeline-name"><FarolDot farol={project.farol} /><span><strong>{project.name}</strong><small>{projectCode(project.id)}{clientName(project.clientId) ? ` · ${clientName(project.clientId)}` : ""}</small></span></span>
-        <span className="timeline-track">
-          {range.months.map((month) => <i key={month.day} className="timeline-tick" style={{ left: `${month.left}%` }} />)}
-          <i className="timeline-today" style={{ left: `${range.todayLeft}%` }} />
-          {bar && !bar.outside && <b className={`timeline-bar ${project.farol} ${bar.assumed ? "assumed" : ""} ${bar.late ? "late" : ""}`} style={{ left: `${bar.left}%`, width: `${bar.width}%` }}><em>{fullDate(project.endForecast).slice(0, 5)}</em></b>}
-        </span>
-      </button>)}
-    </div>
-    <p className="timeline-legend"><span><i className="timeline-today" /> hoje</span><span><b className="timeline-bar blue assumed" /> início não informado (30 dias antes da previsão)</span><span><b className="timeline-bar blue late" /> previsão vencida</span></p>
-    {undated.length > 0 && <p className="timeline-undated">Sem previsão em data ({undated.length}): {undated.map((item) => item.project.name).join(", ")}. Informe a previsão de término no projeto para aparecer aqui.</p>}
-  </div>;
-}
+/** Projeto no formato da linha do tempo. */
+const toGantt = (project: Project, clientName: (id: number | null) => string): GanttProject => ({
+  id: project.id, name: project.name, code: projectCode(project.id), subtitle: clientName(project.clientId), farol: project.farol,
+  startDate: project.startDate, endForecast: project.endForecast, closed: isClosedProject(project), milestones: project.milestones ?? [], dependsOn: project.dependsOn ?? [],
+});
 
 function ProjectDrawer({ project, data, onClose, onSaved, onDeleted, onOpenTask }: { project: Project | null; data: Data; onClose: () => void; onSaved: (id: number) => Promise<void>; onDeleted: () => Promise<void>; onOpenTask: (taskId: number) => void }) {
   const [form, setForm] = useState({
@@ -272,6 +254,10 @@ function ProjectDrawer({ project, data, onClose, onSaved, onDeleted, onOpenTask 
         <label className="task-notes"><span>OBS / Impedimentos / Bloqueios</span><textarea readOnly={readOnly} rows={3} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
         {error && <p className="modal-error">{error}</p>}
         {!readOnly && <div className="project-save"><button className="primary-button" disabled={saving || !dirty || !form.name.trim()} onClick={() => void save()}>{saving ? "Salvando..." : project ? "Salvar alterações" : "Criar projeto"}</button>{project && dirty && <small>Há alterações não salvas.</small>}</div>}
+
+        {project && <ProjectPlanPanel project={toGantt(project, () => "")} canEdit={!readOnly}
+          others={data.projects.map((entry) => ({ id: entry.id, name: entry.name, code: projectCode(entry.id), dependsOn: entry.dependsOn ?? [] }))}
+          onAction={(payload) => run(async () => { await post(payload); await onSaved(project.id); })} />}
 
         {project && <section className="project-tasks">
           <h3>Demandas do projeto <Progress statuses={project.tasks.map((task) => task.status)} /></h3>
