@@ -52,6 +52,11 @@ import Coffee from "lucide-react/icons/coffee";
 import FileDown from "lucide-react/icons/file-down";
 import History from "lucide-react/icons/history";
 import LogOut from "lucide-react/icons/log-out";
+import PanelLeftClose from "lucide-react/icons/panel-left-close";
+import PanelLeftOpen from "lucide-react/icons/panel-left-open";
+
+/** Escolha de cada pessoa: menu lateral fixo aberto ou só ícones. */
+const MENU_PINNED_KEY = "portal-menu-fixo";
 import Menu from "lucide-react/icons/menu";
 import PackageCheck from "lucide-react/icons/package-check";
 import PackageOpen from "lucide-react/icons/package-open";
@@ -153,6 +158,29 @@ export default function Home() {
     hoverTimer.current = null;
     setSidebarHover(false);
   }, []);
+  // Menu fixo aberto (com os nomes) em telas largas. Cada pessoa escolhe; o padrão é fixo a partir de 1280px.
+  const [menuPinned, setMenuPinned] = useState(false);
+  const [wideScreen, setWideScreen] = useState(false);
+  useEffect(() => {
+    const wide = window.matchMedia("(min-width: 1100px)");
+    const sync = () => setWideScreen(wide.matches);
+    wide.addEventListener("change", sync);
+    const first = window.setTimeout(() => {
+      sync();
+      let saved: string | null = null;
+      try { saved = window.localStorage.getItem(MENU_PINNED_KEY); } catch { /* navegador sem armazenamento */ }
+      setMenuPinned(saved === null ? window.innerWidth >= 1280 : saved === "1");
+    }, 0);
+    return () => { window.clearTimeout(first); wide.removeEventListener("change", sync); };
+  }, []);
+  const toggleMenuPinned = useCallback(() => {
+    setMenuPinned((current) => {
+      try { window.localStorage.setItem(MENU_PINNED_KEY, current ? "0" : "1"); } catch { /* ok */ }
+      return !current;
+    });
+    setSidebarHover(false);
+  }, []);
+  const pinnedOpen = menuPinned && wideScreen;
 
   // Atalhos da visão geral para abrir o formulário de nova demanda / novo chamado.
   const [newTaskRequest, setNewTaskRequest] = useState(0);
@@ -216,7 +244,7 @@ export default function Home() {
     return () => window.removeEventListener(OPEN_TASK_EVENT, onOpen);
   }, []);
   // No celular a gaveta aberta já mostra os nomes.
-  const sidebarOpen = sidebarHover || mobileMenu;
+  const sidebarOpen = sidebarHover || mobileMenu || pinnedOpen;
 
   const load = useCallback(async (silent = false) => {
     try {
@@ -327,10 +355,10 @@ export default function Home() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${pinnedOpen ? "menu-pinned" : ""}`}>
       <aside className={`sidebar ${mobileMenu ? "open" : ""} ${sidebarOpen ? "expanded" : ""}`}
-        onMouseEnter={expandSidebar} onMouseLeave={collapseSidebar}
-        onFocus={expandSidebar} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) collapseSidebar(); }}>
+        onMouseEnter={pinnedOpen ? undefined : expandSidebar} onMouseLeave={pinnedOpen ? undefined : collapseSidebar}
+        onFocus={pinnedOpen ? undefined : expandSidebar} onBlur={pinnedOpen ? undefined : (event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) collapseSidebar(); }}>
         <div className="brand"><span className={brand.logoUrl ? "brand-mark has-logo" : "brand-mark"}><BrandLogo fallback={<Users size={21} />} /></span><div><strong>{brand.name}</strong>{brand.tagline && <small>{brand.tagline}</small>}</div></div>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <SidebarNav activeKey={tab} expanded={sidebarOpen} sections={[
@@ -372,6 +400,9 @@ export default function Home() {
           <button className="sidebar-footer" onClick={() => currentUser && setModal({ kind: "profile" })} aria-label="Editar meu perfil" title="Meu perfil">{currentUser ? <MemberVisual member={currentUser} /> : <span className="avatar">EQ</span>}<div><strong>{currentUser?.name || "Equipe"}</strong><small>{currentUser ? `${roleLabel(currentUser.role)} · Meu perfil` : "Carregando acesso"}</small></div></button>
           <button className="signout-link" onClick={logout} title="Sair do sistema" aria-label="Sair do sistema"><LogOut size={16} /></button>
         </div>
+        {wideScreen && <button className="menu-pin-toggle" onClick={toggleMenuPinned} title={pinnedOpen ? "Recolher o menu (só ícones)" : "Fixar o menu aberto, com os nomes"} aria-pressed={pinnedOpen}>
+          {pinnedOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}<span>{pinnedOpen ? "Recolher menu" : "Fixar menu"}</span>
+        </button>}
       </aside>
 
       <main>

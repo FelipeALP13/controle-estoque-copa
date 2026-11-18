@@ -17,6 +17,7 @@ import { splitMentions } from "./notifications";
 import { taskCode } from "./tasks";
 import { Avatar, MentionTextarea, relativeTime, TeamChip } from "./tasks-view";
 import Download from "lucide-react/icons/download";
+import { MoreMenu } from "./more-menu";
 import BookOpen from "lucide-react/icons/book-open";
 import Lightbulb from "lucide-react/icons/lightbulb";
 import ExternalLink from "lucide-react/icons/external-link";
@@ -171,6 +172,8 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
     if (statusFilter === "closed" && isActiveTicket(ticket.status)) return false;
     return matchesSearch(ticket);
   }).sort(compareTickets), [inScope, statusFilter, matchesSearch]);
+  // A etiqueta do time só aparece quando a lista tem chamados de mais de um time.
+  const mixedTeams = useMemo(() => new Set(visible.map((ticket) => ticket.teamId ?? 0)).size > 1, [visible]);
   // Quadro: os em aberto e os resolvidos nos últimos 7 dias, por coluna.
   const [boardNow] = useState(() => Date.now());
   const board = useMemo(() => {
@@ -258,9 +261,11 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
         <button className={layout === "list" ? "active" : ""} aria-pressed={layout === "list"} onClick={() => setLayout("list")} title="Lista"><List size={15} /> Lista</button>
         <button className={layout === "board" ? "active" : ""} aria-pressed={layout === "board"} onClick={() => setLayout("board")} title="Quadro"><Columns3 size={15} /> Quadro</button>
       </div>
-      {data?.me.canEdit && <button className="secondary-button" onClick={() => setManagingReplies(true)} title="Textos prontos para responder os chamados"><MessageSquareText size={15} /> Respostas prontas</button>}
-      {data?.me.isAdmin && <button className="secondary-button" onClick={() => setJiraOpen(true)} title="Trazer chamados das contas do Jira"><Plug size={15} /> Jira</button>}
-      {data && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel os chamados que estão na tela, com os filtros aplicados"><Download size={15} /> Exportar Excel</button>}
+      <MoreMenu actions={[
+        ...(data?.me.canEdit ? [{ key: "replies", label: "Respostas prontas", icon: <MessageSquareText size={15} />, onClick: () => setManagingReplies(true), title: "Textos prontos para responder os chamados" }] : []),
+        ...(data ? [{ key: "export", label: "Exportar Excel", icon: <Download size={15} />, onClick: exportExcel, disabled: !visible.length, title: "Baixa em Excel os chamados que estão na tela, com os filtros aplicados" }] : []),
+        ...(data?.me.isAdmin ? [{ key: "jira", label: "Contas do Jira", icon: <Plug size={15} />, onClick: () => setJiraOpen(true), title: "Trazer chamados das contas do Jira" }] : []),
+      ]} />
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating(true)}><Plus size={16} /> Abrir chamado</button>}
     </div>
 
@@ -278,14 +283,16 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
         <div className="ticket-list">
           {visible.map((ticket) => {
             const team = ticket.teamId ? teamsById.get(ticket.teamId) : null;
+            // Menos etiquetas por linha: urgência só quando pede atenção; time só quando a lista mistura times.
+            const loud = ticket.urgency === "critical" || ticket.urgency === "high";
             return <button key={ticket.id} className={`ticket-row ${isActiveTicket(ticket.status) ? "" : "closed"}`} onClick={() => setOpenId(ticket.id)}>
-              <UrgencyBadge urgency={ticket.urgency} />
+              {loud ? <UrgencyBadge urgency={ticket.urgency} /> : <span className="urgency-badge is-quiet" title={`Urgência ${ticketUrgencyLabels[ticket.urgency].toLowerCase()}`} aria-hidden="true" />}
               <span className="ticket-main">
-                <span className="ticket-title"><span className="task-code">{ticketCode(ticket.id)}</span>{ticket.externalKey && <span className="jira-badge" title={`Veio do Jira: ${ticket.externalKey}${ticket.externalStatus ? ` (${ticket.externalStatus})` : ""}`}>{ticket.externalKey}</span>}<strong>{ticket.title}</strong></span>
-                <span className="ticket-sub">{ticketTypeLabels[ticket.type]}{ticket.client && ` · ${ticket.client}`} · por {ticket.requesterName}{ticket.commentCount > 0 && <span className="task-comments"><MessageSquare size={11} />{ticket.commentCount}</span>}</span>
+                <span className="ticket-title"><span className="task-code">{ticketCode(ticket.id)}</span><strong>{ticket.title}</strong></span>
+                <span className="ticket-sub">{ticket.externalKey && <span className="ticket-jira" title={`Veio do Jira${ticket.externalStatus ? ` (${ticket.externalStatus})` : ""}`}>{ticket.externalKey}</span>}{ticketTypeLabels[ticket.type]}{ticket.client && ` · ${ticket.client}`} · por {ticket.requesterName}{ticket.commentCount > 0 && <span className="task-comments"><MessageSquare size={11} />{ticket.commentCount}</span>}</span>
               </span>
               <span className="ticket-meta">
-                {team && <TeamChip team={team} />}
+                {team && mixedTeams && <TeamChip team={team} />}
                 <SlaBadge ticket={ticket} />
                 <StatusPill status={ticket.status} />
                 <Avatar member={ticket.assigneeId ? peopleById.get(ticket.assigneeId) : null} />
@@ -647,7 +654,7 @@ export function MyTicketsPanel({ onOpen }: { onOpen: (ticketId?: number) => void
   return <article className="hub-tasks">
     <div className="hub-panel-title"><div><span><LifeBuoy /></span><div><h3>Chamados</h3><p>{me.teamIds.length ? `${queue.length} na fila do seu time${late ? ` · ${late} fora do prazo` : ""}` : "Você ainda não está em nenhum time"}{requested ? ` · ${requested} aberto${requested === 1 ? "" : "s"} por você` : ""}</p></div></div><button onClick={() => onOpen()}>Abrir chamados</button></div>
     {focus.length ? focus.map((ticket) => <button key={ticket.id} className="hub-task-row" onClick={() => onOpen(ticket.id)}>
-      <UrgencyBadge urgency={ticket.urgency} /><span className="task-code">{ticketCode(ticket.id)}</span><span className="task-title">{ticket.title}</span><SlaBadge ticket={ticket} />
+      {ticket.urgency === "critical" || ticket.urgency === "high" ? <UrgencyBadge urgency={ticket.urgency} /> : <span className="urgency-badge is-quiet" aria-hidden="true" />}<span className="task-code">{ticketCode(ticket.id)}</span><span className="task-title">{ticket.title}</span><SlaBadge ticket={ticket} />
     </button>) : <div className="hub-empty-row"><LifeBuoy /><span><strong>Nada esperando por você</strong><small>Chamados atribuídos a você ou sem dono na fila do seu time aparecem aqui.</small></span></div>}
   </article>;
 }

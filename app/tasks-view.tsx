@@ -16,6 +16,7 @@ import Lock from "lucide-react/icons/lock";
 import { dueState, isClosedStatus, sortOrderBetween, taskCode, taskPriorities, taskPriorityLabels, taskStatuses, taskStatusLabels, type TaskPriority, type TaskStatus } from "./tasks";
 import ImportModal from "./import-modal";
 import Download from "lucide-react/icons/download";
+import { MoreMenu } from "./more-menu";
 import { downloadXlsx, type CellValue } from "./xlsx-writer";
 import ListChecks from "lucide-react/icons/list-checks";
 import { type Task, type TaskTeam, type TasksData, type Lookups, boardStatuses, BOARD_DONE_LIMIT, todayInSaoPaulo, fold, postTask, StatusIcon, PriorityIcon, TeamChip, AvatarStack, DueChip } from "./task-shared";
@@ -239,10 +240,14 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled, cr
         <button className={view === "list" ? "active" : ""} aria-pressed={view === "list"} onClick={() => changeView("list")} title="Lista"><LayoutList size={15} /><span>Lista</span></button>
         <button className={view === "board" ? "active" : ""} aria-pressed={view === "board"} onClick={() => changeView("board")} title="Quadro"><Columns3 size={15} /><span>Quadro</span></button>
       </div>
-      {data && data.tasks.length > 0 && <button className="secondary-button" onClick={exportExcel} disabled={!visible.length} title="Baixa em Excel as demandas que estão na tela, com os filtros e a busca aplicados"><Download size={15} /> Exportar Excel</button>}
-      {data?.me.isAdmin && <button className="secondary-button" onClick={() => setManagingTemplates(true)} title="Modelos de demanda com checklist"><ListChecks size={15} /> Modelos</button>}
-      {data?.me.isAdmin && <button className="secondary-button" onClick={() => setManagingClients(true)} title="Lista de clientes/projetos"><Building2 size={15} /> Clientes</button>}
-      {data?.me.isAdmin && <button className="secondary-button" onClick={() => setImporting(true)}><FileSpreadsheet size={15} /> Importar planilhas</button>}
+      <MoreMenu actions={[
+        ...(data && data.tasks.length > 0 ? [{ key: "export", label: "Exportar Excel", icon: <Download size={15} />, onClick: exportExcel, disabled: !visible.length, title: "Baixa em Excel as demandas que estão na tela, com os filtros e a busca aplicados" }] : []),
+        ...(data?.me.isAdmin ? [
+          { key: "templates", label: "Modelos de demanda", icon: <ListChecks size={15} />, onClick: () => setManagingTemplates(true), title: "Modelos de demanda com checklist" },
+          { key: "clients", label: "Clientes e projetos", icon: <Building2 size={15} />, onClick: () => setManagingClients(true) },
+          { key: "import", label: "Importar planilhas", icon: <FileSpreadsheet size={15} />, onClick: () => setImporting(true) },
+        ] : []),
+      ]} />
       {data?.me.canEdit && <button className="primary-button tasks-new" onClick={() => setCreating("todo")} title="Atalho: tecla C"><Plus size={16} /> Nova demanda</button>}
     </div>
     <div className="tasks-filters">

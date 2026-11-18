@@ -90,7 +90,11 @@ export default function SidebarNav({ sections, activeKey, expanded = true }: { s
   }, [activeKey]);
   useEffect(() => {
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    // O menu muda de tamanho sem a tela mudar (fixar/recolher, abrir submenu): o destaque acompanha.
+    const nav = navRef.current;
+    const observer = typeof ResizeObserver !== "undefined" && nav ? new ResizeObserver(() => place()) : null;
+    if (nav && observer) { observer.observe(nav); for (const child of nav.children) observer.observe(child); }
+    return () => { window.removeEventListener("resize", place); observer?.disconnect(); };
   }, [place]);
 
   const render = (item: NavItem, child = false, hidden = false) => {

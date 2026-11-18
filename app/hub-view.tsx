@@ -24,14 +24,13 @@ import Archive from "lucide-react/icons/archive";
 import CalendarClock from "lucide-react/icons/calendar-clock";
 import History from "lucide-react/icons/history";
 import Plus from "lucide-react/icons/plus";
-import Search from "lucide-react/icons/search";
 import Sun from "lucide-react/icons/sun";
 import Sprout from "lucide-react/icons/sprout";
 import ClipboardCheck from "lucide-react/icons/clipboard-check";
 import Smile from "lucide-react/icons/smile";
 import { type CurrentUser, type Item, type Movement, type Schedule, movementCopy, fmt, toForecast, exactDate, ItemVisual, todayLong, isoDateInSaoPaulo, weekLabel, findTeam } from "./dashboard-shared";
 
-export function HubView({ onOpenReviews, onOpenPulse, items, movements, schedule, currentUser, counts, agenda, onOpenAgenda, onMyDay, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket, onSearch }: { onOpenReviews: () => void; onOpenPulse: () => void; items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; agenda: AgendaEvent[]; onOpenAgenda: (eventId?: number) => void; onMyDay: () => void; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch: () => void }) {
+export function HubView({ onOpenReviews, onOpenPulse, items, movements, schedule, currentUser, counts, agenda, onOpenAgenda, onMyDay, onOpen, onOpenTask, onOpenTicket, onNewTask, onNewTicket }: { onOpenReviews: () => void; onOpenPulse: () => void; items: Item[]; movements: Movement[]; schedule: Schedule; currentUser: CurrentUser | null; counts: NavCounts | null; agenda: AgendaEvent[]; onOpenAgenda: (eventId?: number) => void; onMyDay: () => void; onOpen: (destination: "stock" | "schedule" | "people" | "calendar") => void; onOpenTask: (taskId?: number) => void; onOpenTicket: (ticketId?: number) => void; onNewTask: () => void; onNewTicket: () => void; onSearch?: () => void }) {
   const today = isoDateInSaoPaulo();
   const currentWeek = supportWeekForDate(schedule.weeks, today);
   const nextWeek = nextSupportWeek(schedule.weeks, today);
@@ -63,7 +62,6 @@ export function HubView({ onOpenReviews, onOpenPulse, items, movements, schedule
         {canEdit && <button className="primary-button" onClick={onNewTask}><Plus size={16} /> Nova demanda</button>}
         {canEdit && <button className="secondary-button" onClick={onNewTicket}><LifeBuoy size={16} /> Abrir chamado</button>}
         <button className="secondary-button" onClick={onMyDay}><Sun size={16} /> Meu dia</button>
-        <button className="secondary-button" onClick={onSearch}><Search size={16} /> Buscar <kbd>Ctrl K</kbd></button>
       </div>
     </section>
 

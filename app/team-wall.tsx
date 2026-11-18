@@ -131,6 +131,18 @@ export default function TeamWall() {
   const openPolls = data.polls.filter((poll) => poll.open);
   const pending = openPolls.filter((poll) => !poll.mine.length).length;
   const kudosShown = showAll ? data.kudos : data.kudos.slice(0, 4);
+  const modals = <>
+    {modal === "kudos" && <KudosModal people={data.people} onClose={() => setModal(null)} onSaved={async () => { setModal(null); setTab("kudos"); await load(); }} />}
+    {modal === "poll" && <PollModal onClose={() => setModal(null)} onSave={async (payload) => { await wallPost({ action: "createPoll", ...payload }); setModal(null); setTab("polls"); await load(); }} />}
+  </>;
+
+  // Sem elogios nem enquetes recentes: uma linha só, com os botões (sem abas vazias ocupando a tela).
+  if (!data.kudos.length && !data.polls.length) return <article className="team-wall is-empty">
+    <div className="hub-panel-title"><div><span><Award /></span><div><h3>Mural da equipe</h3><p>Nenhum elogio ou enquete recente. Reconheça um colega que ajudou você.</p></div></div>
+      {data.me.canPost && <div className="team-wall-actions"><button onClick={() => setModal("kudos")}><Award size={14} /> Elogiar colega</button><button onClick={() => setModal("poll")}><Plus size={14} /> Nova enquete</button></div>}
+    </div>
+    {modals}
+  </article>;
 
   return <article className="team-wall">
     <div className="hub-panel-title"><div><span><Award /></span><div><h3>Mural da equipe</h3><p>Elogios e enquetes rápidas{pending ? ` · ${pending} enquete${pending === 1 ? "" : "s"} esperando seu voto` : ""}</p></div></div>
@@ -149,8 +161,7 @@ export default function TeamWall() {
     </> : <div className="team-wall-polls">
       {data.polls.length ? data.polls.map((poll) => <PollCard key={poll.id} poll={poll} onChanged={load} />) : <p className="muted">Nenhuma enquete nas últimas duas semanas. Ex.: “Pizza ou japonês na sexta?”</p>}
     </div>}
-    {modal === "kudos" && <KudosModal people={data.people} onClose={() => setModal(null)} onSaved={async () => { setModal(null); setTab("kudos"); await load(); }} />}
-    {modal === "poll" && <PollModal onClose={() => setModal(null)} onSave={async (payload) => { await wallPost({ action: "createPoll", ...payload }); setModal(null); setTab("polls"); await load(); }} />}
+    {modals}
   </article>;
 }
 
