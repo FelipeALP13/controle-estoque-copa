@@ -231,7 +231,7 @@ function TeamModal({ team, people, onClose, onSaved }: { team: Team | null; peop
       <label><span>Descrição <em>opcional</em></span><input maxLength={200} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="O que este time faz" /></label>
       <div className="full team-color-field"><span className="field-label">Cor</span><div className="team-color-options">{teamColors.map((option) => <button type="button" key={option} className={`team-color-swatch ${option} ${color === option ? "active" : ""}`} onClick={() => setColor(option)} aria-pressed={color === option}><i />{teamColorLabels[option]}</button>)}</div></div>
       <div className="full roster-editor">
-        <div className="roster-head"><span className="field-label">Integrantes ({roster.size})</span><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filtrar pessoas" /></div>
+        <div className="roster-head"><span className="field-label">Integrantes ({roster.size})</span><input aria-label="Filtrar pessoas" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filtrar pessoas" /></div>
         <ul>{visible.map((person) => {
           const inTeam = roster.has(person.id);
           return <li key={person.id} className={inTeam ? "selected" : ""}>

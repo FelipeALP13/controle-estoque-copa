@@ -71,7 +71,7 @@ export default function HandoffPanel() {
     </header>
 
     {writing && <form className="handoff-form" onSubmit={(event) => { event.preventDefault(); void run(async () => { const result = await post({ action: "createHandoff", body: text }); setText(""); setWriting(false); setNotice(result.notified ? `Passagem registrada. ${result.notified} ${result.notified === 1 ? "pessoa da" : "pessoas da"} ${result.toTeam} ${result.notified === 1 ? "foi avisada" : "foram avisadas"} no sino.` : "Passagem registrada."); }); }}>
-      <textarea autoFocus rows={8} maxLength={MAX_HANDOFF} value={text} onChange={(event) => setText(event.target.value)} placeholder={"O que ficou pendente, combinados com clientes, alertas para a próxima equipe…"} />
+      <textarea aria-label="Passagem de plantão" autoFocus rows={8} maxLength={MAX_HANDOFF} value={text} onChange={(event) => setText(event.target.value)} placeholder={"O que ficou pendente, combinados com clientes, alertas para a próxima equipe…"} />
       <div className="handoff-form-actions">
         {data.openTickets.length > 0 && <button type="button" className="secondary-button" onClick={draftFromTickets}>Incluir os {data.openTickets.length} chamados em aberto</button>}
         <span />

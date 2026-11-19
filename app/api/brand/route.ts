@@ -9,6 +9,7 @@ import { loadBrand, saveBrand } from "../../brand-store";
 import { DEFAULT_BRAND, brandInputError, brandLogoUrl, parseBrand, type Brand } from "../../brand-theme";
 
 const MAX_LOGO_BYTES = 1024 * 1024;
+const MAX_ICON_BYTES = 512 * 1024;
 const LOGO_TYPES: Record<string, { extension: string; valid: (b: Uint8Array) => boolean }> = {
   "image/png": { extension: "png", valid: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
   "image/jpeg": { extension: "jpg", valid: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
@@ -20,10 +21,13 @@ const publicBrand = (brand: Brand) => ({ name: brand.name, shortName: brand.shor
 
 export async function GET(request: Request) {
   const brand = await loadBrand();
-  if (new URL(request.url).searchParams.get("logo") !== "1") return json({ brand: publicBrand(brand) });
-  // Só o logo configurado (nunca outro arquivo do armazenamento).
-  if (!brand.logoKey) return new Response(null, { status: 404 });
-  const object = await fileStoreOrNull()?.get(brand.logoKey);
+  const params = new URL(request.url).searchParams;
+  const icon = params.get("icon");
+  if (params.get("logo") !== "1" && icon !== "512" && icon !== "192") return json({ brand: publicBrand(brand) });
+  // Só o logo e os ícones configurados (nunca outro arquivo do armazenamento).
+  const fileKey = icon === "512" ? brand.iconKey : icon === "192" ? brand.iconSmallKey : brand.logoKey;
+  if (!fileKey) return new Response(null, { status: 404 });
+  const object = await fileStoreOrNull()?.get(fileKey);
   if (!object) return new Response(null, { status: 404 });
   return new Response(object.body, {
     headers: {
@@ -52,7 +56,7 @@ export async function POST(request: Request) {
 
     // Enviar logo (formulário com o arquivo).
     if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
-      if (Number(request.headers.get("content-length") ?? 0) > MAX_LOGO_BYTES + 64 * 1024) return json({ error: "O logo pode ter até 1 MB." }, 413);
+      if (Number(request.headers.get("content-length") ?? 0) > MAX_LOGO_BYTES + 2 * MAX_ICON_BYTES + 64 * 1024) return json({ error: "O logo pode ter até 1 MB." }, 413);
       const form = await request.formData();
       const file = form.get("file");
       if (!(file instanceof File)) return json({ error: "Escolha uma imagem." }, 400);
@@ -62,9 +66,22 @@ export async function POST(request: Request) {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (!type.valid(bytes)) return json({ error: "O conteúdo do arquivo não é uma imagem válida." }, 400);
       const key = `media/brand/${crypto.randomUUID()}.${type.extension}`;
+      // Ícones de instalar (PNG quadrados gerados no navegador a partir do logo). Opcionais: sem eles, ficam os padrão.
+      const icons: { iconKey: string | null; iconSmallKey: string | null } = { iconKey: null, iconSmallKey: null };
+      for (const [field, target] of [["icon512", "iconKey"], ["icon192", "iconSmallKey"]] as const) {
+        const iconFile = form.get(field);
+        if (!(iconFile instanceof File) || iconFile.type !== "image/png" || iconFile.size > MAX_ICON_BYTES) continue;
+        const iconBytes = new Uint8Array(await iconFile.arrayBuffer());
+        if (!LOGO_TYPES["image/png"].valid(iconBytes)) continue;
+        const iconKey = `media/brand/${crypto.randomUUID()}.png`;
+        await fileStore().put(iconKey, iconBytes, "image/png");
+        icons[target] = iconKey;
+      }
       await fileStore().put(key, bytes, file.type);
-      const saved = await saveBrand(db, { ...current, logoKey: key });
+      const saved = await saveBrand(db, { ...current, logoKey: key, ...icons });
       await removeFile(current.logoKey);
+      await removeFile(current.iconKey);
+      await removeFile(current.iconSmallKey);
       await audit("brand_logo_updated", "Novo logo");
       return json({ brand: publicBrand(saved) });
     }
@@ -72,14 +89,18 @@ export async function POST(request: Request) {
     const body = await readJsonBody(request);
     if (body instanceof Response) return body;
     if (body.action === "removeLogo") {
-      const saved = await saveBrand(db, { ...current, logoKey: null });
+      const saved = await saveBrand(db, { ...current, logoKey: null, iconKey: null, iconSmallKey: null });
       await removeFile(current.logoKey);
+      await removeFile(current.iconKey);
+      await removeFile(current.iconSmallKey);
       await audit("brand_logo_updated", "Logo removido (volta ao ícone padrão)");
       return json({ brand: publicBrand(saved) });
     }
     if (body.action === "reset") {
-      const saved = await saveBrand(db, { ...DEFAULT_BRAND, logoKey: null });
+      const saved = await saveBrand(db, { ...DEFAULT_BRAND, logoKey: null, iconKey: null, iconSmallKey: null });
       await removeFile(current.logoKey);
+      await removeFile(current.iconKey);
+      await removeFile(current.iconSmallKey);
       await audit("brand_updated", "Marca restaurada para o padrão");
       return json({ brand: publicBrand(saved) });
     }

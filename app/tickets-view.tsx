@@ -472,7 +472,7 @@ function TicketDrawer({ ticket, data, onOpenTicket, onManageReplies, onClose, on
           <h2 className="ticket-drawer-title">{ticket.title}</h2>
           {ticket.source === "atendechat" && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Aberto pelo agente N1 do AtendeChat, a partir de uma conversa com o cliente. O resumo está na descrição; a conversa continua no AtendeChat.{ticket.externalUrl && <> <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir a conversa</a></>}</p>}
           {ticket.source === "jira" && ticket.externalUrl && <p className="jira-origin"><span className="jira-badge">{ticket.externalKey}</span> Veio do Jira{ticket.externalStatus ? <> · lá está <b>{ticket.externalStatus}</b></> : null}. Responda ao cliente pelo Jira; os comentários daqui ficam só para a equipe. <a href={ticket.externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> Abrir no Jira</a></p>}
-          <textarea className="task-description-input" readOnly={(!handler && !isRequester) || ticket.source === "jira"} title={ticket.source === "jira" ? "A descrição vem do Jira; edite lá." : undefined} value={description} rows={5} placeholder="Sem detalhes."
+          <textarea aria-label="Descrição do chamado" className="task-description-input" readOnly={(!handler && !isRequester) || ticket.source === "jira"} title={ticket.source === "jira" ? "A descrição vem do Jira; edite lá." : undefined} value={description} rows={5} placeholder="Sem detalhes."
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== ticket.description && handler) void onUpdate({ description }); }} />
 

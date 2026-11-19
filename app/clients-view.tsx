@@ -234,7 +234,7 @@ function SystemCard({ system, teams, isAdmin, onEdit, onChanged }: { system: Sys
         {isAdmin && <button className="person-edit" disabled={busy} onClick={() => { if (window.confirm(`Excluir o acesso “${system.name}”? A senha guardada também será apagada.`)) void run(async () => { await post({ action: "deleteSystem", systemId: system.id }); await onChanged(); }); }} title="Excluir" aria-label={`Excluir ${system.name}`}><Trash2 size={13} /></button>}
       </span>
     </header>
-    {system.url && <p className="system-url"><a href={system.url} target="_blank" rel="noopener noreferrer">{system.url} <ExternalLink size={12} /></a><button className="link-button" onClick={() => void copy(system.url, "Endereço")}><Copy size={12} /></button></p>}
+    {system.url && <p className="system-url"><a href={system.url} target="_blank" rel="noopener noreferrer">{system.url} <ExternalLink size={12} /></a><button className="link-button" onClick={() => void copy(system.url, "Endereço")} aria-label="Copiar endereço" title="Copiar endereço"><Copy size={12} /></button></p>}
     {system.canSeeLogin ? <div className="system-login">
       <span><small>Usuário</small><b>{system.username || "—"}</b>{system.username && <button className="link-button" onClick={() => void copy(system.username!, "Usuário")} title="Copiar usuário" aria-label="Copiar usuário"><Copy size={12} /></button>}</span>
       <span><small>Senha</small>{system.hasPassword ? <>

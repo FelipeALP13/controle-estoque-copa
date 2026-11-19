@@ -14,6 +14,14 @@ Tudo pelo `scripts/cloudflare.mjs`. Os nomes do banco e do armazenamento ficam e
 4. Primeiro acesso: defina um código de instalação com `wrangler secret put SETUP_TOKEN --name portaldaequipe` (24+ caracteres). Sem ele, ninguém consegue criar o administrador. Depois de criar, apague com `wrangler secret delete SETUP_TOKEN --name portaldaequipe`.
 5. Backup completo: `node scripts/cloudflare.mjs backup` (arquivo `.sql` em `backups/`, que não vai para o Git). No painel da Cloudflare (D1 → Time Travel) dá para voltar o banco a qualquer momento dos últimos 7 dias (plano gratuito) ou 30 dias (plano pago), e o Console roda SQL direto.
 
+### Ambiente de teste
+
+Uma segunda cópia do Portal, com banco e arquivos próprios, para auditorias e testes que criam dados (a produção fica só com dados reais): **https://portaldaequipe-teste.grupohermanos.workers.dev**. Os nomes ficam em `cloudflare.teste.json`.
+
+- Publicar a versão atual no teste: `node scripts/cloudflare.mjs publicar --teste`.
+- Primeiro acesso: igual ao passo 4, com `--name portaldaequipe-teste` (código de instalação próprio; apague depois).
+- Os mesmos comandos aceitam `--teste` (`criar`, `publicar`, `backup`).
+
 ## O que tem
 
 | Área | Onde fica |
@@ -47,7 +55,7 @@ Tudo pelo `scripts/cloudflare.mjs`. Os nomes do banco e do armazenamento ficam e
 | Usuários, permissões, histórico e cópia de segurança | `app/team-view.tsx`, `app/admin-view.tsx`, `app/api/admin/` |
 | Sino de avisos (som, aviso na tela e no sistema) | `app/notifications-bell.tsx`, `app/notify-sound.ts` |
 | Login e sessões (renovação, 7 dias sem uso, encerrar aparelhos) | `app/auth-session.ts`, `app/session-policy.ts`, `app/sessions-panel.tsx` |
-| Instalar como app (PWA) | `public/manifest.webmanifest`, `public/sw.js`, `app/pwa-register.tsx` |
+| Instalar como app (PWA; com logo enviado, os ícones de instalar são gerados dele) | `app/api/manifest/`, `app/app-icons.ts`, `public/sw.js`, `app/pwa-register.tsx` |
 
 A tela principal (`app/dashboard-client.tsx`) monta o menu e troca entre essas áreas. Tipos e utilidades comuns ficam em `app/dashboard-shared.tsx`.
 
@@ -69,10 +77,12 @@ npm run typecheck          # tipos (TypeScript)
 npm run lint               # padrões de código
 npm test                   # testes das regras (rodam sem servidor)
 npm run build              # gera o pacote para publicar
+npm run test:a11y          # acessibilidade no código: rótulos de campos, botões só com ícone e imagens sem alt
 npm run test:permissions   # permissões das APIs (precisa do npm run dev rodando)
+npm run test:flows         # fluxos completos: demanda, chamado, artigo, copa e agenda (precisa do npm run dev rodando)
 ```
 
-O GitHub roda typecheck, lint, testes e build a cada envio (`.github/workflows/ci.yml`). O teste de permissões cria dois usuários temporários **só no banco local**, confere que "Somente leitura" e "Membro" não fazem o que não podem, e apaga tudo no final.
+O GitHub roda typecheck, lint, testes, acessibilidade e build a cada envio (`.github/workflows/ci.yml`). Os testes de permissões e de fluxos criam usuários (e um time) temporários **só no banco local**, sem senha, e apagam tudo no final; nenhum aviso sai do computador.
 
 ## Banco de dados e migrações
 

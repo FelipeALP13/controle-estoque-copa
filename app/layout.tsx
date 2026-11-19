@@ -5,7 +5,7 @@ import { APP_DESCRIPTION } from "./brand";
 import PwaRegister from "./pwa-register";
 import { THEME_BOOT_SCRIPT } from "./theme";
 import { loadBrand } from "./brand-store";
-import { DEFAULT_BRAND_COLOR, brandCss, brandLogoUrl, brandPalette } from "./brand-theme";
+import { DEFAULT_BRAND_COLOR, brandCss, brandIconUrl, brandLogoUrl, brandPalette } from "./brand-theme";
 import { BRAND_STYLE_ID, BrandProvider } from "./brand-context";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: brand.name,
     description: APP_DESCRIPTION,
     manifest: "/api/manifest",
-    icons: logo ? { icon: logo, shortcut: logo, apple: logo } : { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/apple-touch-icon.png" },
+    icons: logo ? { icon: logo, shortcut: logo, apple: brandIconUrl(brand, 512) ?? logo } :{ icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/apple-touch-icon.png" },
     // No iPhone/iPad: "Adicionar à Tela de Início" abre como app.
     appleWebApp: { capable: true, title: brand.shortName, statusBarStyle: "default" },
   };

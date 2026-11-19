@@ -107,7 +107,7 @@ export default function JiraSettings({ onClose, onSynced }: { onClose: () => voi
               <tbody>{projects.map((project) => <tr key={project.projectKey} className={project.enabled ? "on" : ""}>
                 <td><input type="checkbox" checked={project.enabled} onChange={(event) => void saveProject(project, { enabled: event.target.checked })} aria-label={`Trazer chamados de ${project.projectKey}`} /></td>
                 <td><b>{project.projectKey}</b> {project.projectName}</td>
-                <td><select value={project.clientId ?? ""} onChange={(event) => void saveProject(project, { clientId: event.target.value ? Number(event.target.value) : null })}><option value="">Usar o nome do projeto</option>{data.clients.filter((client) => client.active !== false || client.id === project.clientId).map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></td>
+                <td><select aria-label={`Cliente do projeto ${project.projectKey}`} value={project.clientId ?? ""} onChange={(event) => void saveProject(project, { clientId: event.target.value ? Number(event.target.value) : null })}><option value="">Usar o nome do projeto</option>{data.clients.filter((client) => client.active !== false || client.id === project.clientId).map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></td>
               </tr>)}</tbody>
             </table> : <p className="muted">Nenhum projeto visível para este usuário do Jira. Confira as permissões dele lá.</p>}
           </section>;

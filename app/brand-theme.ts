@@ -15,10 +15,13 @@ export type Brand = {
   color: string;
   /** Logo no armazenamento de arquivos (media/brand/...), ou null para o ícone padrão. */
   logoKey: string | null;
+  /** Ícones de instalar no celular/computador (PNG quadrado 512 e 192), gerados do logo no envio. */
+  iconKey: string | null;
+  iconSmallKey: string | null;
   updatedAt: string | null;
 };
 
-export const DEFAULT_BRAND: Brand = { name: "Portal da Equipe", shortName: "Portal", tagline: "Sistema interno", color: DEFAULT_BRAND_COLOR, logoKey: null, updatedAt: null };
+export const DEFAULT_BRAND: Brand = { name: "Portal da Equipe", shortName: "Portal", tagline: "Sistema interno", color: DEFAULT_BRAND_COLOR, logoKey: null, iconKey: null, iconSmallKey: null, updatedAt: null };
 
 export const BRAND_LIMITS = { name: 40, shortName: 16, tagline: 40 };
 export const BRAND_PRESETS = ["#2f6fed", "#0f766e", "#15803d", "#7c3aed", "#c2410c", "#be123c", "#0369a1", "#334155"];
@@ -39,6 +42,8 @@ export function parseBrand(raw: string | null | undefined): Brand {
     tagline: "tagline" in data ? clean(data.tagline, BRAND_LIMITS.tagline) : DEFAULT_BRAND.tagline,
     color: isHexColor(data.color) ? data.color.toLowerCase() : DEFAULT_BRAND.color,
     logoKey: isBrandLogoKey(data.logoKey) ? data.logoKey : null,
+    iconKey: isBrandLogoKey(data.iconKey) ? data.iconKey : null,
+    iconSmallKey: isBrandLogoKey(data.iconSmallKey) ? data.iconSmallKey : null,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
   };
 }
@@ -141,3 +146,9 @@ export function brandCss(color: string) {
 
 /** Endereço público do logo (o login precisa dele antes de alguém entrar). */
 export const brandLogoUrl = (brand: Pick<Brand, "logoKey" | "updatedAt">) => (brand.logoKey ? `/api/brand?logo=1&v=${encodeURIComponent(brand.logoKey.slice(12, 20))}` : null);
+
+/** Ícone de instalar gerado do logo (512 ou 192), ou null para os ícones padrão. */
+export const brandIconUrl = (brand: Pick<Brand, "iconKey" | "iconSmallKey">, size: 512 | 192) => {
+  const key = size === 512 ? brand.iconKey : brand.iconSmallKey;
+  return key ? `/api/brand?icon=${size}&v=${encodeURIComponent(key.slice(12, 20))}` : null;
+};

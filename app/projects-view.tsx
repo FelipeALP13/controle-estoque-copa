@@ -239,7 +239,7 @@ function ProjectDrawer({ project, data, onClose, onSaved, onDeleted, onOpenTask 
         <button className="task-drawer-icon" onClick={onClose} aria-label="Fechar" title="Fechar (Esc)"><X size={16} /></button>
       </header>
       <div className="project-drawer-body">
-        <input className="task-title-input" readOnly={readOnly} value={form.name} maxLength={160} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nome do projeto (história de usuário)" autoFocus={!project} />
+        <input aria-label="Nome do projeto" className="task-title-input" readOnly={readOnly} value={form.name} maxLength={160} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nome do projeto (história de usuário)" autoFocus={!project} />
         <div className="project-form">
           <label className="task-prop"><span>Farol</span><span className="farol-options">{projectFarois.map((value) => <button type="button" key={value} disabled={readOnly} className={form.farol === value ? "active" : ""} onClick={() => setForm({ ...form, farol: value })} title={projectFarolLabels[value]}>{projectFarolEmoji[value]} {projectFarolLabels[value]}</button>)}</span></label>
           <label className="task-prop"><span>Fase do projeto</span><span className="task-prop-control"><select disabled={readOnly} value={form.phase} onChange={(event) => setForm({ ...form, phase: event.target.value as ProjectPhase })}>{projectPhases.map((value) => <option key={value} value={value}>{projectPhaseLabels[value]}</option>)}</select></span></label>

@@ -42,5 +42,8 @@ jobs:
       - name: Testes
         run: pnpm test
 
+      - name: Acessibilidade (rótulos de campos, botões e imagens)
+        run: pnpm run test:a11y
+
       - name: Build
         run: pnpm run build

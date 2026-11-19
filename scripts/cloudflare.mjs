@@ -4,6 +4,10 @@
 //   node scripts/cloudflare.mjs publicar  -> build, aplica as migrações novas no banco de produção e publica o Worker
 //   node scripts/cloudflare.mjs backup    -> baixa uma cópia completa do banco de produção para backups/ (fora do Git)
 //
+// Com --teste, tudo vale para o ambiente de TESTE (Worker, banco e arquivos próprios, em cloudflare.teste.json):
+//   node scripts/cloudflare.mjs criar --teste   e   node scripts/cloudflare.mjs publicar --teste
+// Use o ambiente de teste para auditorias e testes que criam dados; a produção fica só com dados reais.
+//
 // Antes, uma vez: "node node_modules/wrangler/bin/wrangler.js login" (abre o navegador para você entrar na Cloudflare).
 // Nenhum segredo fica neste arquivo nem no cloudflare.config.json. A chave de criptografia (ENCRYPTION_KEY) é gerada
 // aqui na primeira publicação, enviada direto à Cloudflare e nunca aparece na tela nem fica gravada no computador.
@@ -15,12 +19,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const CONFIG = path.join(root, "cloudflare.config.json");
+const TESTE = process.argv.includes("--teste");
+const CONFIG = path.join(root, TESTE ? "cloudflare.teste.json" : "cloudflare.config.json");
 const BUILT = path.join(root, "dist/server/wrangler.json");
 const DEPLOY = path.join(root, "dist/server/wrangler.deploy.json");
 const WRANGLER = path.join(root, "node_modules/wrangler/bin/wrangler.js");
 
-const defaults = { workerName: "portaldaequipe", databaseName: "portal-equipe-db", databaseId: "", filesName: "portal-equipe-arquivos", filesId: "" };
+const defaults = TESTE
+  ? { workerName: "portaldaequipe-teste", databaseName: "portal-equipe-teste-db", databaseId: "", filesName: "portal-equipe-teste-arquivos", filesId: "" }
+  : { workerName: "portaldaequipe", databaseName: "portal-equipe-db", databaseId: "", filesName: "portal-equipe-arquivos", filesId: "" };
 const readConfig = () => ({ ...defaults, ...(existsSync(CONFIG) ? JSON.parse(readFileSync(CONFIG, "utf8")) : {}) });
 const saveConfig = (config) => {
   const rest = { ...config };
@@ -50,8 +57,8 @@ function criar() {
     }
     config.databaseId = id;
     saveConfig(config);
-    console.log("\nBanco criado e anotado em cloudflare.config.json.");
-  } else console.log("O banco já existe (cloudflare.config.json).");
+    console.log(`\nBanco criado e anotado em ${path.basename(CONFIG)}.`);
+  } else console.log(`O banco já existe (${path.basename(CONFIG)}).`);
   if (!config.filesId) {
     const out = run(["kv", "namespace", "create", config.filesName], { capture: true });
     const id = out.match(/"id"\s*:\s*"([0-9a-f]{32})"/i)?.[1] ?? out.match(/id\s*=\s*"([0-9a-f]{32})"/i)?.[1];
@@ -61,15 +68,15 @@ function criar() {
     }
     config.filesId = id;
     saveConfig(config);
-    console.log("\nArmazenamento de arquivos (Workers KV) criado e anotado em cloudflare.config.json.");
+    console.log(`\nArmazenamento de arquivos (Workers KV) criado e anotado em ${path.basename(CONFIG)}.`);
   } else console.log("O armazenamento de arquivos já existe.");
-  console.log("\nPróximo passo: node scripts/cloudflare.mjs publicar");
+  console.log(`\nPróximo passo: node scripts/cloudflare.mjs publicar${TESTE ? " --teste" : ""}`);
 }
 
 function deployConfig() {
   const config = readConfig();
   if (!config.databaseId || !config.filesId) {
-    console.error('Rode antes "node scripts/cloudflare.mjs criar".');
+    console.error(`Rode antes "node scripts/cloudflare.mjs criar${TESTE ? " --teste" : ""}".`);
     process.exit(1);
   }
   const built = JSON.parse(readFileSync(BUILT, "utf8"));
@@ -103,7 +110,7 @@ function publicar() {
   const build = spawnSync(process.execPath, [path.join(root, "scripts/run-framework.mjs"), "build"], { cwd: root, stdio: "inherit" });
   if (build.status !== 0) process.exit(build.status ?? 1);
   const config = deployConfig();
-  console.log("\nAplicando as migrações novas no banco de produção...");
+  console.log(`\nAplicando as migrações novas no banco ${TESTE ? "de TESTE" : "de produção"}...`);
   run(["d1", "migrations", "apply", "DB", "--remote", "--config", DEPLOY]);
   console.log("\nPublicando...");
   if (hasEncryptionKey(config.workerName)) run(["deploy", "--config", DEPLOY]);

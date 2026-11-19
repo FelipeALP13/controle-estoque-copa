@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_BRAND, brandCss, brandInputError, brandPalette, contrast, isBrandLogoKey, parseBrand } from "../app/brand-theme.ts";
+import { DEFAULT_BRAND, brandCss, brandIconUrl, brandInputError, brandPalette, contrast, isBrandLogoKey, parseBrand } from "../app/brand-theme.ts";
 
 test("marca padrão não injeta CSS (visual idêntico ao original)", () => {
   assert.equal(brandCss(DEFAULT_BRAND.color), "");
@@ -43,4 +43,14 @@ test("validação do formulário", () => {
   assert.match(brandInputError({ name: "H", color: "#123abc" }) ?? "", /nome/);
   assert.match(brandInputError({ name: "Hermanos", color: "123abc" }) ?? "", /cor/);
   assert.match(brandInputError({ name: "Hermanos", shortName: "x".repeat(30), color: "#123abc" }) ?? "", /curto/);
+});
+
+test("ícones de instalar: só chaves da marca, endereço muda quando o ícone muda", () => {
+  const key = "media/brand/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0.png";
+  const brand = parseBrand(JSON.stringify({ iconKey: key, iconSmallKey: "secrets/encryption-key-v1" }));
+  assert.equal(brand.iconKey, key);
+  assert.equal(brand.iconSmallKey, null);
+  assert.equal(brandIconUrl(brand, 512), "/api/brand?icon=512&v=0f1e2d3c");
+  assert.equal(brandIconUrl(brand, 192), null);
+  assert.equal(brandIconUrl(DEFAULT_BRAND, 512), null);
 });

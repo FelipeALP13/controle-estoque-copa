@@ -137,8 +137,8 @@ export function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defa
       <div className="modal-head"><div><h2>Nova demanda</h2><p>Ctrl + Enter cria a demanda. Esc fora dos campos fecha.</p></div><button type="button" onClick={requestClose} aria-label="Fechar"><X /></button></div>
       <div className="task-modal-body">
         {templates.length > 0 && <label className="template-pick"><ListChecks size={14} /><select value={templateId} onChange={(event) => applyTemplate(event.target.value)} aria-label="Usar um modelo"><option value="">Começar do zero</option>{templates.map((template) => <option key={template.id} value={template.id}>Modelo: {template.name} ({template.items.length} passos)</option>)}</select></label>}
-        <input className="task-title-input" autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Demanda / atividade" />
-        <textarea className="task-description-input" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição (opcional)" rows={3} />
+        <input aria-label="Título da demanda" className="task-title-input" autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Demanda / atividade" />
+        <textarea aria-label="Descrição (opcional)" className="task-description-input" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição (opcional)" rows={3} />
         {showSteps ? <label className="task-notes"><span>Checklist (um passo por linha)</span><textarea rows={Math.min(10, Math.max(3, steps.split("\n").length + 1))} value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={"Ex.:\nReunião com o cliente\nConfigurar ambiente\nTreinar a equipe"} /></label>
           : <button type="button" className="link-button template-add-steps" onClick={() => setShowSteps(true)}><ListChecks size={13} /> Adicionar checklist</button>}
         <PropertyFields value={fields} onChange={(changes) => setFields((current) => ({ ...current, ...changes }))} lookups={lookups} compact />
@@ -235,11 +235,11 @@ export function TaskDrawer({ task, allTasks = [], onOpenTask, lookups, me, today
       <div className="task-drawer-body">
         <div className="task-drawer-main">
           {task.codes.length > 0 && <p className="task-legacy">Código{task.codes.length > 1 ? "s" : ""} na planilha: {task.codes.map((code) => <b key={code}>{code}</b>)}</p>}
-          <textarea className="task-title-input" rows={1} readOnly={readOnly} value={title} maxLength={160}
+          <textarea aria-label="Título da demanda" className="task-title-input" rows={1} readOnly={readOnly} value={title} maxLength={160}
             onChange={(event) => setTitle(event.target.value.replace(/\n/g, " "))}
             onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }}
             onBlur={() => { const next = title.trim(); if (!next) setTitle(task.title); else if (next !== task.title) void save({ title: next }); }} />
-          <textarea className="task-description-input" readOnly={readOnly} value={description} rows={4} placeholder={readOnly ? "Sem descrição." : "Adicione uma descrição..."}
+          <textarea aria-label="Descrição da demanda" className="task-description-input" readOnly={readOnly} value={description} rows={4} placeholder={readOnly ? "Sem descrição." : "Adicione uma descrição..."}
             onChange={(event) => setDescription(event.target.value)}
             onBlur={() => { if (description !== task.description) void save({ description }); }} />
           <label className="task-notes"><span>OBS / Impedimentos</span><textarea readOnly={readOnly} value={notes} rows={3} placeholder={readOnly ? "Nenhuma observação." : "Bloqueios, dependências, combinados..."} onChange={(event) => setNotes(event.target.value)} onBlur={() => { if (notes !== task.notes) void save({ notes }); }} /></label>
@@ -589,13 +589,13 @@ export function ClientsModal({ clients, tasks, onClose, onSaved }: { clients: Ta
   return <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><div className="modal clients-modal">
     <div className="modal-head"><div><h2>Clientes e projetos</h2><p>É a lista que aparece em “Cliente / Projeto”. Desativar tira o nome dos menus sem mexer nas demandas antigas.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <form className="clients-add" onSubmit={async (event) => { event.preventDefault(); if (name.trim() && await save({ name })) setName(""); }}>
-      <input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Novo cliente ou projeto" />
+      <input aria-label="Novo cliente ou projeto" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="Novo cliente ou projeto" />
       <button className="primary-button" disabled={busy || !name.trim()}><Plus size={15} /> Adicionar</button>
     </form>
     {error && <p className="modal-error">{error}</p>}
     <ul className="clients-list">{clients.map((client) => <li key={client.id} className={client.active ? "" : "inactive"}>
       {editing?.id === client.id
-        ? <form onSubmit={async (event) => { event.preventDefault(); if (await save({ clientId: client.id, name: editing.name, active: client.active })) setEditing(null); }}><input autoFocus value={editing.name} maxLength={80} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /><button className="secondary-button" disabled={busy}>Salvar</button><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button></form>
+        ? <form onSubmit={async (event) => { event.preventDefault(); if (await save({ clientId: client.id, name: editing.name, active: client.active })) setEditing(null); }}><input aria-label="Nome do cliente ou projeto" autoFocus value={editing.name} maxLength={80} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /><button className="secondary-button" disabled={busy}>Salvar</button><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button></form>
         : <><strong>{client.name}</strong><small>{usage.get(client.id) ?? 0} demanda{usage.get(client.id) === 1 ? "" : "s"}</small><button type="button" className="person-edit" onClick={() => setEditing({ id: client.id, name: client.name })} aria-label={`Renomear ${client.name}`}>✎</button><button type="button" className={`access-toggle ${client.active ? "active" : "inactive"}`} disabled={busy} onClick={() => void save({ clientId: client.id, name: client.name, active: !client.active })}>{client.active ? "Ativo" : "Desativado"}</button></>}
     </li>)}</ul>
   </div></div>;

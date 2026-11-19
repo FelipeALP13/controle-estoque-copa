@@ -222,7 +222,7 @@ export function Modal({ state, items, schedule, currentUser, saving, onClose, on
 
   return (
     <div className="modal-layer"><button className="backdrop" onClick={onClose} aria-label="Fechar janela" /><form className={`modal ${state.kind === "member" ? "member-modal" : ""}`} onSubmit={handleSubmit}>
-      <div className="modal-head"><div><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose}><X /></button></div>
+      <div className="modal-head"><div><h2>{title}</h2><p>{description}</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
       {state.kind === "member" && <div className="member-tabs"><button type="button" className={memberTab === "general" ? "active" : ""} onClick={() => setMemberTab("general")}>Geral</button><button type="button" className={memberTab === "permissions" ? "active" : ""} onClick={() => setMemberTab("permissions")}>Permissões</button></div>}
       <div className="form-grid">
         {state.kind === "supportTeam" ? <SupportTeamFields name={teamName} setName={setTeamName} color={teamColor} setColor={setTeamColor} membersText={teamMembersText} setMembersText={setTeamMembersText} /> : state.kind === "supportWeek" ? <>

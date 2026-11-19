@@ -64,7 +64,7 @@ export default function SurveyClient({ token }: { token: string }) {
       </div>
       <p className="survey-label">{shown ? RATING_LABELS[shown] : "Toque nas estrelas para dar a nota"}</p>
       {rating > 0 && <>
-        <textarea rows={3} maxLength={MAX_RATING_COMMENT} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={rating <= 3 ? "O que poderia ter sido melhor? (opcional)" : "Quer deixar um comentário? (opcional)"} />
+        <textarea aria-label="Comentário (opcional)" rows={3} maxLength={MAX_RATING_COMMENT} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={rating <= 3 ? "O que poderia ter sido melhor? (opcional)" : "Quer deixar um comentário? (opcional)"} />
         <button type="button" className="survey-send" disabled={busy} onClick={send}>{busy ? "Enviando…" : "Enviar avaliação"}</button>
       </>}
       {error && <p className="survey-error" role="alert">{error}</p>}

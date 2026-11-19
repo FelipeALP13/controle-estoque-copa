@@ -59,7 +59,7 @@ export default function TicketRatingCard({ ticket, canRateNow, onRate, onGetLink
       <span>{shown ? RATING_LABELS[shown] : "Escolha de 1 a 5 estrelas"}</span>
     </div>
     {rating > 0 && <>
-      <textarea rows={2} maxLength={MAX_RATING_COMMENT} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={rating <= 3 ? "O que poderia ter sido melhor? (opcional)" : "Quer deixar um elogio? (opcional)"} />
+      <textarea aria-label="Comentário da avaliação (opcional)" rows={2} maxLength={MAX_RATING_COMMENT} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={rating <= 3 ? "O que poderia ter sido melhor? (opcional)" : "Quer deixar um elogio? (opcional)"} />
       <button type="button" className="primary-button" disabled={busy} onClick={async () => {
         setBusy(true); setError("");
         try { await onRate(rating, comment); } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível enviar."); setBusy(false); }

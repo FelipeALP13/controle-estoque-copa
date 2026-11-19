@@ -414,7 +414,7 @@ export default function Home() {
         </header>
 
         <section className={`content ${tab === "community" ? "content-full" : ""}`}>
-          {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
+          {error && <div className="alert error"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16} /></button></div>}
           {notice && <div className="toast"><PackageCheck size={18} />{notice}</div>}
 
           {tab === "hub" ? <HubView onOpenReviews={() => go("reviews")} onOpenPulse={() => openView("pulse")} items={items} movements={movements} schedule={schedule} currentUser={currentUser} counts={navCounts} agenda={upcomingAgenda} onOpenAgenda={openAgenda} onMyDay={() => setMyDayOpen(true)} onOpen={(destination) => go(destination)} onOpenTask={openTask} onOpenTicket={openTicket} onNewTask={() => { openTask(); setNewTaskRequest((value) => value + 1); }} onNewTicket={() => { openTicket(); setNewTicketRequest((value) => value + 1); }} onSearch={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))} /> : tab === "stock" ? (

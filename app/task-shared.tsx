@@ -173,7 +173,7 @@ export function PeoplePicker({ label, value, onChange, members, exclude = [], di
       {disabled && !value.length && <span className="people-empty">Ninguém</span>}
     </div>
     {open && <div className="people-menu">
-      <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pessoa" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } if (event.key === "Enter") { event.preventDefault(); const first = options.find((member) => !value.includes(member.id)); if (first) { onChange([...value, first.id]); setQuery(""); } } }} />
+      <input aria-label="Buscar pessoa" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar pessoa" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } if (event.key === "Enter") { event.preventDefault(); const first = options.find((member) => !value.includes(member.id)); if (first) { onChange([...value, first.id]); setQuery(""); } } }} />
       <ul>{options.length ? options.map((member) => {
         const selected = value.includes(member.id);
         return <li key={member.id}><label><input type="checkbox" checked={selected} onChange={() => onChange(selected ? value.filter((id) => id !== member.id) : [...value, member.id])} /><Avatar member={member} size={18} />{member.name}{away(member.id) && <small className="people-menu-away">{away(member.id)}</small>}</label></li>;
@@ -211,7 +211,7 @@ export function MentionTextarea({ value, onChange, members, onSubmit, placeholde
   }
 
   return <div className="mention-field">
-    <textarea ref={ref} value={value} rows={rows} maxLength={maxLength} autoFocus={autoFocus} onPaste={onPaste} placeholder={placeholder ?? "Escreva um comentário... Use @ para mencionar alguém (Ctrl + Enter envia)"}
+    <textarea aria-label={placeholder ?? "Comentário"} ref={ref} value={value} rows={rows} maxLength={maxLength} autoFocus={autoFocus} onPaste={onPaste} placeholder={placeholder ?? "Escreva um comentário... Use @ para mencionar alguém (Ctrl + Enter envia)"}
       onChange={(event) => { onChange(event.target.value); detect(event.target.value, event.target.selectionStart); }}
       onClick={(event) => detect(event.currentTarget.value, event.currentTarget.selectionStart)}
       onBlur={() => window.setTimeout(() => setMention(null), 150)}

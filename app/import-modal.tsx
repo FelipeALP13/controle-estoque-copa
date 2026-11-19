@@ -134,7 +134,7 @@ export default function ImportModal({ onClose, onImported }: { onClose: () => vo
 
         {report.errors.length > 0 && <section className="import-issues errors"><h4>Erros ({report.totalErrors})</h4><ul>{report.errors.map((issue, index) => <li key={index}><span>{issue.sheet}{issue.row ? ` · linha ${issue.row}` : ""}</span>{issue.message}</li>)}</ul></section>}
         {report.totalWarnings > 0 && <details className="import-issues warnings"><summary>Avisos ({report.totalWarnings}): não impedem a importação</summary>
-          <input value={warningFilter} onChange={(event) => setWarningFilter(event.target.value)} placeholder="Filtrar avisos (ex.: horas, Angelo, data)" />
+          <input aria-label="Filtrar avisos da importação" value={warningFilter} onChange={(event) => setWarningFilter(event.target.value)} placeholder="Filtrar avisos (ex.: horas, Angelo, data)" />
           <ul>{warnings.map((issue, index) => <li key={index}><span>{issue.sheet}{issue.row ? ` · linha ${issue.row}` : ""}</span>{issue.message}</li>)}</ul>
           {report.totalWarnings > report.warnings.length && <p className="muted">Mostrando os primeiros {report.warnings.length} avisos.</p>}
         </details>}

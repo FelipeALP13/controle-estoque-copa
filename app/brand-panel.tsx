@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import Palette from "lucide-react/icons/palette";
 import Upload from "lucide-react/icons/upload";
 import { ImageCropper } from "./image-cropper";
+import { makeAppIcons } from "./app-icons";
 import RotateCcw from "lucide-react/icons/rotate-ccw";
 import Users from "lucide-react/icons/users";
 import { BRAND_LIMITS, BRAND_PRESETS, DEFAULT_BRAND, brandPalette, contrast, isHexColor } from "./brand-theme";
@@ -60,7 +61,12 @@ export function BrandPanel() {
     if (!file) return;
     const data = new FormData();
     data.set("file", file);
-    void run(() => post(data, false), "Logo atualizado para todos.", true);
+    // Os ícones de instalar no celular/computador são gerados aqui mesmo, a partir do logo.
+    void run(async () => {
+      const icons = await makeAppIcons(file);
+      if (icons) { data.set("icon512", icons.icon512, "icon-512.png"); data.set("icon192", icons.icon192, "icon-192.png"); }
+      return post(data, false);
+    }, "Logo atualizado para todos (também nos ícones de instalar o Portal).", true);
     if (fileRef.current) fileRef.current.value = "";
   }
 
