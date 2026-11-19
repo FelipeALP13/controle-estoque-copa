@@ -1,4 +1,5 @@
-@import "tailwindcss";
+/* Tailwind só olha a pasta app (os componentes de exemplo em components/ e examples/ não entram no CSS). */
+@import "tailwindcss" source(".");
 
 :root {
   /* ===== Sistema visual: tokens (fonte única das cores). O tema escuro é gerado a partir deles. ===== */

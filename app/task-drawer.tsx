@@ -97,21 +97,44 @@ export function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defa
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    // Ctrl + Enter repetido ou clique duplo não criam duas demandas.
+    if (saving || !title.trim()) return;
     setSaving(true);
     setError("");
     try {
       const result = await postTask({ action: "createTask", title, description, ...fields, checklist: steps });
-      if (result.task) onCreated(result.task);
+      if (!result.task) throw new Error("O servidor não confirmou a criação. Confira a lista antes de tentar de novo.");
+      onCreated(result.task);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível criar a demanda.");
       setSaving(false);
     }
   }
 
-  return <div className="modal-layer" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
-    <button className="backdrop" onClick={onClose} aria-label="Fechar janela" />
+  // Fechar com algo digitado pede confirmação (antes, Esc ou clique fora descartavam tudo sem avisar).
+  const dirty = Boolean(title.trim() || description.trim() || steps.trim());
+  const requestClose = useCallback(() => {
+    if (saving) return;
+    if (dirty && !window.confirm("Descartar esta demanda? O que você digitou será perdido.")) return;
+    onClose();
+  }, [saving, dirty, onClose]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // Esc dentro de um campo (lista, data, busca de pessoas) só fecha o que está aberto nele, não o formulário.
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [role='listbox']")) return;
+      event.preventDefault();
+      requestClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [requestClose]);
+
+  return <div className="modal-layer">
+    <button className="backdrop" onClick={requestClose} aria-label="Fechar janela" />
     <form className="modal task-modal" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) void submit(event); }}>
-      <div className="modal-head"><div><h2>Nova demanda</h2><p>Ctrl + Enter cria a demanda.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
+      <div className="modal-head"><div><h2>Nova demanda</h2><p>Ctrl + Enter cria a demanda. Esc fora dos campos fecha.</p></div><button type="button" onClick={requestClose} aria-label="Fechar"><X /></button></div>
       <div className="task-modal-body">
         {templates.length > 0 && <label className="template-pick"><ListChecks size={14} /><select value={templateId} onChange={(event) => applyTemplate(event.target.value)} aria-label="Usar um modelo"><option value="">Começar do zero</option>{templates.map((template) => <option key={template.id} value={template.id}>Modelo: {template.name} ({template.items.length} passos)</option>)}</select></label>}
         <input className="task-title-input" autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Demanda / atividade" />
@@ -121,7 +144,7 @@ export function NewTaskModal({ initialStatus, lookups, meId, defaultTeamId, defa
         <PropertyFields value={fields} onChange={(changes) => setFields((current) => ({ ...current, ...changes }))} lookups={lookups} compact />
       </div>
       {error && <p className="modal-error">{error}</p>}
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !title.trim()}>{saving ? "Criando..." : "Criar demanda"}</button></div>
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={requestClose} disabled={saving}>Cancelar</button><button className="primary-button" disabled={saving || !title.trim()}>{saving ? "Criando..." : "Criar demanda"}</button></div>
     </form>
   </div>;
 }
