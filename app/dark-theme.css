@@ -45,7 +45,6 @@ html[data-theme="dark"] { --brand-text: #6c95e4; --brand-soft: #17233d; --brand-
 :where(html[data-theme="dark"]) .row-actions button.danger-action { color: #d1928e; }
 :where(html[data-theme="dark"]) .row-actions button.danger-action:hover { border-color: #6d2f2a; color: #cb746e; background: #3c1917; }
 :where(html[data-theme="dark"]) .empty-state { border: 1px dashed #404e63; background: rgba(19, 27, 40, .55); }
-:where(html[data-theme="dark"]) .loading-list span { border: 1px solid #2b3544; background: linear-gradient(90deg,#1a2028,#232b37,#1a2028); }
 :where(html[data-theme="dark"]) .history-meta small { color: #939c96; }
 :where(html[data-theme="dark"]) .role-chip { color: #c3cdc8; }
 :where(html[data-theme="dark"]) .team-intro { border: 1px solid #35533c; background: linear-gradient(135deg,#1a3a1f,#204027); }

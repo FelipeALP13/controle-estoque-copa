@@ -34,6 +34,7 @@ import AdminView from "./admin-view";
 import CalendarView from "./calendar-view";
 import AgendaView from "./agenda-view";
 import MyDay, { useMyDayAutoOpen } from "./my-day";
+import { ProductTour } from "./product-tour";
 import { comingUp, DEFAULT_COVER_DAYS, shoppingList } from "./stock-forecast";
 import { downloadShoppingList, shoppingWhatsAppUrl } from "./shopping-list";
 import NotebookPen from "lucide-react/icons/notebook-pen";
@@ -491,6 +492,7 @@ export default function Home() {
       {chatPanel && tab !== "community" && <ChatPanel onClose={() => setChatPanel(false)} onOpenFull={(channel) => { setChatPanel(false); go("community"); setCommunityTab((current) => ({ key: current.key + 1, channel })); }} />}
 
       {mobileMenu && <button className="backdrop menu-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
+      {currentUser?.active && <ProductTour memberId={currentUser.userId} firstName={currentUser.name.split(/\s+/)[0]} blocked={myDayOpen || modal !== null} />}
       {myDayOpen && currentUser && <MyDay name={currentUser.name} agenda={upcomingAgenda} onClose={() => setMyDayOpen(false)} onOpenTask={openTask} onOpenTicket={openTicket} onOpenAgenda={openAgenda} />}
       {trip && <ShoppingTrip lines={shopping} items={items} onClose={() => setTrip(false)} onDone={(count) => { setTrip(false); void load(); setNotice(`${count} ${count === 1 ? "compra registrada" : "compras registradas"}.`); window.setTimeout(() => setNotice(""), 3200); }} />}
       {modal && <Modal state={modal} items={items} schedule={schedule} currentUser={currentUser} saving={saving} onClose={() => { setModal(null); setError(""); }} onSubmit={submit} />}

@@ -344,8 +344,18 @@ main { min-height: 100vh; margin-left: 248px; }
 .empty-state p { max-width: 440px; margin: 0; color: var(--muted); font-size: var(--fs-base); line-height: 1.55; }
 .empty-state div { display: flex; gap: 8px; margin-top: 20px; }
 .loading-list { display: grid; gap: 8px; }
-.loading-list span { height: 72px; border: 1px solid #e9ece9; border-radius: 11px; background: linear-gradient(90deg,#fff,#f3f5f3,#fff); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
-@keyframes shimmer { to { background-position: -200% 0; } }
+/* Esqueleto de carregamento: cada linha imita um item (círculo + título + detalhe) com um brilho passando. */
+.loading-list span {
+  position: relative; display: block; height: 72px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background-color: var(--surface);
+  background-image: radial-gradient(circle 18px at 34px 50%, var(--surface-sunken) 17px, transparent 18px), linear-gradient(var(--surface-sunken), var(--surface-sunken)), linear-gradient(var(--surface-sunken), var(--surface-sunken));
+  background-repeat: no-repeat; background-size: auto, min(46%, 320px) 12px, min(28%, 190px) 10px; background-position: 0 0, 66px 22px, 66px 42px;
+}
+.loading-list span:nth-child(3n + 2) { background-size: auto, min(60%, 380px) 12px, min(22%, 150px) 10px; }
+.loading-list span:nth-child(3n) { background-size: auto, min(38%, 260px) 12px, min(32%, 210px) 10px; }
+.loading-list span::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 70%, transparent), transparent); content: ""; transform: translateX(-100%); animation: shimmer 1.4s ease-in-out infinite; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .loading-list span::after { animation: none; } }
 
 .history-title { margin-top: 0; }
 .history-list { margin-top: 20px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
@@ -3689,7 +3699,7 @@ html[data-theme="dark"] .community {
 .login-input { border-color: var(--border-strong); background: var(--surface-alt); }
 .login-input > svg, .login-input button { color: var(--text-muted); }
 .login-submit { font-size: var(--fs-base); }
-.login-note { color: var(--text-faint); font-size: var(--fs-xs); }
+.login-note { color: var(--text-muted); font-size: var(--fs-xs); }
 .login-error { border-color: var(--danger-border); color: var(--danger-text); background: var(--danger-soft); font-size: var(--fs-sm); }
 .login-2fa-hint { color: var(--text-muted); font-size: var(--fs-sm); }
 .login-benefits span { font-size: var(--fs-base); }
@@ -3760,3 +3770,37 @@ html[data-theme="dark"] .community {
 /* Caixa da reunião: a escolha Teams/Meet ocupa a linha de cima inteira; texto e botão lado a lado embaixo */
 .agenda-teams > .agenda-platform { grid-column: 1 / -1; justify-self: start; margin-bottom: 0; }
 .agenda-teams > .secondary-button { white-space: nowrap; }
+
+/* Chat: "Vista"/"Enviada" na conversa direta e botão de voltar ao fim. */
+.community .cv-seen { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 2px 2px 0 0; color: var(--cv-muted); font-size: var(--fs-xs); }
+.community .cv-seen.read { color: var(--cv-accent); }
+.community .cv-jump-wrap { position: sticky; bottom: 4px; z-index: 5; height: 0; }
+.community .cv-jump { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; min-width: 40px; min-height: 40px; justify-content: center; padding: 0 12px; border: 1px solid var(--cv-line); border-radius: 999px; color: var(--cv-text); background: var(--cv-pop); box-shadow: 0 6px 18px rgba(15, 23, 42, .14); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; animation: cv-jump-in .16s ease-out; }
+.community .cv-jump:hover { background: var(--cv-hover); }
+.community .cv-jump.has-new { border-color: transparent; color: var(--on-brand, #fff); background: var(--cv-accent); }
+.community .cv-jump.has-new:hover { background: var(--cv-accent-hover); }
+@keyframes cv-jump-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .community .cv-jump { animation: none; } }
+
+/* Tour do primeiro acesso (product-tour.tsx). */
+.tour-layer { position: fixed; inset: 0; z-index: 120; }
+.tour-dim { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); }
+.tour-spot { position: fixed; border-radius: var(--radius-md); box-shadow: 0 0 0 9999px rgba(15, 23, 42, .55), 0 0 0 2px var(--brand); pointer-events: none; transition: top .2s ease, left .2s ease, width .2s ease, height .2s ease; }
+.tour-card { position: fixed; width: min(340px, calc(100vw - 24px)); padding: 18px 18px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text-secondary); background: var(--surface); box-shadow: var(--shadow-lg); outline: none; animation: tour-in .18s ease-out; }
+.tour-card h2 { margin: 2px 28px 6px 0; color: var(--text); font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.01em; }
+.tour-card p { margin: 0; font-size: var(--fs-base); line-height: 1.5; }
+.tour-count { color: var(--brand-text); font-size: var(--fs-xs); font-weight: 700; }
+.tour-close { position: absolute; top: 10px; right: 10px; display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; cursor: pointer; }
+.tour-close:hover { color: var(--text); background: var(--surface-sunken); }
+.tour-dots { display: flex; gap: 5px; margin: 14px 0 12px; }
+.tour-dots i { width: 6px; height: 6px; border-radius: 999px; background: var(--border-strong); transition: width .2s ease; }
+.tour-dots i.on { width: 18px; background: var(--brand); }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-skip { min-height: 40px; padding: 0 6px; border: 0; color: var(--text-muted); background: transparent; font-weight: 600; cursor: pointer; }
+.tour-skip:hover { color: var(--text); }
+.tour-again { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+.tour-again > div { display: flex; flex-direction: column; gap: 2px; }
+.tour-again strong { color: var(--text); font-size: var(--fs-sm); }
+.tour-again small { color: var(--text-muted); font-size: var(--fs-xs); }
+@keyframes tour-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tour-card { animation: none; } .tour-spot { transition: none; } }

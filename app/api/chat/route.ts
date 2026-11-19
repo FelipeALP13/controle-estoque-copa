@@ -175,6 +175,13 @@ export async function GET(request: Request) {
           return { id: channel.id, kind: channel.kind, name: peer?.name ?? "Pessoa", description: "", archived: channel.archived, peerId, canManage: false };
         })(),
         lastReadId: read?.lastReadId ?? 0,
+        // Conversa direta: até onde a outra pessoa leu (mostra "Vista" embaixo das suas mensagens).
+        peerReadId: channel.kind === "dm" ? await (async () => {
+          const peerId = dmMembers(channel.dmKey).find((id) => id !== member.id);
+          if (!peerId) return null;
+          const [peerRead] = await db.select({ lastReadId: chatTopicReads.lastReadId }).from(chatTopicReads).where(and(eq(chatTopicReads.topicId, topic.id), eq(chatTopicReads.memberId, peerId))).limit(1);
+          return peerRead?.lastReadId ?? 0;
+        })() : null,
         typing: typing.map((row) => row.name),
         scheduled: (await db.select({ id: chatScheduled.id, body: chatScheduled.body, sendAt: chatScheduled.sendAt }).from(chatScheduled)
           .where(and(eq(chatScheduled.memberId, member.id), eq(chatScheduled.channelId, channel.id), sql`${chatScheduled.sentAt} is null`)).orderBy(chatScheduled.sendAt).catch(() => [])),

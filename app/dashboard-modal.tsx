@@ -14,6 +14,7 @@ import { addDays, findOverlappingWeek, generateRotation, normalizeTeamMembers, s
 import Trash2 from "lucide-react/icons/trash-2";
 import TriangleAlert from "lucide-react/icons/triangle-alert";
 import X from "lucide-react/icons/x";
+import { OPEN_TOUR_EVENT } from "./product-tour";
 import { type MemberRole, type MemberPermissions, permissionPresets, permissionOptions, type CurrentUser, type Item, type ModalState, type Schedule, movementCopy, fmt, roleLabel, personIcons, uploadImage, StandardChoice, VisualEditor, isoDateInSaoPaulo, weekLabel, findTeam } from "./dashboard-shared";
 
 function nextMondayAfter(isoDate: string) {
@@ -250,6 +251,7 @@ export function Modal({ state, items, schedule, currentUser, saving, onClose, on
           <div className="password-change full"><div><strong>Alterar senha</strong><small>Deixe os dois campos vazios para manter a senha atual. A nova senha deve ter 8+ caracteres, letras e números.</small></div><div className="password-change-fields"><label><span>Senha atual</span><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Sua senha atual" /></label><label><span>Nova senha</span><input type="password" value={memberPassword} onChange={(e) => setMemberPassword(e.target.value)} placeholder="8+ caracteres, letras e números" /><small className={memberPassword && passwordPolicyError(memberPassword) ? "field-error" : ""}>{memberPassword ? passwordPolicyError(memberPassword) || "Senha válida." : "Mínimo de 8 caracteres, com letras e números."}</small></label></div></div>
           <ThemePicker />
           <PushPanel />
+          <div className="tour-again full"><div><strong>Tour do Portal</strong><small>Mostra de novo onde fica cada coisa: menu, demandas, chamados, busca, chat e avisos.</small></div><button type="button" className="secondary-button" onClick={() => { onClose(); window.setTimeout(() => window.dispatchEvent(new Event(OPEN_TOUR_EVENT)), 250); }}>Ver o tour</button></div>
           <TwoFactorPanel />
           <SessionsPanel />
           <div className="profile-role full"><span>Seu nível de acesso</span><strong>{roleLabel(memberRole)}</strong></div>

@@ -386,7 +386,7 @@ function TaskPicker({ current, onPick, onClose }: { current: number | null; onPi
   return <div className="goal-task-picker" role="dialog" aria-label="Ligar a uma demanda">
     <header><strong>Ligar a uma demanda</strong><button onClick={onClose} aria-label="Fechar"><X size={14} /></button></header>
     <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por título ou código" aria-label="Buscar demanda" />
-    {!tasks ? <p className="muted">Carregando…</p> : list.length ? <ul>{list.map((task) => <li key={task.id}><button className={task.id === current ? "active" : ""} onClick={() => onPick(task.id)}><b>{taskCode(task.id)}</b><span>{task.title}</span>{task.status === "done" && <small>concluída</small>}</button></li>)}</ul> : <p className="muted">Nenhuma demanda encontrada.</p>}
+    {!tasks ? <div className="loading-list"><span /><span /></div> : list.length ? <ul>{list.map((task) => <li key={task.id}><button className={task.id === current ? "active" : ""} onClick={() => onPick(task.id)}><b>{taskCode(task.id)}</b><span>{task.title}</span>{task.status === "done" && <small>concluída</small>}</button></li>)}</ul> : <p className="muted">Nenhuma demanda encontrada.</p>}
     {current && <button className="goal-task-unlink" onClick={() => onPick(null)}>Tirar a demanda ligada</button>}
   </div>;
 }

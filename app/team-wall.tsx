@@ -106,7 +106,7 @@ export function PersonKudos({ memberId, count, from, to, suffix = "" }: { member
   if (!total) return null;
   return <div className="person-kudos">
     <button type="button" className="link-button" onClick={() => { setOpen(!open); if (!items) void load(); }}><Award size={13} /> {total} {total === 1 ? "elogio" : "elogios"}{suffix}{open ? " ▴" : " ▾"}</button>
-    {open && (items ? <KudosList items={items} showTo={false} /> : <p className="muted">Carregando…</p>)}
+    {open && (items ? <KudosList items={items} showTo={false} /> : <div className="loading-list"><span /><span /></div>)}
   </div>;
 }
 

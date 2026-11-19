@@ -12,7 +12,10 @@ import AlarmClock from "lucide-react/icons/alarm-clock";
 import CalendarClock from "lucide-react/icons/calendar-clock";
 import Vote from "lucide-react/icons/vote";
 import { PollCard, PollModal, type PollItem } from "./team-wall";
+import ArrowDown from "lucide-react/icons/arrow-down";
 import ArrowLeft from "lucide-react/icons/arrow-left";
+import Check from "lucide-react/icons/check";
+import CheckCheck from "lucide-react/icons/check-check";
 import Hash from "lucide-react/icons/hash";
 import ImagePlus from "lucide-react/icons/image-plus";
 import ListPlus from "lucide-react/icons/list-plus";
@@ -428,6 +431,10 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const [hasMore, setHasMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [newSince, setNewSince] = useState<number | null>(null);
+  // Conversa direta: até onde a outra pessoa leu ("Vista" embaixo da sua última mensagem).
+  const [peerReadId, setPeerReadId] = useState<number | null>(null);
+  // Rolou para cima: id da última mensagem que estava na tela (as de depois contam como novas no botão).
+  const [awayFrom, setAwayFrom] = useState<number | null>(null);
   const [typing, setTyping] = useState<string[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -446,6 +453,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const stickToBottom = useRef(true);
   const keepOffset = useRef<number | null>(null);
   const lastSeen = useRef(0);
+  const messagesRef = useRef<Message[]>([]);
   const myName = people.find((person) => person.id === me.id)?.name ?? "";
 
   const merge = useCallback((incoming: Message[]) => {
@@ -459,7 +467,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/chat?topic=${topicId}`, { cache: "no-store" });
-      const json = await response.json() as { messages: Message[]; hasMore: boolean; lastReadId: number; typing: string[]; channel: ChannelInfo; pinned?: PinnedMessage[]; scheduled?: Scheduled[]; error?: string };
+      const json = await response.json() as { messages: Message[]; hasMore: boolean; lastReadId: number; peerReadId?: number | null; typing: string[]; channel: ChannelInfo; pinned?: PinnedMessage[]; scheduled?: Scheduled[]; error?: string };
       if (!response.ok) throw new Error(json.error || "Não foi possível carregar as mensagens.");
       const box = listRef.current;
       stickToBottom.current = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 160;
@@ -468,6 +476,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
       setTyping(json.typing ?? []);
       setPinned(json.pinned ?? []);
       setScheduled(json.scheduled ?? []);
+      setPeerReadId(json.peerReadId ?? null);
       if (!loaded) { setHasMore(json.hasMore); setNewSince(json.lastReadId || null); setLoaded(true); }
       const newest = json.messages[json.messages.length - 1]?.id ?? 0;
       if (newest > lastSeen.current) { lastSeen.current = newest; window.dispatchEvent(new Event(CHAT_CHANGED)); onChanged?.(); }
@@ -482,6 +491,8 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
     return () => { window.clearTimeout(first); window.clearInterval(interval); };
   }, [load]);
 
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
   useLayoutEffect(() => {
     const box = listRef.current;
     if (!box) return;
@@ -494,7 +505,12 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   useEffect(() => {
     const box = listRef.current;
     if (!box) return;
-    const onScroll = () => { stickToBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 160; };
+    const onScroll = () => {
+      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+      stickToBottom.current = atBottom;
+      const lastId = messagesRef.current[messagesRef.current.length - 1]?.id ?? 0;
+      setAwayFrom((current) => (atBottom ? null : current ?? lastId));
+    };
     const onLoad = () => { if (stickToBottom.current) box.scrollTop = box.scrollHeight; };
     box.addEventListener("scroll", onScroll, { passive: true });
     box.addEventListener("load", onLoad, true);
@@ -546,8 +562,6 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
       }, 60);
     } finally { jumping.current = false; }
   }, [topicId, merge]);
-  const messagesRef = useRef<Message[]>([]);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => {
     if (!focus || !loaded) return;
     const timer = window.setTimeout(() => { void jumpTo(focus.id); }, 0);
@@ -565,6 +579,10 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
   const isDm = channel?.kind === "dm";
   const where = channel ? (isDm ? channel.name : `#${channel.name}`) : "";
   const peer = isDm ? people.find((person) => person.id === channel?.peerId) : null;
+  const lastLive = isDm ? [...messages].reverse().find((message) => !message.deleted) : undefined;
+  const lastMine = lastLive?.memberId === me.id ? lastLive.id : null;
+  const unseen = awayFrom === null ? 0 : messages.filter((message) => message.id > awayFrom && message.memberId !== me.id && !message.deleted).length;
+  const toBottom = () => { const box = listRef.current; stickToBottom.current = true; setAwayFrom(null); if (box) box.scrollTop = box.scrollHeight; };
 
   return <div className={`cv-thread ${compact ? "compact" : ""}`}>
     <header className="cv-thread-head">
@@ -642,6 +660,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
                     {(message.memberId === me.id || (me.isAdmin && !isDm)) && <button className="danger" onClick={() => { if (window.confirm("Apagar esta mensagem?")) void act({ action: "delete", messageId: message.id }); }} aria-label="Apagar" title="Apagar"><Trash2 size={14} /></button>}
                   </span>}
                 </div>
+                {lastMine === message.id && peerReadId !== null && !outbox.length && <p className={`cv-seen ${peerReadId >= message.id ? "read" : ""}`}>{peerReadId >= message.id ? <><CheckCheck size={13} /> Vista</> : <><Check size={13} /> Enviada</>}</p>}
               </Fragment>)}
             </div>
           </div>
@@ -656,6 +675,9 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
         </div>
       </div>}
       {typing.length > 0 && <p className="cv-typing"><span className="dots"><i /><i /><i /></span> {typingText(typing)}</p>}
+      {awayFrom !== null && <div className="cv-jump-wrap"><button type="button" className={`cv-jump ${unseen ? "has-new" : ""}`} onClick={toBottom} aria-label={unseen ? `${unseen} ${unseen === 1 ? "mensagem nova" : "mensagens novas"}: ir para o fim` : "Ir para a última mensagem"}>
+        <ArrowDown size={15} />{unseen > 0 && <span>{unseen > 99 ? "99+" : unseen} {unseen === 1 ? "nova" : "novas"}</span>}
+      </button></div>}
     </div>
 
     {error && <p className="cv-error">{error}</p>}

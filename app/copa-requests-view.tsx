@@ -115,7 +115,7 @@ export function CopaRequestsView({ items, onStockChanged }: { items: Item[]; onS
 
     <section className="copa-board">
       <h3>Aguardando decisão {open.length > 0 && <b>{open.length}</b>}</h3>
-      {!data ? <p className="copa-muted">Carregando pedidos…</p> : open.length === 0 ? <p className="copa-muted">Nenhum pedido aguardando. Sentiu falta de algo? Peça acima.</p> : <ul className="copa-list">
+      {!data ? <div className="loading-list" aria-label="Carregando pedidos"><span /><span /></div> : open.length === 0 ? <p className="copa-muted">Nenhum pedido aguardando. Sentiu falta de algo? Peça acima.</p> : <ul className="copa-list">
         {open.map((request) => <li key={request.id} id={`copa-request-${request.id}`} className={highlight === request.id ? "flash" : ""}>
           <button type="button" className={`copa-vote ${request.voted ? "on" : ""}`} disabled={request.mine || !data.me.canRequest}
             onClick={() => act({ action: "vote", requestId: request.id, on: !request.voted })}
