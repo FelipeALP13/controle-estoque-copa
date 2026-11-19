@@ -326,7 +326,39 @@ export const absences = sqliteTable("absences", {
   createdById: integer("created_by_id").references(() => members.id, { onDelete: "set null" }),
   createdByName: text("created_by_name").notNull().default("Equipe"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("absences_member_idx").on(table.memberId), index("absences_end_idx").on(table.endDate)]);
+  // Pedido de ausência: "pending" até o líder (ou administrador) aprovar; só "approved" conta como fora.
+  status: text("status", { enum: ["approved", "pending", "rejected"] }).notNull().default("approved"),
+  decidedByName: text("decided_by_name"),
+  decidedAt: text("decided_at"),
+  decisionNote: text("decision_note").notNull().default(""),
+}, (table) => [index("absences_member_idx").on(table.memberId), index("absences_end_idx").on(table.endDate), index("absences_status_idx").on(table.status)]);
+
+/** Pedido de troca de semana na escala de atendimento (aprovado por quem gerencia a escala). */
+export const shiftSwaps = sqliteTable("shift_swaps", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fromWeekId: integer("from_week_id").notNull().references(() => supportWeeks.id, { onDelete: "cascade" }),
+  toWeekId: integer("to_week_id").notNull().references(() => supportWeeks.id, { onDelete: "cascade" }),
+  requesterId: integer("requester_id").references(() => members.id, { onDelete: "set null" }),
+  requesterName: text("requester_name").notNull().default("Equipe"),
+  reason: text("reason").notNull().default(""),
+  status: text("status", { enum: ["pending", "approved", "rejected", "canceled"] }).notNull().default("pending"),
+  decidedByName: text("decided_by_name"),
+  decidedAt: text("decided_at"),
+  decisionNote: text("decision_note").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("shift_swaps_status_idx").on(table.status)]);
+
+/** Daily assíncrona: o que fez ontem, o que vai fazer hoje e bloqueios (uma por pessoa por dia). */
+export const standups = sqliteTable("standups", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  memberId: integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  day: text("day").notNull(),
+  yesterday: text("yesterday").notNull().default(""),
+  today: text("today").notNull().default(""),
+  blockers: text("blockers").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("standups_member_day_idx").on(table.memberId, table.day), index("standups_day_idx").on(table.day)]);
 
 /** Apontamento de horas: quem trabalhou, em que dia e quanto, em cada demanda. */
 export const timeEntries = sqliteTable("time_entries", {
@@ -490,7 +522,7 @@ export const notifications = sqliteTable("notifications", {
   memberId: integer("member_id")
     .notNull()
     .references(() => members.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_message", "chat_reminder", "stock_low", "copa_request", "kudos", "poll", "maintenance", "security_alert"] }).notNull(),
+  kind: text("kind", { enum: ["task_assigned", "task_comment", "task_mention", "task_status", "ticket_new", "ticket_assigned", "ticket_comment", "ticket_mention", "ticket_status", "ticket_late", "agenda_reminder", "agenda_invite", "ticket_rate", "task_unblocked", "handoff", "celebration", "system_down", "system_up", "onboarding", "review_open", "review_reminder", "goal_update", "one_on_one", "dev_action", "pulse_open", "announcement", "incident", "asset_expiring", "chat_mention", "chat_message", "chat_reminder", "stock_low", "copa_request", "kudos", "poll", "maintenance", "security_alert", "absence_request", "absence_decision", "shift_swap", "standup_blocker"] }).notNull(),
   taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   ticketId: integer("ticket_id").references(() => tickets.id, { onDelete: "cascade" }),
   eventId: integer("event_id").references(() => agendaEvents.id, { onDelete: "cascade" }),

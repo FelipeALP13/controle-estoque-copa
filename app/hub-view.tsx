@@ -5,6 +5,7 @@ import { MyTasksPanel } from "./tasks-view";
 import { MyTicketsPanel } from "./tickets-view";
 import LifeBuoy from "lucide-react/icons/life-buoy";
 import NoticeBoard from "./notice-board";
+import { StandupCard } from "./standup-card";
 import TeamWall from "./team-wall";
 import CelebrationsCard from "./celebrations-card";
 import { OnboardingCard, useOnboardings } from "./onboarding-view";
@@ -71,6 +72,8 @@ export function HubView({ onOpenReviews, onOpenPulse, items, movements, schedule
         <span className="hub-stat-go" aria-hidden="true">→</span>
       </button>)}
     </div>
+
+    {currentUser?.active && <StandupCard />}
 
     <HubReviews enabled={Boolean(currentUser?.active)} onOpen={onOpenReviews} />
     <HubPulse enabled={Boolean(currentUser?.active)} onOpen={onOpenPulse} />

@@ -36,7 +36,7 @@ import List from "lucide-react/icons/list";
 import MessageSquareText from "lucide-react/icons/message-square-text";
 import Pencil from "lucide-react/icons/pencil";
 import { fillReply, onTicketBoard, REPLY_FIELDS, repliesFor, TICKET_BOARD_STATUSES, type TicketBoardStatus } from "./team-tools";
-import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
+import { canHandleTicket, compareTickets, describeTicketEvent, formatMinutes, isActiveTicket, isTicketLate, parseStoredDate, resolutionHours, resolutionStatus, slaStatus, ticketCode, ticketJourney, ticketStatuses, ticketStatusLabels, ticketTypeLabels, ticketTypes, ticketUrgencies, ticketUrgencyLabels, type SlaState, type TicketEventKind, type TicketStatus, type TicketType, type TicketUrgency } from "./tickets";
 
 type Ticket = {
   id: number; title: string; description: string; type: TicketType; urgency: TicketUrgency; status: TicketStatus; client: string;
@@ -73,6 +73,31 @@ function UrgencyBadge({ urgency }: { urgency: TicketUrgency }) {
 
 function StatusPill({ status }: { status: TicketStatus }) {
   return <span className={`ticket-status ${status}`}>{ticketStatusLabels[status]}</span>;
+}
+
+const JOURNEY_STATE_TEXT: Record<SlaState, string> = { met: "no prazo", late: "fora do prazo", ok: "no prazo", warning: "perto do limite", breached: "prazo estourado" };
+
+/** Linha do tempo do chamado: aberto, primeira resposta e solução, com o tempo de cada etapa e o prazo (SLA). */
+function TicketJourney({ ticket }: { ticket: Ticket }) {
+  const steps = ticketJourney(ticket);
+  const when = (value: string) => parseStoredDate(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return <ol className="ticket-journey" aria-label="Etapas do chamado">
+    {steps.map((step) => {
+      const waiting = !step.done;
+      const tone = step.state === "late" || step.state === "breached" ? "bad" : step.state === "warning" ? "warn" : step.done ? "good" : "idle";
+      return <li key={step.key} className={`journey-step ${waiting ? "waiting" : "done"} ${tone}`}>
+        <span className="journey-dot" aria-hidden="true" />
+        <div>
+          <strong>{step.label}</strong>
+          <small>
+            {step.at ? when(step.at) : waiting ? "Aguardando" : "—"}
+            {step.minutes !== null && step.key !== "open" && ` · em ${formatMinutes(step.minutes)}`}
+          </small>
+          {step.state && step.limitMinutes !== null && <em>{waiting && step.state !== "breached" ? `Prazo: ${formatMinutes(step.limitMinutes)}` : `Prazo ${formatMinutes(step.limitMinutes)}: ${JOURNEY_STATE_TEXT[step.state]}`}</em>}
+        </div>
+      </li>;
+    })}
+  </ol>;
 }
 
 function SlaBadge({ ticket }: { ticket: Ticket }) {
@@ -496,6 +521,8 @@ function TicketDrawer({ ticket, data, onOpenTicket, onManageReplies, onClose, on
           <AttachmentsPanel ownerType="ticket" ownerId={ticket.id} />
 
           {error && <p className="modal-error task-drawer-error">{error}</p>}
+
+          <TicketJourney ticket={ticket} />
 
           <h3 className="task-activity-title">Atividade</h3>
           {!events ? <div className="loading-list"><span /></div> : <ol className="task-activity">

@@ -229,7 +229,7 @@ export async function GET(request: Request) {
     ]);
     const today = todayInSaoPaulo(now);
     const away = await db.select({ memberId: absences.memberId, kind: absences.kind, startDate: absences.startDate, endDate: absences.endDate }).from(absences)
-      .where(and(sql`${absences.startDate} <= ${today}`, sql`${absences.endDate} >= ${today}`)).catch(() => []);
+      .where(and(sql`${absences.startDate} <= ${today}`, sql`${absences.endDate} >= ${today}`, eq(absences.status, "approved"))).catch(() => []);
     const statusOf = (id: number) => {
       const absence = away.find((row) => row.memberId === id && isAbsenceKind(row.kind));
       const own = presence.find((row) => row.memberId === id);

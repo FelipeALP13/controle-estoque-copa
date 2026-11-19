@@ -281,6 +281,13 @@
       "when": 1795009033395,
       "tag": "0039_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1795116626279,
+      "tag": "0040_requests_and_standups",
+      "breakpoints": true
     }
   ]
 }

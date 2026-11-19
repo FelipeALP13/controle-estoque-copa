@@ -9,6 +9,7 @@ import SupportQualityView from "./support-quality-view";
 import MonthlyReportView from "./monthly-report-view";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
+import { WorkloadGrid } from "./workload-grid";
 import MessageCircle from "lucide-react/icons/message-circle";
 import { weeklySummary } from "./weekly-summary";
 import { isOpen, inPeriod, summarize, workload, type PanelTask } from "./leadership";
@@ -210,6 +211,8 @@ export default function LeadershipView({ onOpenTask, onOpenProjects }: { onOpenT
         {activeProjects.length > 0 && <p className="farol-line">{projectFarois.map((value) => { const count = activeProjects.filter((project) => project.farol === value).length; return count ? <span key={value}><span className={`farol-dot ${value}`} />{count} {projectFarolLabels[value].toLowerCase()}</span> : null; })}</p>}
       </section>
     </div>
+
+    <WorkloadGrid tasks={teamTasks} people={people} absences={absences} today={today} onOpenTask={onOpenTask} />
 
     <div className="report-columns equal">
       {visibleTeams.map((entry) => {

@@ -45,6 +45,11 @@ Uma segunda cópia do Portal, com banco e arquivos próprios, para auditorias e 
 | Integração de quem chega | `app/onboarding-view.tsx`, `app/api/onboarding/` |
 | Base de conhecimento e mural | `app/knowledge-view.tsx`, `app/notice-board.tsx` |
 | Escala de atendimento e passagem de plantão | `app/schedule-view.tsx`, `app/support-schedule.ts`, `app/handoff-panel.tsx`, `app/api/handoffs/` |
+| Troca de semana na escala (pedido e aprovação de quem gerencia a escala) | `app/shift-swaps.tsx`, `app/api/shift-swaps/` |
+| Daily assíncrona (ontem, hoje, bloqueios; bloqueio avisa o líder) | `app/standup-card.tsx`, `app/api/standups/` |
+| Pedido de ausência com aprovação do líder | `app/absences-view.tsx`, `app/api/absences/` |
+| Carga do time por dia (Painel da liderança) | `app/workload-grid.tsx`, `app/workload-calendar.ts` |
+| Perfil da pessoa (painel lateral) | `app/person-profile.tsx` |
 | Aniversários e tempo de casa | `app/celebrations-card.tsx`, aviso em `app/jobs.ts` |
 | Regras dos recursos acima (puras, testadas) | `app/team-tools.ts`, `app/office-tools.ts` |
 | Pessoas, times e ausências | `app/people-view.tsx`, `app/absences*.ts(x)` |

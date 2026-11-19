@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       const [taskRows, roster, away, memberRows, backlog] = await Promise.all([
         db.select({ id: tasks.id, title: tasks.title, status: tasks.status, priority: tasks.priority, estimatedHours: tasks.estimatedHours, workedHours: tasks.workedHours, completedOn: tasks.completedOn, dueDate: tasks.dueDate, teamId: tasks.teamId }).from(tasks).where(eq(tasks.sprintId, sprintId)).orderBy(asc(tasks.sortOrder)),
         sprint.teamId ? db.select({ memberId: teamMembers.memberId }).from(teamMembers).innerJoin(members, eq(teamMembers.memberId, members.id)).where(and(eq(teamMembers.teamId, sprint.teamId), eq(members.active, true))) : Promise.resolve([]),
-        db.select({ memberId: absences.memberId, startDate: absences.startDate, endDate: absences.endDate }).from(absences).where(and(lte(absences.startDate, sprint.endDate), gte(absences.endDate, sprint.startDate))),
+        db.select({ memberId: absences.memberId, startDate: absences.startDate, endDate: absences.endDate }).from(absences).where(and(lte(absences.startDate, sprint.endDate), gte(absences.endDate, sprint.startDate), eq(absences.status, "approved"))),
         db.select({ id: members.id, name: members.name, avatarIcon: members.avatarIcon, avatarKey: members.avatarKey }).from(members).where(eq(members.active, true)).orderBy(asc(members.name)),
         // Candidatas a entrar: em aberto, sem sprint (do time do sprint ou sem time).
         db.select({ id: tasks.id, title: tasks.title, status: tasks.status, estimatedHours: tasks.estimatedHours, teamId: tasks.teamId }).from(tasks).where(and(isNull(tasks.sprintId), notInArray(tasks.status, ["done", "canceled"]))).orderBy(asc(tasks.sortOrder)).limit(500),

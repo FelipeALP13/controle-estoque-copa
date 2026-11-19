@@ -20,6 +20,7 @@ import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
 import { PersonKudos } from "./team-wall";
 import { ActivityHeatmap } from "./activity-heatmap";
+import { PersonProfile } from "./person-profile";
 
 export type Person = { id: number; name: string; email: string; role: "admin" | "member" | "viewer"; active: boolean; avatarIcon: string; avatarKey: string | null; jobTitle: string; phone: string; birthday?: string | null; startedOn?: string | null };
 
@@ -41,7 +42,7 @@ async function post(payload: Record<string, unknown>) {
 
 const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR");
 
-export default function PeopleView({ initialSearch = "", initialTab = "people" }: { initialSearch?: string; initialTab?: "people" | "assets" }) {
+export default function PeopleView({ initialSearch = "", initialTab = "people" }: { initialSearch?: string; initialTab?: "people" | "assets" | "absences" }) {
   const [data, setData] = useState<PeopleData | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"people" | "teams" | "absences" | "onboarding" | "assets">(initialTab);
@@ -50,6 +51,8 @@ export default function PeopleView({ initialSearch = "", initialTab = "people" }
   const [search, setSearch] = useState(initialSearch);
   const [teamFilter, setTeamFilter] = useState("");
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+  const [viewing, setViewing] = useState<Person | null>(null);
+  const closeProfile = useCallback(() => setViewing(null), [setViewing]);
   const [kudosCounts, setKudosCounts] = useState<Record<string, number>>({});
   useEffect(() => {
     let cancelled = false;
@@ -116,8 +119,10 @@ export default function PeopleView({ initialSearch = "", initialTab = "people" }
           const canEdit = data.me.isAdmin || person.id === data.me.id;
           return <article key={person.id} className={`person-card ${person.active ? "" : "inactive"}`}>
             <div className="person-head">
-              <Avatar member={person} size={44} />
-              <div><strong>{person.name}{person.id === data.me.id && <small> (você)</small>}</strong><span>{person.jobTitle || <em>Cargo não informado</em>}</span></div>
+              <button type="button" className="person-open" onClick={() => setViewing(person)} aria-label={`Ver o perfil de ${person.name}`}>
+                <Avatar member={person} size={44} />
+                <div><strong>{person.name}{person.id === data.me.id && <small> (você)</small>}</strong><span>{person.jobTitle || <em>Cargo não informado</em>}</span></div>
+              </button>
               {canEdit && <button className="person-edit" onClick={() => setEditingPerson(person)} aria-label={`Editar ${person.name}`} title="Editar"><Pencil size={14} /></button>}
             </div>
             <div className="person-teams">{memberships.length ? memberships.map(({ team, isLead }) => <TeamChip key={team.id} team={team} lead={isLead} />) : <span className="person-noteam">Sem time</span>}{!person.active && <span className="person-inactive">Desativado</span>}{(() => { const away = absenceOn(absences, person.id, today); return away ? <span className="person-away">{describeAbsence(away, today)}</span> : null; })()}</div>
@@ -145,6 +150,8 @@ export default function PeopleView({ initialSearch = "", initialTab = "people" }
       </div> : <div className="empty-state"><span><Users /></span><h3>Nenhum time cadastrado</h3><p>{data.me.isAdmin ? "Crie os times da empresa para organizar pessoas, demandas e chamados." : "Os administradores ainda não cadastraram os times."}</p></div>
     )}
 
+    {viewing && <PersonProfile person={viewing} memberships={teamsOf(viewing.id)} absences={absences} today={today} isMe={viewing.id === data.me.id} isAdmin={data.me.isAdmin} kudosCount={kudosCounts[viewing.id] ?? 0}
+      onEdit={data.me.isAdmin || viewing.id === data.me.id ? () => { setEditingPerson(viewing); setViewing(null); } : undefined} onClose={closeProfile} />}
     {editingPerson && <PersonModal person={editingPerson} teams={data.teams} isAdmin={data.me.isAdmin} currentTeamIds={teamsOf(editingPerson.id).map(({ team }) => team.id)} onClose={() => setEditingPerson(null)} onSaved={async () => { setEditingPerson(null); await load(); }} />}
     {editingTeam && <TeamModal team={editingTeam === "new" ? null : editingTeam} people={data.people.filter((person) => person.active)} onClose={() => setEditingTeam(null)} onSaved={async () => { setEditingTeam(null); await load(); }} />}
   </div>;

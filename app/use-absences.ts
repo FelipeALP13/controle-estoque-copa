@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { Absence } from "./absences";
 
 export type LoadedAbsence = Absence & { createdByName: string; canDelete: boolean };
-export type AbsencesData = { absences: LoadedAbsence[]; people: { id: number; name: string }[]; me: { id: number; manageable: "all" | number[] } };
+export type AbsenceRequest = LoadedAbsence & { status: "pending" | "rejected"; decidedByName: string | null; decisionNote: string; canDecide: boolean };
+export type AbsencesData = { absences: LoadedAbsence[]; requests?: AbsenceRequest[]; people: { id: number; name: string }[]; me: { id: number; manageable: "all" | number[] } };
 
 const CHANGED = "absences-changed";
 let cache: { at: number; promise: Promise<AbsencesData | null> } | null = null;
@@ -34,5 +35,5 @@ export function useAbsences() {
     window.addEventListener(CHANGED, onChange);
     return () => { window.clearTimeout(first); window.removeEventListener(CHANGED, onChange); };
   }, [load]);
-  return { absences: data?.absences ?? [], people: data?.people ?? [], me: data?.me ?? null, loaded: data !== null };
+  return { absences: data?.absences ?? [], requests: data?.requests ?? [], people: data?.people ?? [], me: data?.me ?? null, loaded: data !== null };
 }

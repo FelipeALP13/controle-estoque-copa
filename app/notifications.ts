@@ -1,4 +1,4 @@
-export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late" | "agenda_reminder" | "agenda_invite" | "ticket_rate" | "task_unblocked" | "handoff" | "celebration" | "system_down" | "system_up" | "onboarding" | "review_open" | "review_reminder" | "goal_update" | "one_on_one" | "dev_action" | "pulse_open" | "announcement" | "incident" | "asset_expiring" | "chat_mention" | "chat_message" | "chat_reminder" | "stock_low" | "copa_request" | "kudos" | "poll" | "maintenance" | "security_alert";
+export type NotificationKind = "task_assigned" | "task_comment" | "task_mention" | "task_status" | "ticket_new" | "ticket_assigned" | "ticket_comment" | "ticket_mention" | "ticket_status" | "ticket_late" | "agenda_reminder" | "agenda_invite" | "ticket_rate" | "task_unblocked" | "handoff" | "celebration" | "system_down" | "system_up" | "onboarding" | "review_open" | "review_reminder" | "goal_update" | "one_on_one" | "dev_action" | "pulse_open" | "announcement" | "incident" | "asset_expiring" | "chat_mention" | "chat_message" | "chat_reminder" | "stock_low" | "copa_request" | "kudos" | "poll" | "maintenance" | "security_alert" | "absence_request" | "absence_decision" | "shift_swap" | "standup_blocker";
 
 type Person = { id: number; name: string };
 
@@ -91,6 +91,8 @@ export function notificationText(kind: NotificationKind, actorName: string, body
   if (kind === "kudos") return `${actorName} elogiou você: ${body}`;
   if (kind === "poll") return `${actorName} abriu uma enquete: ${body}`;
   if (kind === "maintenance" || kind === "security_alert") return body;
+  if (kind === "absence_request") return `${actorName} pediu ${body}`;
+  if (kind === "absence_decision" || kind === "shift_swap" || kind === "standup_blocker") return body;
   if (kind === "pulse_open" || kind === "incident" || kind === "asset_expiring" || kind === "stock_low" || kind === "copa_request") return body;
   if (kind === "ticket_rate") return `${actorName} resolveu o seu chamado. Como foi o atendimento?`;
   return `${actorName} comentou`;

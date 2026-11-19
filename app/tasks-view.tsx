@@ -355,13 +355,17 @@ function Board({ byStatus, lookups, teamsById, canEdit, today, onOpen, onMove, o
             const client = task.clientId ? lookups.clientsById.get(task.clientId) : null;
             return <div key={task.id}>
               {target?.status === status && target.beforeId === task.id && dragId !== task.id && <div className="drop-line" />}
-              <button className={`board-card ${dragId === task.id ? "dragging" : ""}`} draggable={canEdit} onClick={() => onOpen(task.id)}
+              <button className={`board-card ${dragId === task.id ? "dragging" : ""} ${task.priority === 1 ? "prio-critical" : task.priority === 2 ? "prio-high" : ""} ${task.dueDate && !isClosedStatus(task.status) && task.dueDate < today ? "late" : ""}`} draggable={canEdit} onClick={() => onOpen(task.id)}
                 onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(task.id)); setDragId(task.id); }}
                 onDragEnd={finish}
                 onDragOver={(event) => { if (dragId === null) return; event.preventDefault(); event.stopPropagation(); const box = event.currentTarget.getBoundingClientRect(); const after = event.clientY > box.top + box.height / 2; const index = column.findIndex((entry) => entry.id === task.id); setTarget({ status, beforeId: after ? column[index + 1]?.id ?? null : task.id }); }}>
                 <span className="board-card-top"><span className="task-code">{taskCode(task.id)}</span><AvatarStack ids={task.owners} membersById={lookups.membersById} size={20} /></span>
                 <span className="board-card-title"><StatusIcon status={task.status} /><span>{task.title}</span></span>
                 {client && <span className="board-card-client">{client.name}{task.category && ` · ${task.category}`}</span>}
+                {task.checklist && task.checklist.total > 0 && <span className="board-card-progress" title={`Checklist: ${task.checklist.done} de ${task.checklist.total} passos`}>
+                  <span className="board-card-bar" role="progressbar" aria-label="Checklist" aria-valuemin={0} aria-valuemax={task.checklist.total} aria-valuenow={task.checklist.done}><i style={{ width: `${Math.round((task.checklist.done / task.checklist.total) * 100)}%` }} className={task.checklist.done === task.checklist.total ? "complete" : ""} /></span>
+                  <small>{task.checklist.done}/{task.checklist.total}</small>
+                </span>}
                 <span className="board-card-meta"><PriorityIcon priority={task.priority} />{task.teamId && teamsById.get(task.teamId) && <TeamChip team={teamsById.get(task.teamId)!} />}{task.dueDate && <DueChip dueDate={task.dueDate} closed={isClosedStatus(task.status)} today={today} />}{task.commentCount > 0 && <span className="task-comments"><MessageSquare size={12} />{task.commentCount}</span>}{task.hoursFlag && <span className="hours-flag" title="Horas importadas fora do normal: revise"><TriangleAlert size={12} /></span>}{Boolean(task.waitingOn) && !isClosedStatus(task.status) && <WaitingChip count={task.waitingOn!} />}</span>
               </button>
             </div>;

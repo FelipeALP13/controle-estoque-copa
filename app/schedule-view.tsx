@@ -7,13 +7,14 @@ import { useAbsences } from "./use-absences";
 import { nextSupportWeek, supportWeekForDate, type SupportTeam, type SupportWeek } from "./support-schedule";
 import CalendarClock from "lucide-react/icons/calendar-clock";
 import HandoffPanel from "./handoff-panel";
+import { ShiftSwaps } from "./shift-swaps";
 import Pencil from "lucide-react/icons/pencil";
 import Plus from "lucide-react/icons/plus";
 import Sparkles from "lucide-react/icons/sparkles";
 import UserPlus from "lucide-react/icons/user-plus";
 import { type Schedule, isoDateInSaoPaulo, scheduleDate, weekLabel, findTeam, scheduleRangeLabel, LoadingRows } from "./dashboard-shared";
 
-export function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNewWeek, onEditWeek, onGenerate }: { schedule: Schedule; loading: boolean; canEdit: boolean; onNewTeam: () => void; onEditTeam: (team: SupportTeam) => void; onNewWeek: () => void; onEditWeek: (week: SupportWeek) => void; onGenerate: () => void }) {
+export function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam, onNewWeek, onEditWeek, onGenerate, onScheduleChanged }: { schedule: Schedule; loading: boolean; canEdit: boolean; onNewTeam: () => void; onEditTeam: (team: SupportTeam) => void; onNewWeek: () => void; onEditWeek: (week: SupportWeek) => void; onGenerate: () => void; onScheduleChanged?: () => void }) {
   const [showPast, setShowPast] = useState(false);
   const away = useAbsences();
   if (loading) return <LoadingRows />;
@@ -51,6 +52,8 @@ export function ScheduleView({ schedule, loading, canEdit, onNewTeam, onEditTeam
         </div>
         <div className="schedule-hero-date"><CalendarClock /><small>{currentWeek ? "Semana atual" : nextWeek ? "Próxima semana" : "Último período"}</small><strong>{weekLabel(highlightedWeek)}</strong><span>Escala {highlightedWeek.start.slice(0, 4)}</span></div>
       </section> : <div className="empty-state"><span><CalendarClock /></span><h3>Nenhuma semana cadastrada</h3><p>{canEdit ? (schedule.teams.length ? "Cadastre uma semana ou gere várias de uma vez com o rodízio das equipes." : "Comece criando as equipes de atendimento.") : "A escala ainda não foi preenchida. Fale com um administrador."}</p></div>}
+
+      {weeks.length > 0 && <ShiftSwaps weeks={weeks} teams={schedule.teams} today={today} onScheduleChanged={() => onScheduleChanged?.()} />}
 
       {weeks.length > 0 && <HandoffPanel />}
 

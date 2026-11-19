@@ -76,6 +76,27 @@ export function isTicketLate(ticket: { createdAt: string; firstResponseAt: strin
   return slaStatus(ticket, now).state === "breached" || resolutionStatus(ticket, now)?.state === "breached";
 }
 
+export type JourneyStep = { key: "open" | "response" | "end"; label: string; at: string | null; done: boolean; minutes: number | null; limitMinutes: number | null; state: SlaState | null };
+
+/**
+ * Etapas do chamado para a linha do tempo: aberto, primeira resposta e solução (ou cancelamento),
+ * com quanto tempo levou desde a abertura e se ficou dentro do prazo.
+ */
+export function ticketJourney(ticket: { createdAt: string; firstResponseAt: string | null; resolvedAt: string | null; status: TicketStatus; urgency: TicketUrgency }, now = new Date()): JourneyStep[] {
+  const created = parseStoredDate(ticket.createdAt).getTime();
+  const since = (value: string | null) => (value ? Math.max(0, Math.round((parseStoredDate(value).getTime() - created) / 60000)) : null);
+  const response = slaStatus(ticket, now);
+  const canceled = ticket.status === "canceled";
+  const resolution = resolutionStatus(ticket, now);
+  return [
+    { key: "open", label: "Aberto", at: ticket.createdAt, done: true, minutes: 0, limitMinutes: null, state: null },
+    { key: "response", label: "Primeira resposta", at: ticket.firstResponseAt, done: Boolean(ticket.firstResponseAt), minutes: since(ticket.firstResponseAt), limitMinutes: firstResponseHours[ticket.urgency] * 60, state: canceled && !ticket.firstResponseAt ? null : response.state },
+    canceled
+      ? { key: "end", label: "Cancelado", at: ticket.resolvedAt, done: true, minutes: since(ticket.resolvedAt), limitMinutes: null, state: null }
+      : { key: "end", label: "Resolvido", at: ticket.status === "resolved" ? ticket.resolvedAt : null, done: ticket.status === "resolved", minutes: ticket.status === "resolved" ? since(ticket.resolvedAt) : null, limitMinutes: resolutionHours[ticket.urgency] * 60, state: resolution?.state ?? null },
+  ];
+}
+
 export function formatMinutes(total: number) {
   const minutes = Math.abs(Math.round(total));
   if (minutes < 60) return `${minutes} min`;

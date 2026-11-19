@@ -1,5 +1,6 @@
 // Teste dos fluxos principais, de ponta a ponta, contra o Portal rodando localmente:
-// demanda (criar, aparecer na lista, concluir, mapa de calor, excluir), chamado (abrir, resolver, excluir),
+// demanda (criar, aparecer na lista, concluir, mapa de calor, excluir), chamado (abrir, resolver, excluir), ausência com aprovação,
+// troca de semana na escala, daily (com aviso de bloqueio),
 // artigo (criar, buscar, excluir), item da copa (cadastrar, aparecer, excluir) e agenda (criar, listar, excluir).
 // Cria um administrador temporário no banco LOCAL (sem senha: só uma sessão de teste) e apaga tudo no fim.
 // O chamado vai para um time temporário só com esse usuário (ninguém da equipe é avisado) e nada sai do computador.
@@ -35,14 +36,22 @@ function cleanup() {
   sql(`delete from kb_articles where title like '${MARK}%';`);
   sql(`delete from items where name like '${MARK}%';`);
   sql(`delete from agenda_events where title like '${MARK}%';`);
-  sql(`delete from notifications where member_id in (select id from members where user_id like '${MARK}-%');`);
+  sql(`delete from notifications where member_id in (select id from members where user_id like '${MARK}-%') or actor_name like 'Teste fluxo%';`);
   sql(`delete from audit_logs where actor_user_id like '${MARK}-%';`);
+  sql(`delete from standups where member_id in (select id from members where user_id like '${MARK}-%');`);
+  sql(`delete from absences where member_id in (select id from members where user_id like '${MARK}-%');`);
+  sql(`delete from shift_swaps where from_week_id in (select id from support_weeks where note = '${MARK}') or to_week_id in (select id from support_weeks where note = '${MARK}');`);
+  sql(`delete from support_weeks where team_id in (select id from support_teams where name like '${MARK}%');`);
+  sql(`delete from support_teams where name like '${MARK}%';`);
   sql(`delete from members where user_id like '${MARK}-%';`);
   sql(`delete from teams where name = '${MARK}';`);
 }
 
-async function api(method, path, body) {
-  const headers = { Origin: BASE, Cookie: `estoque_session=${token}` };
+const memberToken = randomBytes(32).toString("hex");
+let memberId = 0;
+
+async function api(method, path, body, as = token) {
+  const headers = { Origin: BASE, Cookie: `estoque_session=${as}` };
   if (body) headers["Content-Type"] = "application/json";
   const send = () => fetch(BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   // O servidor local às vezes derruba a conexão logo depois de o teste gravar direto no banco: tenta de novo uma vez.
@@ -60,6 +69,9 @@ try {
   sql(`insert into members (user_id, name, email, role, permissions, active) values ('${MARK}-admin', 'Teste fluxo', '${MARK}@pendente.local', 'admin', '{}', 1);`);
   adminId = sql(`select id from members where user_id = '${MARK}-admin';`)[0].results[0].id;
   sql(`insert into sessions (member_id, token_hash, expires_at, last_seen_at, device) values (${adminId}, '${sha256(token)}', '${new Date(Date.now() + 3600000).toISOString()}', '${new Date().toISOString()}', 'Teste de fluxos');`);
+  sql(`insert into members (user_id, name, email, role, permissions, active) values ('${MARK}-member', 'Teste fluxo membro', '${MARK}-membro@pendente.local', 'member', '{}', 1);`);
+  memberId = sql(`select id from members where user_id = '${MARK}-member';`)[0].results[0].id;
+  sql(`insert into sessions (member_id, token_hash, expires_at, last_seen_at, device) values (${memberId}, '${sha256(memberToken)}', '${new Date(Date.now() + 3600000).toISOString()}', '${new Date().toISOString()}', 'Teste de fluxos');`);
 
   // Demanda
   const created = await api("POST", "/api/tasks", { action: "createTask", title: `${TITLE} demanda`, description: "teste", owners: [adminId], support: [], status: "todo", priority: 0 });
@@ -117,6 +129,48 @@ try {
   check("agenda: aparece na lista", JSON.stringify(agenda.data).includes(`${TITLE} agenda`));
   const removedEvent = await api("POST", "/api/agenda", { action: "deleteEvent", eventId });
   check("agenda: excluir", removedEvent.status === 200, `status ${removedEvent.status}`);
+
+  // Ausência com aprovação: o membro pede, fica pendente (não conta como fora), o administrador aprova.
+  const future = (days) => new Date(Date.parse(`${today}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+  const asked = await api("POST", "/api/absences", { action: "addAbsence", kind: "day_off", startDate: future(40), endDate: future(41), note: MARK }, memberToken);
+  check("ausência: membro pede (fica pendente)", asked.status === 201 && asked.data.pending === true, `status ${asked.status} ${asked.data.error ?? ""}`);
+  const askedId = asked.data.absence?.id;
+  const adminView = await api("GET", "/api/absences");
+  check("ausência: pendente não conta como fora", !adminView.data.absences?.some((absence) => absence.id === askedId));
+  check("ausência: administrador vê o pedido para decidir", adminView.data.requests?.some((request) => request.id === askedId && request.canDecide));
+  const selfDecide = await api("POST", "/api/absences", { action: "decideAbsence", absenceId: askedId, approve: true }, memberToken);
+  check("ausência: membro não aprova o próprio pedido", selfDecide.status === 403, `status ${selfDecide.status}`);
+  const approvedAbsence = await api("POST", "/api/absences", { action: "decideAbsence", absenceId: askedId, approve: true });
+  check("ausência: administrador aprova", approvedAbsence.status === 200, `status ${approvedAbsence.status} ${approvedAbsence.data.error ?? ""}`);
+  check("ausência: aprovada conta como fora", (await api("GET", "/api/absences", null, memberToken)).data.absences?.some((absence) => absence.id === askedId));
+  const decisionNotice = sql(`select count(*) n from notifications where member_id = ${memberId} and kind = 'absence_decision';`)[0].results[0].n;
+  check("ausência: membro recebe o aviso da decisão", decisionNotice === 1, `avisos ${decisionNotice}`);
+  sql(`delete from absences where member_id = ${memberId};`);
+
+  // Troca de semana na escala (equipes e semanas temporárias, em 2030 para não tocar na escala real).
+  sql(`insert into support_teams (name, color, members) values ('${MARK} A', 'purple', '[]'), ('${MARK} B', 'orange', '[]');`);
+  const [teamA, teamB] = sql(`select id from support_teams where name like '${MARK}%' order by name;`)[0].results.map((row) => row.id);
+  sql(`insert into support_weeks (start_date, end_date, team_id, note) values ('2030-01-07', '2030-01-11', ${teamA}, '${MARK}'), ('2030-01-14', '2030-01-18', ${teamB}, '${MARK}');`);
+  const [weekA, weekB] = sql(`select id from support_weeks where note = '${MARK}' order by start_date;`)[0].results.map((row) => row.id);
+  const swap = await api("POST", "/api/shift-swaps", { action: "requestSwap", fromWeekId: weekA, toWeekId: weekB, reason: "teste" }, memberToken);
+  check("troca: membro pede", swap.status === 201, `status ${swap.status} ${swap.data.error ?? ""}`);
+  const swapId = swap.data.swap?.id;
+  const memberDecide = await api("POST", "/api/shift-swaps", { action: "decideSwap", swapId, approve: true }, memberToken);
+  check("troca: membro sem permissão não aprova", memberDecide.status === 403, `status ${memberDecide.status}`);
+  const approvedSwap = await api("POST", "/api/shift-swaps", { action: "decideSwap", swapId, approve: true });
+  check("troca: administrador aprova", approvedSwap.status === 200, `status ${approvedSwap.status} ${approvedSwap.data.error ?? ""}`);
+  const swapped = sql(`select id, team_id from support_weeks where id in (${weekA}, ${weekB}) order by start_date;`)[0].results;
+  check("troca: as semanas trocaram de equipe", swapped[0]?.team_id === teamB && swapped[1]?.team_id === teamA, JSON.stringify(swapped));
+
+  // Daily: responder, aparecer para o time e o bloqueio avisar o líder.
+  sql(`insert into team_members (team_id, member_id, is_lead) values (${teamId || 0}, ${memberId}, 0);`);
+  sql(`update team_members set is_lead = 1 where team_id = ${teamId || 0} and member_id = ${adminId};`);
+  const daily = await api("POST", "/api/standups", { action: "save", yesterday: "x", today: `${MARK} hoje`, blockers: "esperando acesso" }, memberToken);
+  check("daily: responder", daily.status === 200, `status ${daily.status} ${daily.data.error ?? ""}`);
+  const dailyView = await api("GET", "/api/standups");
+  check("daily: aparece para o time", dailyView.data.entries?.some((entry) => entry.memberId === memberId && entry.blockers === "esperando acesso"));
+  const blockerNotice = sql(`select count(*) n from notifications where member_id = ${adminId} and kind = 'standup_blocker';`)[0].results[0].n;
+  check("daily: bloqueio avisa o líder do time", blockerNotice === 1, `avisos ${blockerNotice}`);
 } finally {
   try { cleanup(); } catch (error) { console.error("Limpeza falhou:", error.message); }
 }
