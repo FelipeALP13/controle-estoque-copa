@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLiveRefresh } from "./live";
 import { createPortal } from "react-dom";
 import AtSign from "lucide-react/icons/at-sign";
 import Bell from "lucide-react/icons/bell";
@@ -133,6 +134,7 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
       for (const item of fresh.slice(0, 3)) window.setTimeout(() => dismissToast(item.id), item.kind === "agenda_reminder" ? 30000 : 9000);
     } catch { /* tenta de novo no próximo ciclo */ }
   }, [dismissToast]);
+  useLiveRefresh(load);
 
   useEffect(() => {
     const prefs = window.setTimeout(() => { setMutedState(isMuted()); setAskDesktop(canAskDesktop()); }, 0);

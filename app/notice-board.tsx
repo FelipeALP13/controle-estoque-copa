@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Check from "lucide-react/icons/check";
 import Megaphone from "lucide-react/icons/megaphone";
 import Plus from "lucide-react/icons/plus";
@@ -38,6 +39,7 @@ export default function NoticeBoard() {
       setData({ notices: [], me: { id: 0, canPost: false } });
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function act(payload: Record<string, unknown>) {

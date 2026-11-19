@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Download from "lucide-react/icons/download";
 import FolderKanban from "lucide-react/icons/folder-kanban";
 import { downloadXlsx } from "./xlsx-writer";
@@ -74,6 +75,7 @@ export default function ProjectsView({ onOpenTask, openRequest = null, onOpenReq
       setError(err instanceof Error ? err.message : "Não foi possível carregar os projetos.");
     }
   }, []);
+  useLiveRefresh(load);
 
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 

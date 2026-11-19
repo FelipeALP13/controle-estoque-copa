@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Check from "lucide-react/icons/check";
 import ClipboardList from "lucide-react/icons/clipboard-list";
 import Repeat from "lucide-react/icons/repeat-2";
@@ -44,6 +45,7 @@ export default function HandoffPanel() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar a passagem de plantão.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function run(action: () => Promise<void>) {

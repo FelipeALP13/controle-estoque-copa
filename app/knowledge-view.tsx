@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import BookOpen from "lucide-react/icons/book-open";
 import Pencil from "lucide-react/icons/pencil";
 import Plus from "lucide-react/icons/plus";
@@ -50,6 +51,7 @@ export default function KnowledgeView({ openRequest = null, draft = null, onRequ
       setError(err instanceof Error ? err.message : "Não foi possível carregar a base.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   // Pedido vindo de um chamado: abrir um artigo ou começar um a partir da solução.

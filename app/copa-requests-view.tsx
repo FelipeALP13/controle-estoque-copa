@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import BellRing from "lucide-react/icons/bell-ring";
 import Check from "lucide-react/icons/check";
 import HandPlatter from "lucide-react/icons/hand-platter";
@@ -50,6 +51,7 @@ export function CopaRequestsView({ items, onStockChanged }: { items: Item[]; onS
       setError(err instanceof Error ? err.message : "Não foi possível carregar os pedidos.");
     }
   }, []);
+  useLiveRefresh(load);
 
   useEffect(() => {
     const first = window.setTimeout(() => { void load(); }, 0);

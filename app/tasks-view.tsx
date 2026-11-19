@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Building2 from "lucide-react/icons/building-2";
 import ChevronDown from "lucide-react/icons/chevron-down";
 import Columns3 from "lucide-react/icons/columns-3";
@@ -60,6 +61,7 @@ export default function TasksView({ openRequest = null, onOpenRequestHandled, cr
       setError(err instanceof Error ? err.message : "Não foi possível carregar as demandas.");
     }
   }, []);
+  useLiveRefresh(load);
 
   useEffect(() => {
     const first = window.setTimeout(() => { setView(readView()); void load(); }, 0);

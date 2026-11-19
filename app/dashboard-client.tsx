@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveRefresh, useLiveSync } from "./live";
 import { useRouter } from "next/navigation";
 import ReportsView from "./reports-view";
 import TasksView from "./tasks-view";
@@ -17,7 +18,6 @@ import ClipboardCheck from "lucide-react/icons/clipboard-check";
 import Building2 from "lucide-react/icons/building-2";
 import CalendarRange from "lucide-react/icons/calendar-range";
 import { BrandLogo, useBrand } from "./brand-context";
-import LayoutDashboard from "lucide-react/icons/layout-dashboard";
 import UserCog from "lucide-react/icons/user-cog";
 import PeopleView from "./people-view";
 import ProjectsView from "./projects-view";
@@ -265,6 +265,9 @@ export default function Home() {
       if (!silent) setLoading(false);
     }
   }, [router]);
+  // Atualização ao vivo: vigia mudanças da equipe e recarrega as telas abertas.
+  useLiveSync(Boolean(currentUser?.active));
+  useLiveRefresh(useCallback(() => load(true), [load]));
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => { void load(); }, 0);
@@ -387,11 +390,10 @@ export default function Home() {
       <aside className={`sidebar ${mobileMenu ? "open" : ""} ${sidebarOpen ? "expanded" : ""}`}
         onMouseEnter={pinnedOpen ? undefined : expandSidebar} onMouseLeave={pinnedOpen ? undefined : collapseSidebar}
         onFocus={pinnedOpen ? undefined : expandSidebar} onBlur={pinnedOpen ? undefined : (event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) collapseSidebar(); }}>
-        <div className="brand"><span className={brand.logoUrl ? "brand-mark has-logo" : "brand-mark"}><BrandLogo fallback={<Users size={21} />} /></span><div><strong>{brand.name}</strong>{brand.tagline && <small>{brand.tagline}</small>}</div></div>
+        <button type="button" className={`brand brand-home ${tab === "hub" ? "active" : ""}`} onClick={() => go("hub")} aria-label={`${brand.name}: ir para a Visão geral`} title="Visão geral" aria-current={tab === "hub" ? "page" : undefined}><span className={brand.logoUrl ? "brand-mark has-logo" : "brand-mark"}><BrandLogo fallback={<Users size={21} />} /></span><div><strong>{brand.name}</strong>{brand.tagline && <small>{brand.tagline}</small>}</div></button>
         <button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X /></button>
         <SidebarNav activeKey={tab} expanded={sidebarOpen} sections={[
           { items: [
-            { key: "hub", label: "Visão geral", icon: <LayoutDashboard />, onClick: () => go("hub") },
             { key: "agenda", label: "Minha agenda", icon: <NotebookPen />, onClick: () => openAgenda() },
             { key: "calendar", label: "Calendário", icon: <CalendarDays />, onClick: () => go("calendar") },
             { key: "community", label: "Chat", icon: <MessagesSquare />, onClick: () => go("community"), badge: navCounts?.chat ? { count: navCounts.chat, tone: navCounts.chatDirect ? "danger" : "info", title: `${navCounts.chat} ${navCounts.chat === 1 ? "mensagem não lida" : "mensagens não lidas"}${navCounts.chatDirect ? ` (${navCounts.chatDirect} em conversa direta)` : ""}` } : null },

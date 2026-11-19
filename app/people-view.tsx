@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Mail from "lucide-react/icons/mail";
 import Pencil from "lucide-react/icons/pencil";
 import Phone from "lucide-react/icons/phone";
@@ -71,6 +72,7 @@ export default function PeopleView({ initialSearch = "", initialTab = "people" }
       setError(err instanceof Error ? err.message : "Não foi possível carregar as pessoas.");
     }
   }, []);
+  useLiveRefresh(load);
 
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 

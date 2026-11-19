@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveRefresh } from "./live";
 import CircleCheck from "lucide-react/icons/circle-check";
 import Hand from "lucide-react/icons/hand";
 import LifeBuoy from "lucide-react/icons/life-buoy";
@@ -142,6 +143,7 @@ export default function TicketsView({ openRequest = null, onOpenRequestHandled, 
       setError(err instanceof Error ? err.message : "Não foi possível carregar os chamados.");
     }
   }, []);
+  useLiveRefresh(load);
 
   useEffect(() => {
     const first = window.setTimeout(() => { void load(); }, 0);
@@ -434,6 +436,7 @@ function TicketDrawer({ ticket, data, onOpenTicket, onManageReplies, onClose, on
     const json = await response.json() as { events?: TicketEvent[]; error?: string };
     if (response.ok && json.events) setEvents(json.events); else setError(json.error || "Não foi possível carregar a atividade.");
   }, [ticket.id]);
+  useLiveRefresh(loadEvents);
 
   useEffect(() => { const timer = window.setTimeout(() => { void loadEvents(); }, 0); return () => window.clearTimeout(timer); }, [loadEvents, ticket.updatedAt]);
   useEffect(() => {

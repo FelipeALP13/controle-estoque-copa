@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import MapPin from "lucide-react/icons/map-pin";
 import MessageSquare from "lucide-react/icons/message-square";
 import Plus from "lucide-react/icons/plus";
@@ -40,6 +41,7 @@ export default function MaintenanceView() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar os pedidos.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   const shown = useMemo(() => (data?.requests ?? []).filter((row) => filter === "active" ? isActiveMaintenance(row.status) : filter === "mine" ? row.mine : !isActiveMaintenance(row.status)), [data, filter]);

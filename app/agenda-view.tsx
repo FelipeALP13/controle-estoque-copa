@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import BellRing from "lucide-react/icons/bell-ring";
 import BellOff from "lucide-react/icons/bell-off";
 import CalendarPlus from "lucide-react/icons/calendar-plus";
@@ -63,6 +64,7 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
       setError(err instanceof Error ? err.message : "Não foi possível carregar a agenda.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   // Veio do sino: destaca o compromisso.

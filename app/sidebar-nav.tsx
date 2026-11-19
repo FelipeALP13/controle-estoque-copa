@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLiveRefresh } from "./live";
 import ChevronDown from "lucide-react/icons/chevron-down";
 import { TICKETS_CHANGED } from "./use-jira-sync";
 import { NOTIFY_REFRESH_EVENT } from "./notify-sound";
@@ -28,6 +29,7 @@ export function useNavCounts(enabled: boolean) {
       if (json.reminded) window.dispatchEvent(new Event(NOTIFY_REFRESH_EVENT));
     } catch { /* sem conexão: mantém os números anteriores */ }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => {
     if (!enabled) return;
     const first = window.setTimeout(() => { void load(); }, 800);

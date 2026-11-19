@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Check from "lucide-react/icons/check";
 import Lock from "lucide-react/icons/lock";
 import Settings from "lucide-react/icons/settings";
@@ -37,6 +38,7 @@ export default function PulseView() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   if (!data) return error ? <div className="alert error"><span>{error}</span></div> : <div className="loading-list"><span /><span /></div>;

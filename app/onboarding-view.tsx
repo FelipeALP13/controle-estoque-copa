@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Check from "lucide-react/icons/check";
 import Plus from "lucide-react/icons/plus";
 import Sprout from "lucide-react/icons/sprout";
@@ -32,6 +33,7 @@ export function useOnboardings(enabled = true) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { if (!enabled) return; const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load, enabled]);
   return { data, error, load };
 }

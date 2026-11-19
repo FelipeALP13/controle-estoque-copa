@@ -2,6 +2,7 @@
 
 // Daily assíncrona na Visão geral: responder em 1 minuto e ver o que o time disse hoje.
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import ChevronDown from "lucide-react/icons/chevron-down";
 import MessageSquareText from "lucide-react/icons/message-square-text";
 import OctagonAlert from "lucide-react/icons/octagon-alert";
@@ -28,6 +29,7 @@ export function StandupCard() {
       setData(next);
     } catch { /* a daily é opcional: sem ela, a Visão geral continua */ }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   function startEditing() {

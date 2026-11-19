@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import KeyRound from "lucide-react/icons/key-round";
 import Laptop from "lucide-react/icons/laptop";
 import Pencil from "lucide-react/icons/pencil";
@@ -44,6 +45,7 @@ export default function AssetsView() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
   const today = todayIso();
   const list = useMemo(() => {

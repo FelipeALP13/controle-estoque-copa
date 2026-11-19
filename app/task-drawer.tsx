@@ -4,6 +4,7 @@ import AttachmentsPanel from "./attachments-panel";
 import RecurrencePanel, { type Recurrence } from "./recurrence-panel";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Building2 from "lucide-react/icons/building-2";
 import CalendarDays from "lucide-react/icons/calendar";
 import Plus from "lucide-react/icons/plus";
@@ -169,6 +170,7 @@ export function TaskDrawer({ task, allTasks = [], onOpenTask, lookups, me, today
     const data = await response.json() as { events?: TaskEvent[]; checklist?: ChecklistItem[]; recurrence?: Recurrence | null; dependencies?: Dependencies; error?: string };
     if (response.ok && data.events) { setEvents(data.events); setChecklist(data.checklist ?? []); setRecurrence(data.recurrence ?? null); setDependencies(data.dependencies ?? { blockedBy: [], blocking: [] }); } else setError(data.error || "Não foi possível carregar a atividade.");
   }, [task.id]);
+  useLiveRefresh(loadEvents);
 
   // Recarrega a atividade quando a demanda muda (status, responsáveis...).
   useEffect(() => { const timer = window.setTimeout(() => { void loadEvents(); }, 0); return () => window.clearTimeout(timer); }, [loadEvents, task.updatedAt]);
@@ -399,6 +401,7 @@ export function TemplatesModal({ lookups, onClose }: { lookups: Lookups; onClose
       setError(err instanceof Error ? err.message : "Não foi possível carregar os modelos.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function post(payload: Record<string, unknown>) {
@@ -477,6 +480,7 @@ function TimeLog({ task, me, lookups, today, onSaveBase, onChanged }: { task: Ta
     const data = await response.json() as { entries?: LoggedEntry[]; error?: string };
     if (response.ok && data.entries) setEntries(data.entries); else { setEntries([]); setError(data.error || "Não foi possível carregar as horas."); }
   }, [task.id]);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function post(body: Record<string, unknown>) {

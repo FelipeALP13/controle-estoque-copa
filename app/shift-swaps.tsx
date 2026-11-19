@@ -2,6 +2,7 @@
 
 // Troca de semana na escala: pedir (qualquer pessoa da equipe) e aprovar ou recusar (quem gerencia a escala).
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import ArrowLeftRight from "lucide-react/icons/arrow-left-right";
 import Check from "lucide-react/icons/check";
 import X from "lucide-react/icons/x";
@@ -33,6 +34,7 @@ export function ShiftSwaps({ weeks, teams, today, onScheduleChanged }: { weeks: 
       if (response.ok) setData(await response.json() as Data);
     } catch { /* a troca é opcional: sem ela, a escala continua funcionando */ }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function act(payload: Record<string, unknown>, changesSchedule = false) {

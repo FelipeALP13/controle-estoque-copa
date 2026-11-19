@@ -1,6 +1,7 @@
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
+import { bumpLiveVersion, isLiveRequest, liveResponse } from "./live";
 
 const worker = {
   fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
@@ -23,8 +24,13 @@ const worker = {
         },
       };
     }
-    const https = new URL(request.url).protocol === "https:";
-    return Promise.resolve(runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx))).then((response) => withSecurityHeaders(response, https));
+    const url = new URL(request.url);
+    const https = url.protocol === "https:";
+    if (isLiveRequest(url) && request.method === "GET") return liveResponse(env).then((response) => withSecurityHeaders(response, https));
+    return Promise.resolve(runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx))).then((response) => {
+      bumpLiveVersion(request, response, env, ctx);
+      return withSecurityHeaders(response, https);
+    });
   },
 };
 

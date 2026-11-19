@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Absence } from "./absences";
+import { LIVE_EVENT } from "./live";
 
 export type LoadedAbsence = Absence & { createdByName: string; canDelete: boolean };
 export type AbsenceRequest = LoadedAbsence & { status: "pending" | "rejected"; decidedByName: string | null; decisionNote: string; canDecide: boolean };
@@ -33,7 +34,10 @@ export function useAbsences() {
     const first = window.setTimeout(() => { void load(); }, 0);
     const onChange = () => { void load(true); };
     window.addEventListener(CHANGED, onChange);
-    return () => { window.clearTimeout(first); window.removeEventListener(CHANGED, onChange); };
+    // Alguém da equipe mudou algo: busca de novo (sem o cache de 1 minuto).
+    const onLive = () => { cache = null; void load(true); };
+    window.addEventListener(LIVE_EVENT, onLive);
+    return () => { window.clearTimeout(first); window.removeEventListener(CHANGED, onChange); window.removeEventListener(LIVE_EVENT, onLive); };
   }, [load]);
   return { absences: data?.absences ?? [], requests: data?.requests ?? [], people: data?.people ?? [], me: data?.me ?? null, loaded: data !== null };
 }

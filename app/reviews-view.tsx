@@ -2,6 +2,7 @@
 import { PersonKudos } from "./team-wall";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Building2 from "lucide-react/icons/building-2";
 import Check from "lucide-react/icons/check";
 import ClipboardCheck from "lucide-react/icons/clipboard-check";
@@ -69,6 +70,7 @@ function useReviews() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar a avaliação.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
   return { data, error, load, setError };
 }
@@ -278,6 +280,7 @@ function GoalsTab() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar as metas.");
     }
   }, [year]);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   if (!data) return error ? <div className="alert error"><span>{error}</span></div> : <div className="loading-list"><span /><span /></div>;

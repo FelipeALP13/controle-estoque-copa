@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Archive from "lucide-react/icons/archive";
 import ArchiveRestore from "lucide-react/icons/archive-restore";
 import Hash from "lucide-react/icons/hash";
@@ -29,6 +30,7 @@ export function useConversations() {
       setError(err instanceof Error ? err.message : "Não foi possível carregar as conversas.");
     }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => {
     const first = window.setTimeout(() => { void load(); }, 0);
     const interval = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 10000);

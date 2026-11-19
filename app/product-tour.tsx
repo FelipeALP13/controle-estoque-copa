@@ -14,7 +14,7 @@ type Step = { target: string | null; title: string; text: string; mobileTarget?:
 
 const STEPS: Step[] = [
   { target: null, title: "Boas-vindas ao Portal", text: "Um tour rápido, de menos de um minuto, pelo que você mais vai usar no dia a dia." },
-  { target: ".sidebar .sidebar-nav, .sidebar nav", mobileTarget: ".menu-button", title: "Menu", text: "Todas as áreas ficam aqui: Visão geral, Agenda, Demandas, Chamados, Escala, Pessoas e mais. No computador, passe o mouse para ver os nomes ou fixe o menu aberto." },
+  { target: ".sidebar .sidebar-nav, .sidebar nav", mobileTarget: ".menu-button", title: "Menu", text: "Todas as áreas ficam aqui: Agenda, Demandas, Chamados, Escala, Pessoas e mais. Clique no logo, no topo, para voltar à Visão geral. No computador, passe o mouse para ver os nomes ou fixe o menu aberto." },
   { target: '.sidebar button[data-key="tasks"]', title: "Demandas", text: "Suas tarefas, com prazo, checklist, horas e cronômetro. O número ao lado mostra quantas estão abertas com você (vermelho quando tem prazo vencido)." },
   { target: '.sidebar button[data-key="tickets"]', title: "Chamados", text: "Pedidos entre os times. Cada chamado cai na fila do time escolhido; quem vai atender clica em Assumir." },
   { target: ".topbar-search", title: "Buscar em tudo", text: "Ache demandas, chamados, pessoas, clientes e artigos pelo nome ou código. Atalho: Ctrl+K." },

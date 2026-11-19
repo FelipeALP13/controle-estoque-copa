@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh } from "./live";
 import Award from "lucide-react/icons/award";
 import Check from "lucide-react/icons/check";
 import Lock from "lucide-react/icons/lock";
@@ -100,6 +101,7 @@ export function PersonKudos({ memberId, count, from, to, suffix = "" }: { member
       if (response.ok) setItems(((await response.json()) as { kudos: KudosItem[] }).kudos);
     } catch { /* sem conexão: mostra de novo ao abrir */ }
   }, [memberId, period]);
+  useLiveRefresh(load);
   // Sem o total vindo de fora (avaliação), busca a lista para contar.
   useEffect(() => { if (count === undefined) { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); } }, [count, load]);
   const total = count ?? items?.length ?? 0;
@@ -125,6 +127,7 @@ export default function TeamWall() {
       setData(await response.json() as Data);
     } catch { /* tenta de novo depois */ }
   }, []);
+  useLiveRefresh(load);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
 
   if (!data) return null;
