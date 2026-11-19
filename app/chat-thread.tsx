@@ -3,6 +3,11 @@
 // Peças do chat usadas pela tela de Conversas e pelo painel lateral: a conversa, o campo de mensagem,
 // formatação, emojis, GIFs e anexos.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import ChevronLeft from "lucide-react/icons/chevron-left";
+import ChevronRight from "lucide-react/icons/chevron-right";
+import Download from "lucide-react/icons/download";
+import ExternalLink from "lucide-react/icons/external-link";
 import AlarmClock from "lucide-react/icons/alarm-clock";
 import CalendarClock from "lucide-react/icons/calendar-clock";
 import Vote from "lucide-react/icons/vote";
@@ -234,11 +239,52 @@ export function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onTo
 }
 
 /** Imagem ou GIF da mensagem no tamanho natural (até 360 × 280). */
-function AttachmentImage({ file }: { file: Attachment }) {
-  return <a href={file.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir imagem em tamanho real">
+function AttachmentImage({ file, onOpen }: { file: Attachment; onOpen: () => void }) {
+  return <button type="button" className="cv-attachment-open" onClick={onOpen} aria-label="Ver imagem em tamanho maior">
     {/* eslint-disable-next-line @next/next/no-img-element -- imagens do chat vêm da rota de mídia ou do Giphy, sem otimização de servidor */}
     <img src={file.url} alt={file.gif ? "GIF" : "Imagem enviada"} loading="lazy" width={file.width || undefined} height={file.height || undefined} />
-  </a>;
+  </button>;
+}
+
+/** Imagens da mensagem: clicar abre por cima do chat (sem sair da conversa). */
+function AttachmentGallery({ files }: { files: Attachment[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  return <div className="cv-attachments">
+    {files.map((file, index) => <AttachmentImage key={file.url} file={file} onOpen={() => setOpen(index)} />)}
+    {open !== null && files[open] && <ImageViewer files={files} index={open} onChange={setOpen} onClose={() => setOpen(null)} />}
+  </div>;
+}
+
+/** Visualizador de imagem por cima da tela: Esc ou clique fora fecha; setas passam entre as imagens da mensagem. */
+function ImageViewer({ files, index, onChange, onClose }: { files: Attachment[]; index: number; onChange: (index: number) => void; onClose: () => void }) {
+  const file = files[index];
+  const many = files.length > 1;
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+      else if (many && event.key === "ArrowRight") onChange((index + 1) % files.length);
+      else if (many && event.key === "ArrowLeft") onChange((index - 1 + files.length) % files.length);
+    };
+    document.addEventListener("keydown", onKey, true);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey, true); document.body.style.overflow = overflow; previous?.focus?.(); };
+  }, [index, many, files.length, onChange, onClose]);
+  return createPortal(<div className="image-viewer" role="dialog" aria-modal="true" aria-label="Imagem" onClick={onClose}>
+    <div className="image-viewer-bar" onClick={(event) => event.stopPropagation()}>
+      {many && <span>{index + 1} de {files.length}</span>}
+      <a href={file.url} target="_blank" rel="noopener noreferrer" title="Abrir em outra aba" aria-label="Abrir em outra aba"><ExternalLink size={18} /></a>
+      {!file.gif && <a href={file.url} download title="Baixar" aria-label="Baixar"><Download size={18} /></a>}
+      <button ref={closeRef} type="button" onClick={onClose} title="Fechar (Esc)" aria-label="Fechar"><X size={20} /></button>
+    </div>
+    {many && <button type="button" className="image-viewer-nav prev" aria-label="Imagem anterior" onClick={(event) => { event.stopPropagation(); onChange((index - 1 + files.length) % files.length); }}><ChevronLeft size={26} /></button>}
+    {/* eslint-disable-next-line @next/next/no-img-element -- mesma imagem da conversa, em tamanho maior */}
+    <img src={file.url} alt={file.gif ? "GIF" : "Imagem enviada"} onClick={(event) => event.stopPropagation()} />
+    {many && <button type="button" className="image-viewer-nav next" aria-label="Próxima imagem" onClick={(event) => { event.stopPropagation(); onChange((index + 1) % files.length); }}><ChevronRight size={26} /></button>}
+  </div>, document.body);
 }
 
 export function GifPicker({ onPick, onClose }: { onPick: (gif: Gif) => void; onClose: () => void }) {
@@ -570,7 +616,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
                     <small>Enter salva · Esc cancela</small>
                   </div> : message.deleted ? <p className="cv-text"><em>Mensagem apagada</em></p> : message.body && <div className="cv-text"><Markdown text={message.body} people={people} /></div>}
                   {message.poll && <PollCard poll={message.poll} compact onChanged={load} />}
-                  {message.attachments.length > 0 && <div className="cv-attachments">{message.attachments.map((file) => <AttachmentImage key={file.url} file={file} />)}</div>}
+                  {message.attachments.length > 0 && <AttachmentGallery files={message.attachments} />}
                   {editing?.id !== message.id && <time className="cv-meta" title={new Date(message.createdAt).toLocaleString("pt-BR")}>{message.pinned && <Pin size={10} aria-label="Fixada" />}{message.editedAt && !message.deleted ? "editada · " : ""}{isoToLocal(message.createdAt).time}</time>}
                   {!message.deleted && <Reactions reactions={message.reactions} onToggle={(emoji) => void act({ action: "react", messageId: message.id, emoji })} />}
                   {!message.deleted && (message.task || message.reminderAt) && <div className="cv-chips">

@@ -48,7 +48,7 @@ export function buildCalendar(name: string, events: readonly IcsEvent[], now = n
   ];
   for (const event of events) {
     const end = event.endsAt ?? new Date(Date.parse(event.startsAt) + (event.kind === "meeting" ? 30 : 15) * 60000).toISOString();
-    const description = [event.notes, event.teamsUrl ? `Entrar no Teams: ${event.teamsUrl}` : "", event.organizer ? `Criado por ${event.organizer} no Portal da Equipe` : ""].filter(Boolean).join("\n\n");
+    const description = [event.notes, event.teamsUrl ? `Entrar na reunião (${/meet\.google\.com/.test(event.teamsUrl) ? "Google Meet" : "Teams"}): ${event.teamsUrl}` : "", event.organizer ? `Criado por ${event.organizer} no Portal da Equipe` : ""].filter(Boolean).join("\n\n");
     lines.push(
       "BEGIN:VEVENT",
       `UID:agenda-${event.id}@portal-da-equipe`,
@@ -59,7 +59,7 @@ export function buildCalendar(name: string, events: readonly IcsEvent[], now = n
       `SUMMARY:${icsText(event.title)}`,
     );
     if (description) lines.push(`DESCRIPTION:${icsText(description)}`);
-    if (event.teamsUrl) lines.push(`LOCATION:${icsText("Microsoft Teams")}`, `URL:${event.teamsUrl}`);
+    if (event.teamsUrl) lines.push(`LOCATION:${icsText(/meet\.google\.com/.test(event.teamsUrl) ? "Google Meet" : "Microsoft Teams")}`, `URL:${event.teamsUrl}`);
     const rule = rrule(event.repeat, event.repeatUntil);
     if (rule) lines.push(`RRULE:${rule}`);
     lines.push("END:VEVENT");

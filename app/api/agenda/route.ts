@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { agendaAttendees, agendaEvents, agendaReminders, members, notifications } from "../../../db/schema";
 import { getSessionMember } from "../../auth-session";
 import { hasTrustedOrigin } from "../../request-security";
-import { isoToLocal, isRealEmail, isRepeat, isTeamsJoinLink, localToIso, REMIND_OPTIONS } from "../../agenda";
+import { isMeetingJoinLink, isoToLocal, isRealEmail, isRepeat, localToIso, REMIND_OPTIONS } from "../../agenda";
 import { agendaRemindersJob } from "../../jobs";
 import { sha256Hex } from "../../secret-box";
 import { z } from "zod";
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       if (!startsAt) return json({ error: "Informe um dia e um horário válidos." }, 400);
       if (endTime && (!endsAt || endsAt <= startsAt)) return json({ error: "O horário de fim precisa ser depois do início." }, 400);
       if (remind !== null && !REMIND_OPTIONS.some((option) => option.value === remind)) return json({ error: "Escolha quando avisar." }, 400);
-      if (teamsUrl && !isTeamsJoinLink(teamsUrl)) return json({ error: "Cole o link de entrada da reunião do Teams (começa com https://teams.microsoft.com/...)." }, 400);
+      if (teamsUrl && !isMeetingJoinLink(teamsUrl)) return json({ error: "Cole o link de entrada da reunião: do Teams (https://teams.microsoft.com/...) ou do Google Meet (https://meet.google.com/...)." }, 400);
       const requested = [...new Set(input.data.attendees.filter((id) => id !== member.id))].slice(0, 50);
       const valid = requested.length ? (await db.select({ id: members.id }).from(members).where(and(inArray(members.id, requested), eq(members.active, true)))).map((row) => row.id) : [];
       if (valid.length !== requested.length) return json({ error: "Escolha convidados ativos da equipe." }, 400);

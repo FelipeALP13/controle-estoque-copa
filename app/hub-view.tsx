@@ -12,7 +12,7 @@ import { shoppingList } from "./stock-forecast";
 import { monthLabel } from "./people-tools";
 import NotebookPen from "lucide-react/icons/notebook-pen";
 import VideoIcon from "lucide-react/icons/video";
-import { isoToLocal, isTeamsJoinLink } from "./agenda";
+import { isoToLocal, isMeetingJoinLink, MEETING_PLATFORM_LABEL, meetingPlatform } from "./agenda";
 import { expandAgenda, useNow, type AgendaEvent } from "./use-agenda";
 import { type NavCounts } from "./sidebar-nav";
 import ListTodo from "lucide-react/icons/list-todo";
@@ -130,7 +130,7 @@ function HubAgenda({ events, today, onOpen }: { events: AgendaEvent[]; today: st
       const live = Date.parse(event.startsAt) <= now;
       return <li key={`${event.id}-${event.startsAt}`} className={live ? "live" : ""}>
         <button onClick={() => onOpen(event.id)}><b>{isoToLocal(event.startsAt).time}</b><span>{event.title}</span>{live && <em>agora</em>}</button>
-        {event.teamsUrl && isTeamsJoinLink(event.teamsUrl) && <a href={event.teamsUrl} target="_blank" rel="noopener noreferrer" title="Entrar na reunião do Teams"><VideoIcon size={14} /> Entrar</a>}
+        {isMeetingJoinLink(event.teamsUrl) && <a href={event.teamsUrl} target="_blank" rel="noopener noreferrer" title={`Entrar na reunião do ${MEETING_PLATFORM_LABEL[meetingPlatform(event.teamsUrl)!]}`}><VideoIcon size={14} /> Entrar</a>}
       </li>;
     })}{list.length > 4 && <li className="more"><button onClick={() => onOpen()}>e mais {list.length - 4}</button></li>}</ul>
   </article>;

@@ -300,5 +300,8 @@ html[data-theme="dark"] { --chart-grid: #263244; --chart-baseline: #495669; }
 :where(html[data-theme="dark"]) .ai-assistant { border: 1px solid #231f52; background: #1a1434; }
 :where(html[data-theme="dark"]) .menu-pin-toggle { color: #667b9a; }
 :where(html[data-theme="dark"]) .menu-pin-toggle:hover { color: #ffffff; background: rgba(19, 27, 40, .06); }
+:where(html[data-theme="dark"]) .image-viewer-bar a, :where(html[data-theme="dark"]) .image-viewer-bar button, :where(html[data-theme="dark"]) .image-viewer-nav { color: #ffffff; background: rgba(19, 27, 40, .12); }
+:where(html[data-theme="dark"]) .image-viewer-bar a:hover, :where(html[data-theme="dark"]) .image-viewer-bar button:hover, :where(html[data-theme="dark"]) .image-viewer-nav:hover { background: rgba(19, 27, 40, .22); }
+:where(html[data-theme="dark"]) .image-viewer-bar a:focus-visible, :where(html[data-theme="dark"]) .image-viewer-bar button:focus-visible, :where(html[data-theme="dark"]) .image-viewer-nav:focus-visible { outline: 2px solid #1a2028; }
 html[data-theme="dark"] { --canvas: #0d141f; }
 :where(html[data-theme="dark"]) body { background: #0d141f; }

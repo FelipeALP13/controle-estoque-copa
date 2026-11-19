@@ -13,7 +13,7 @@ import StickyNote from "lucide-react/icons/sticky-note";
 import Trash2 from "lucide-react/icons/trash-2";
 import Video from "lucide-react/icons/video";
 import X from "lucide-react/icons/x";
-import { dayLabel, DEFAULT_REMIND, isoToLocal, isTeamsJoinLink, localToIso, REMIND_OPTIONS, REPEAT_OPTIONS, repeatLabel, teamsMeetingLink, type Repeat } from "./agenda";
+import { dayLabel, DEFAULT_REMIND, googleMeetLink, isoToLocal, localToIso, MEETING_PLATFORM_LABEL, meetingPlatform, REMIND_OPTIONS, REPEAT_OPTIONS, repeatLabel, teamsMeetingLink, type MeetingPlatform, type Repeat } from "./agenda";
 import RepeatIcon from "lucide-react/icons/repeat";
 import Share2 from "lucide-react/icons/share-2";
 import CalendarLinkModal from "./calendar-link";
@@ -34,10 +34,11 @@ async function post<T = { ok: boolean }>(payload: Record<string, unknown>) {
 
 const remindLabel = (value: number | null) => REMIND_OPTIONS.find((option) => option.value === value)?.label ?? "Sem aviso";
 
-/** Abre o Teams com a reunião já preenchida (assunto, horário, convidados e pauta). */
-export function openTeamsMeeting(event: { title: string; startsAt: string; endsAt: string | null; notes: string; attendees: number[] }, people: Person[]) {
+/** Abre o Teams ou o Google Agenda (com Meet) com a reunião já preenchida (assunto, horário, convidados e pauta). */
+export function openTeamsMeeting(event: { title: string; startsAt: string; endsAt: string | null; notes: string; attendees: number[] }, people: Person[], platform: MeetingPlatform = "teams") {
   const emails = people.filter((person) => event.attendees.includes(person.id) && person.email).map((person) => person.email as string);
-  window.open(teamsMeetingLink({ subject: event.title, startsAt: event.startsAt, endsAt: event.endsAt, attendees: emails, content: event.notes }), "_blank", "noopener,noreferrer");
+  const input = { subject: event.title, startsAt: event.startsAt, endsAt: event.endsAt, attendees: emails, content: event.notes };
+  window.open(platform === "meet" ? googleMeetLink(input) : teamsMeetingLink(input), "_blank", "noopener,noreferrer");
 }
 
 /** Agenda pessoal: anotações com horário e reuniões do Teams, com aviso antes e na hora. */
@@ -137,8 +138,8 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
         </span>
       </div>
       <div className="agenda-actions">
-        {event.teamsUrl && isTeamsJoinLink(event.teamsUrl) && <a className={`secondary-button agenda-join ${started && !event.done ? "now" : ""}`} href={event.teamsUrl} target="_blank" rel="noopener noreferrer"><Video size={14} /> Entrar no Teams</a>}
-        {event.kind === "meeting" && !event.teamsUrl && event.isOwner && !event.done && <button className="secondary-button" onClick={() => openTeamsMeeting(event, people)} title="Abre o Teams com assunto, horário e convidados preenchidos"><CalendarPlus size={14} /> Criar no Teams</button>}
+        {meetingPlatform(event.teamsUrl) && <a className={`secondary-button agenda-join ${started && !event.done ? "now" : ""}`} href={event.teamsUrl} target="_blank" rel="noopener noreferrer"><Video size={14} /> Entrar no {MEETING_PLATFORM_LABEL[meetingPlatform(event.teamsUrl)!]}</a>}
+        {event.kind === "meeting" && !event.teamsUrl && event.isOwner && !event.done && <><button className="secondary-button" onClick={() => openTeamsMeeting(event, people)} title="Abre o Teams com assunto, horário e convidados preenchidos"><CalendarPlus size={14} /> Criar no Teams</button><button className="secondary-button" onClick={() => openTeamsMeeting(event, people, "meet")} title="Abre o Google Agenda com assunto, horário e convidados preenchidos, para criar a sala do Meet"><CalendarPlus size={14} /> Criar no Meet</button></>}
         {event.isOwner ? <>
           <button className="icon-button" onClick={() => setEditing(series(event))} aria-label="Editar" title={event.repeat ? "Editar (vale para todas as repetições)" : "Editar"}><Pencil size={14} /></button>
           <button className="icon-button" onClick={() => act({ action: "deleteEvent", eventId: event.id }, `Excluir “${event.title}”${event.repeat ? " e todas as repetições" : ""}?${event.attendees.length ? " Os convidados também deixam de ver." : ""}`)} aria-label="Excluir" title="Excluir"><Trash2 size={14} /></button>
@@ -154,7 +155,7 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
 
   return <div className="agenda-page">
     <div className="agenda-head">
-      <p>Anote compromissos e reuniões com horário: o sino toca <b>antes</b> e <b>na hora</b>. Reuniões podem ser criadas no Teams já preenchidas.</p>
+      <p>Anote compromissos e reuniões com horário: o sino toca <b>antes</b> e <b>na hora</b>. Reuniões podem ser criadas no Teams ou no Google Meet já preenchidas.</p>
       <div className="agenda-head-actions">
         <button className="secondary-button" onClick={() => setLinkOpen(true)} title="Mostra seus compromissos do Portal no calendário do Outlook/Teams"><Share2 size={15} /> Ver no Outlook</button>
         <button className="primary-button" onClick={() => setEditing("new")}><Plus size={16} /> Novo compromisso</button>
@@ -206,6 +207,9 @@ function AgendaModal({ event, people, today, onClose, onSaved }: { event: Agenda
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const meeting = form.kind === "meeting";
+  // Teams ou Google Meet: começa pelo sistema do link já salvo.
+  const [platform, setPlatform] = useState<MeetingPlatform>(meetingPlatform(event?.teamsUrl) ?? "teams");
+  const platformName = MEETING_PLATFORM_LABEL[platform];
   const startsAt = localToIso(form.day, form.time);
   const endsAt = form.endTime ? localToIso(form.day, form.endTime) : null;
   const filtered = people.filter((person) => !query.trim() || person.name.toLocaleLowerCase("pt-BR").includes(query.trim().toLocaleLowerCase("pt-BR")));
@@ -238,7 +242,7 @@ function AgendaModal({ event, people, today, onClose, onSaved }: { event: Agenda
     <div className="modal-head"><div><h2>{event ? "Editar compromisso" : "Novo compromisso"}</h2><p>O sino avisa você e os convidados, com som.</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X /></button></div>
     <div className="agenda-kind-switch" role="radiogroup" aria-label="Tipo">
       <button type="button" role="radio" aria-checked={!meeting} className={!meeting ? "active" : ""} onClick={() => setKind("note")}><StickyNote size={15} /> Anotação</button>
-      <button type="button" role="radio" aria-checked={meeting} className={meeting ? "active" : ""} onClick={() => setKind("meeting")}><Video size={15} /> Reunião no Teams</button>
+      <button type="button" role="radio" aria-checked={meeting} className={meeting ? "active" : ""} onClick={() => setKind("meeting")}><Video size={15} /> Reunião online</button>
     </div>
     <div className="form-grid">
       <label className="full"><span>{meeting ? "Assunto da reunião" : "O que é"}</span><input required autoFocus maxLength={140} value={form.title} onChange={(change) => setForm({ ...form, title: change.target.value })} placeholder={meeting ? "Ex.: Alinhamento com o cliente" : "Ex.: Reunião às 14h com a contabilidade"} /></label>
@@ -257,18 +261,23 @@ function AgendaModal({ event, people, today, onClose, onSaved }: { event: Agenda
         {chosen.length > 0 && <div className="agenda-chosen">{chosen.map((person) => <button type="button" key={person.id} onClick={() => toggle(person.id)} title="Remover"><Avatar member={person} size={18} />{person.name}<X size={12} /></button>)}</div>}
         <label className="search agenda-search"><Search size={15} /><input value={query} onChange={(change) => setQuery(change.target.value)} placeholder="Buscar pessoa da equipe..." aria-label="Buscar convidado" /></label>
         <div className="agenda-picker">{filtered.length ? filtered.map((person) => <label key={person.id} className={form.attendees.includes(person.id) ? "on" : ""}><input type="checkbox" checked={form.attendees.includes(person.id)} onChange={() => toggle(person.id)} /><Avatar member={person} size={22} /><span className="agenda-picker-name">{person.name}</span>{!person.email && <small>sem e-mail</small>}</label>) : <p className="muted">Ninguém encontrado.</p>}</div>
-        <small className="form-hint">Convidados recebem o convite e os avisos no sino do Portal.{meeting && noEmail.length > 0 && ` No Teams, ${noEmail.map((person) => person.name.split(" ")[0]).join(", ")} ${noEmail.length === 1 ? "precisa" : "precisam"} ser adicionados à mão (sem e-mail cadastrado).`}</small>
+        <small className="form-hint">Convidados recebem o convite e os avisos no sino do Portal.{meeting && noEmail.length > 0 && ` No ${platformName}, ${noEmail.map((person) => person.name.split(" ")[0]).join(", ")} ${noEmail.length === 1 ? "precisa" : "precisam"} ser adicionados à mão (sem e-mail cadastrado).`}</small>
       </div>
 
       <label className="full"><span>{meeting ? "Pauta (opcional)" : "Observações (opcional)"}</span><textarea rows={3} maxLength={2000} value={form.notes} onChange={(change) => setForm({ ...form, notes: change.target.value })} placeholder={meeting ? "Assuntos que serão tratados" : "Detalhes para lembrar"} /></label>
 
       {meeting && <div className="full agenda-teams">
-        <div>
-          <strong>Reunião no Teams</strong>
-          <p>1. Clique em <b>Abrir no Teams</b>: assunto, horário, convidados e pauta já vão preenchidos; lá é só <b>Enviar</b>.<br />2. (Opcional) Copie o link “Entrar” da reunião e cole abaixo: o botão <b>Entrar no Teams</b> aparece aqui na agenda.</p>
+        <div className="agenda-platform" role="radiogroup" aria-label="Onde será a reunião">
+          {(["teams", "meet"] as const).map((value) => <button key={value} type="button" role="radio" aria-checked={platform === value} className={platform === value ? "active" : ""} onClick={() => setPlatform(value)}><Video size={14} /> {MEETING_PLATFORM_LABEL[value]}</button>)}
         </div>
-        <button type="button" className="secondary-button" disabled={!form.title.trim() || !startsAt} onClick={() => startsAt && openTeamsMeeting({ title: form.title.trim(), startsAt, endsAt: endsAt && endsAt > startsAt ? endsAt : null, notes: form.notes, attendees: form.attendees }, people)}><CalendarPlus size={15} /> Abrir no Teams</button>
-        <label><span>Link para entrar (opcional)</span><input type="url" value={form.teamsUrl} onChange={(change) => setForm({ ...form, teamsUrl: change.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/..." /></label>
+        <div>
+          <strong>Reunião no {platformName}</strong>
+          {platform === "teams"
+            ? <p>1. Clique em <b>Abrir no Teams</b>: assunto, horário, convidados e pauta já vão preenchidos; lá é só <b>Enviar</b>.<br />2. (Opcional) Copie o link “Entrar” da reunião e cole abaixo: o botão <b>Entrar no Teams</b> aparece aqui na agenda.</p>
+            : <p>1. Clique em <b>Abrir no Google Agenda</b>: assunto, horário, convidados e pauta já vão preenchidos. Confira se aparece <b>Participar com o Google Meet</b> (senão, clique em <b>Adicionar videoconferência do Google Meet</b>) e <b>Salve</b>.<br />2. (Opcional) Copie o link do Meet (meet.google.com/...) e cole abaixo: o botão <b>Entrar no Google Meet</b> aparece aqui na agenda.</p>}
+        </div>
+        <button type="button" className="secondary-button" disabled={!form.title.trim() || !startsAt} onClick={() => startsAt && openTeamsMeeting({ title: form.title.trim(), startsAt, endsAt: endsAt && endsAt > startsAt ? endsAt : null, notes: form.notes, attendees: form.attendees }, people, platform)}><CalendarPlus size={15} /> {platform === "meet" ? "Abrir no Google Agenda" : "Abrir no Teams"}</button>
+        <label><span>Link para entrar (opcional)</span><input type="url" value={form.teamsUrl} onChange={(change) => { const value = change.target.value; setForm({ ...form, teamsUrl: value }); const detected = meetingPlatform(value); if (detected) setPlatform(detected); }} placeholder={platform === "meet" ? "https://meet.google.com/abc-defg-hij" : "https://teams.microsoft.com/l/meetup-join/..."} /></label>
       </div>}
     </div>
     {error && <p className="modal-error">{error}</p>}

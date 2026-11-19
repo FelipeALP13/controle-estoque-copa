@@ -7,7 +7,7 @@ import ListTodo from "lucide-react/icons/list-todo";
 import Sun from "lucide-react/icons/sun";
 import Video from "lucide-react/icons/video";
 import X from "lucide-react/icons/x";
-import { isoToLocal, isTeamsJoinLink } from "./agenda";
+import { isoToLocal, isMeetingJoinLink } from "./agenda";
 import { expandAgenda, type AgendaEvent } from "./use-agenda";
 import { dueState, taskCode } from "./tasks";
 import { ticketCode } from "./tickets";
@@ -91,7 +91,7 @@ export default function MyDay({ name, agenda, onClose, onOpenTask, onOpenTicket,
       {loading ? <div className="loading-list"><span /><span /></div> : calm ? <p className="my-day-calm">Nada marcado para hoje: sem compromissos, prazos vencendo ou chamados com você. Bom trabalho!</p> : <>
         {events.length > 0 && <div className="my-day-block">
           <h3><CalendarClock size={15} /> Agenda de hoje</h3>
-          <ul>{events.map((event) => <li key={`${event.id}-${event.startsAt}`}><button onClick={() => go(() => onOpenAgenda(event.id))}><b>{isoToLocal(event.startsAt).time}</b><span>{event.title}</span></button>{event.teamsUrl && isTeamsJoinLink(event.teamsUrl) && <a href={event.teamsUrl} target="_blank" rel="noopener noreferrer"><Video size={13} /> Entrar</a>}</li>)}</ul>
+          <ul>{events.map((event) => <li key={`${event.id}-${event.startsAt}`}><button onClick={() => go(() => onOpenAgenda(event.id))}><b>{isoToLocal(event.startsAt).time}</b><span>{event.title}</span></button>{isMeetingJoinLink(event.teamsUrl) && <a href={event.teamsUrl} target="_blank" rel="noopener noreferrer"><Video size={13} /> Entrar</a>}</li>)}</ul>
         </div>}
         {myTasks.length > 0 && <div className="my-day-block">
           <h3><ListTodo size={15} /> Demandas que vencem</h3>

@@ -89,6 +89,43 @@ export function isTeamsJoinLink(value: string) {
   }
 }
 
+/** Link de sala do Google Meet (https://meet.google.com/abc-defg-hij). */
+export function isMeetJoinLink(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && url.hostname === "meet.google.com" && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+export type MeetingPlatform = "teams" | "meet";
+export const MEETING_PLATFORM_LABEL: Record<MeetingPlatform, string> = { teams: "Teams", meet: "Google Meet" };
+
+/** De qual sistema é o link de entrar (ou null se não for um link de reunião aceito). */
+export function meetingPlatform(value: string | null | undefined): MeetingPlatform | null {
+  if (!value) return null;
+  if (isTeamsJoinLink(value)) return "teams";
+  if (isMeetJoinLink(value)) return "meet";
+  return null;
+}
+
+export const isMeetingJoinLink = (value: string | null | undefined) => meetingPlatform(value) !== null;
+
+/**
+ * Link que abre o Google Agenda com o evento já preenchido (assunto, horário, convidados e pauta).
+ * Nas contas Google da empresa o Meet entra sozinho; senão é um clique em "Adicionar videoconferência do Google Meet".
+ */
+export function googleMeetLink(input: { subject: string; startsAt: string; endsAt: string | null; attendees: readonly string[]; content?: string }) {
+  const utc = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const end = input.endsAt ?? new Date(Date.parse(input.startsAt) + 30 * 60000).toISOString();
+  const params = new URLSearchParams({ action: "TEMPLATE", text: input.subject, dates: `${utc(input.startsAt)}/${utc(end)}`, ctz: "America/Sao_Paulo" });
+  if (input.content?.trim()) params.set("details", input.content.trim().slice(0, 1000));
+  const emails = input.attendees.filter(isRealEmail);
+  if (emails.length) params.set("add", emails.join(","));
+  return `https://calendar.google.com/calendar/render?${params.toString().replace(/\+/g, "%20")}`;
+}
+
 const weekdays = ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."];
 
 /** "Hoje", "Amanhã", "Ontem" ou "qua., 19/11" (dia em Brasília). */

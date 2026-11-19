@@ -2,14 +2,14 @@
 
 Sistema interno da equipe (Suporte, Desenvolvimento e Liderança): demandas, chamados entre os times, agenda, escala de atendimento, projetos, base de conhecimento, estoque da copa e diretório de pessoas.
 
-Roda como um Cloudflare Worker na **conta Cloudflare da empresa**, com banco D1 (SQLite) e armazenamento R2. Cada pessoa entra com o próprio usuário e senha.
+Roda como um Cloudflare Worker na **conta Cloudflare da empresa**, com banco D1 (SQLite) e arquivos no KV (plano gratuito, sem cartão). Cada pessoa entra com o próprio usuário e senha.
 
 ## Hospedagem própria (Cloudflare)
 
 Tudo pelo `scripts/cloudflare.mjs`. Os nomes do banco e do armazenamento ficam em `cloudflare.config.json` (sem segredos). Opcional: `"customDomain": "portal.suaempresa.com.br"`, para um domínio que já esteja na mesma conta Cloudflare.
 
 1. Uma vez: `node node_modules/wrangler/bin/wrangler.js login` (abre o navegador para entrar na Cloudflare).
-2. Uma vez: `node scripts/cloudflare.mjs criar` (cria o banco D1 e o armazenamento R2).
+2. Uma vez: `node scripts/cloudflare.mjs criar` (cria o banco D1 e o armazenamento de arquivos no KV).
 3. A cada versão nova: `node scripts/cloudflare.mjs publicar` (build, migrações novas no banco de produção, publicação).
 4. Primeiro acesso: defina um código de instalação com `wrangler secret put SETUP_TOKEN --name portaldaequipe` (24+ caracteres). Sem ele, ninguém consegue criar o administrador. Depois de criar, apague com `wrangler secret delete SETUP_TOKEN --name portaldaequipe`.
 5. Backup completo: `node scripts/cloudflare.mjs backup` (arquivo `.sql` em `backups/`, que não vai para o Git). No painel da Cloudflare (D1 → Time Travel) dá para voltar o banco a qualquer momento dos últimos 7 dias (plano gratuito) ou 30 dias (plano pago), e o Console roda SQL direto.
@@ -19,7 +19,7 @@ Tudo pelo `scripts/cloudflare.mjs`. Os nomes do banco e do armazenamento ficam e
 | Área | Onde fica |
 | --- | --- |
 | Visão geral (resumo do dia, mural, minha agenda de hoje) | `app/hub-view.tsx` |
-| Minha agenda (anotações e reuniões no Teams, lembretes, repetição, link para o Outlook) | `app/agenda-view.tsx`, `app/agenda.ts`, `app/ics.ts`, `app/api/agenda/` |
+| Minha agenda (anotações e reuniões no Teams ou no Google Meet, lembretes, repetição, link para o Outlook) | `app/agenda-view.tsx`, `app/agenda.ts`, `app/ics.ts`, `app/api/agenda/` |
 | Meu dia (resumo ao abrir o Portal) | `app/my-day.tsx` |
 | Calendário (prazos, ausências, escala, projetos, agenda) | `app/calendar-view.tsx`, `app/calendar.ts` |
 | Demandas (quadro, lista, checklist, horas, cronômetro, dependências, modelos, repetição) | `app/tasks-view.tsx`, `app/task-drawer.tsx`, `app/task-shared.tsx`, `app/task-recurrence*.ts`, `app/task-timer.tsx`, `app/api/tasks/` |
@@ -76,19 +76,19 @@ O GitHub roda typecheck, lint, testes e build a cada envio (`.github/workflows/c
 
 ## Banco de dados e migrações
 
-- O esquema fica em `db/schema.ts`. As migrações ficam em `drizzle/` (`0000` a `0032`), com o registro em `drizzle/meta/_journal.json`.
-- **No site publicado, o Sites aplica as migrações novas a cada publicação.**
+- O esquema fica em `db/schema.ts`. As migrações ficam em `drizzle/` (`0000` a `0039`), com o registro em `drizzle/meta/_journal.json`.
+- **No site publicado, `node scripts/cloudflare.mjs publicar` aplica as migrações novas a cada publicação.**
 - No computador, aplique cada migração nova uma vez:
 
 ```bash
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0032_chat_topics.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0039_hardening.sql
 ```
 
 ## Segurança
 
 - Senhas guardadas como PBKDF2 (210 mil iterações); sessões guardadas só como hash do token.
 - Sessão renova enquanto está em uso, cai após 7 dias parada e dura no máximo 90 dias.
-- Tokens do Jira ficam criptografados (AES-GCM); a chave fica no R2, fora do banco.
+- Tokens do Jira ficam criptografados (AES-GCM); a chave (ENCRYPTION_KEY) fica como segredo do Worker, fora do banco.
 - Toda API confere login, perfil e a origem do pedido. O corpo dos pedidos passa por `app/api-input.ts` (objeto JSON, tamanho máximo, ação válida).
 - A cópia de segurança em Excel não leva senhas, sessões nem chaves (nem as senhas dos sistemas dos clientes).
 - Avaliação anônima: as respostas ficam sem ligação com quem respondeu; quem já avaliou quem fica numa tabela à parte (fora da cópia de segurança). Médias só com 3 ou mais respostas e só depois de encerrar o ciclo.
@@ -108,11 +108,9 @@ node scripts/build-dark-theme.mjs
 
 ## Observações
 
-- O nome do pacote (`site-creator-vinext-starter` no `package.json`) é usado como nome do Worker na hospedagem. Ele não foi trocado de propósito, para não mudar a identidade do site publicado.
 - As rotinas automáticas (busca no Jira, aviso de chamados atrasados, lembretes da agenda, demandas que se repetem, aniversários e tempo de casa, monitor dos sistemas e incidentes automáticos, lembretes da avaliação, lembrete do 1:1 no dia, pesquisa de clima do mês e vencimento de licenças) rodam enquanto alguém da equipe está com o Portal aberto.
 - Chamados novos caem na fila do time escolhido, sem responsável: quem atende clica em "Assumir". A escala do Suporte (desenvolvedores que apoiam o Suporte em questões de código) não recebe chamados automaticamente; os nomes da escala são ligados às pessoas do Portal pelo nome só para a passagem de plantão.
 - O link da agenda para o Outlook é pessoal e secreto; o banco guarda só o resumo (hash). Desligar ou gerar outro link na Agenda invalida o anterior.
-- Detalhes técnicos do ambiente Sites (perfis de execução, pré-visualização, publicação) estão em `docs/ambiente-sites.md`.
 
 ## Sistema visual (tokens)
 
