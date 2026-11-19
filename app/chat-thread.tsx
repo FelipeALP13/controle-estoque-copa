@@ -34,6 +34,7 @@ import Trash2 from "lucide-react/icons/trash-2";
 import UsersRound from "lucide-react/icons/users-round";
 import X from "lucide-react/icons/x";
 import { isoToLocal } from "./agenda";
+import { firstLink, type LinkPreview } from "./link-preview";
 import { splitMentions } from "./notifications";
 import { CHAT_CHANGED, OPEN_TASK_EVENT } from "./sidebar-nav";
 import { taskPriorities, taskPriorityLabels } from "./tasks";
@@ -633,6 +634,7 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
                       onSubmit={() => void act({ action: "edit", messageId: message.id, body: editing.text.trim() }).then(() => setEditing(null))} />
                     <small>Enter salva · Esc cancela</small>
                   </div> : message.deleted ? <p className="cv-text"><em>Mensagem apagada</em></p> : message.body && <div className="cv-text"><Markdown text={message.body} people={people} /></div>}
+                  {!message.deleted && editing?.id !== message.id && message.body && <LinkCard text={message.body} />}
                   {message.poll && <PollCard poll={message.poll} compact onChanged={load} />}
                   {message.attachments.length > 0 && <AttachmentGallery files={message.attachments} />}
                   {editing?.id !== message.id && <time className="cv-meta" title={new Date(message.createdAt).toLocaleString("pt-BR")}>{message.pinned && <Pin size={10} aria-label="Fixada" />}{message.editedAt && !message.deleted ? "editada · " : ""}{isoToLocal(message.createdAt).time}</time>}
@@ -717,6 +719,42 @@ export function Thread({ topicId, people, me, compact, onChanged, onBack, onOpen
     {pollModal && <PollModal where="nesta conversa" onClose={() => setPollModal(false)} onSave={async (payload) => { await call("/api/chat", { action: "createPoll", topicId, ...payload }); setPollModal(false); await load(); }} />}
     {makingTask && <TaskFromMessage message={makingTask} where={where} people={people} me={me} onClose={() => setMakingTask(null)} onDone={() => { setMakingTask(null); void load(); }} />}
   </div>;
+}
+
+// Prévias já buscadas nesta aba (a lista recarrega a cada 3 s; cada link é buscado uma vez só).
+const linkPreviews = new Map<string, Promise<LinkPreview | null>>();
+function loadLinkPreview(url: string) {
+  let pending = linkPreviews.get(url);
+  if (!pending) {
+    pending = fetch(`/api/link-preview?url=${encodeURIComponent(url)}`).then(async (response) => (response.ok ? await response.json() as { preview: LinkPreview | null } : { preview: null })).then((data) => data.preview).catch(() => null);
+    linkPreviews.set(url, pending);
+  }
+  return pending;
+}
+
+/** Cartão com título, descrição e imagem do primeiro link da mensagem (links do próprio Portal não ganham cartão). */
+function LinkCard({ text }: { text: string }) {
+  const url = firstLink(text);
+  const own = Boolean(url && typeof window !== "undefined" && new URL(url).origin === window.location.origin);
+  const [preview, setPreview] = useState<{ url: string; data: LinkPreview | null } | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => {
+    if (!url || own) return;
+    let alive = true;
+    void loadLinkPreview(url).then((data) => { if (alive) setPreview({ url, data }); });
+    return () => { alive = false; };
+  }, [url, own]);
+  const data = preview && preview.url === url ? preview.data : null;
+  if (!url || own || !data) return null;
+  return <a className="cv-link-card" href={url} target="_blank" rel="noopener noreferrer">
+    {/* eslint-disable-next-line @next/next/no-img-element -- imagem externa passando pelo servidor do Portal */}
+    {data.image && !imageFailed && <span className="cv-link-image"><img src={data.image} alt="" loading="lazy" onError={() => setImageFailed(true)} /></span>}
+    <span className="cv-link-text">
+      <small>{data.siteName}</small>
+      <strong>{data.title}</strong>
+      {data.description && <span>{data.description}</span>}
+    </span>
+  </a>;
 }
 
 /** Aviso grande enquanto a pessoa arrasta uma imagem por cima da conversa. */

@@ -18,6 +18,7 @@ import RepeatIcon from "lucide-react/icons/repeat";
 import Share2 from "lucide-react/icons/share-2";
 import CalendarLinkModal from "./calendar-link";
 import { Avatar } from "./tasks-view";
+import { AvatarStack } from "./task-shared";
 import { agendaChanged, expandAgenda, useNow, type AgendaEvent } from "./use-agenda";
 
 type Person = { id: number; name: string; avatarIcon: string; avatarKey: string | null; email: string | null };
@@ -134,7 +135,7 @@ export default function AgendaView({ openRequest, onOpenRequestHandled }: { open
           {event.remindBefore === null ? <span><BellOff size={12} /> Sem aviso</span> : <span><BellRing size={12} /> {remindLabel(event.remindBefore)}</span>}
           {event.repeat && <span><RepeatIcon size={12} /> {repeatLabel(event.repeat, event.repeatUntil)}</span>}
           {!event.isOwner && <span>Convite de {owner?.name ?? "alguém da equipe"}</span>}
-          {guests.length > 0 && <span className="agenda-guests" title={guests.map((person) => person.name).join(", ")}>{guests.slice(0, 5).map((person) => <Avatar key={person.id} member={person} size={20} />)}{guests.length > 5 && <i>+{guests.length - 5}</i>}</span>}
+          {guests.length > 0 && <AvatarStack ids={guests.map((person) => person.id)} membersById={byId} size={22} label="Convidados" max={4} />}
         </span>
       </div>
       <div className="agenda-actions">

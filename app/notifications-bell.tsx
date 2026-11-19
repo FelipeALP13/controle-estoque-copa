@@ -46,6 +46,17 @@ type Item = { id: number; kind: NotificationKind; taskId: number | null; taskTit
 type DueTask = { id: number; title: string; dueDate: string };
 type Data = { items: Item[]; unread: number; due: DueTask[] };
 
+/** Filtros do painel de avisos. */
+type Filter = "all" | "unread" | "mentions" | "work" | "chat";
+const FILTERS: { value: Filter; label: string; match: (item: Item) => boolean }[] = [
+  { value: "all", label: "Todos", match: () => true },
+  { value: "unread", label: "Não lidos", match: (item) => !item.readAt },
+  { value: "mentions", label: "Menções", match: (item) => item.kind.endsWith("_mention") },
+  { value: "work", label: "Demandas e chamados", match: (item) => item.kind.startsWith("task_") || item.kind.startsWith("ticket_") },
+  { value: "chat", label: "Chat", match: (item) => item.kind.startsWith("chat_") },
+];
+const FILTER_EMPTY: Record<Filter, string> = { all: "", unread: "Tudo lido por aqui.", mentions: "Ninguém te mencionou nos últimos avisos.", work: "Nenhum aviso de demanda ou chamado.", chat: "Nenhum aviso do chat." };
+
 
 const kindIcon = { task_assigned: UserPlus, task_comment: MessageSquare, task_mention: AtSign, task_status: CircleDot, ticket_new: LifeBuoy, ticket_assigned: UserPlus, ticket_comment: MessageSquare, ticket_mention: AtSign, ticket_status: CircleDot, ticket_late: AlarmClock, agenda_reminder: CalendarClock, agenda_invite: CalendarPlus, ticket_rate: Star, task_unblocked: Unlock, handoff: Repeat, celebration: PartyPopper, system_down: ServerCrash, system_up: ServerCog, onboarding: Sprout, review_open: ClipboardCheck, review_reminder: ClipboardCheck, goal_update: Target, one_on_one: Handshake, dev_action: Handshake, pulse_open: Smile, announcement: Megaphone, incident: Siren, asset_expiring: Laptop, chat_mention: MessagesSquare, chat_message: MessageSquare, chat_reminder: AlarmClock, stock_low: PackageMinus, copa_request: HandPlatter, kudos: Award, poll: Vote, maintenance: Wrench, security_alert: ShieldAlert } as const;
 
@@ -91,6 +102,7 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
   const [muted, setMutedState] = useState(false);
   const [askDesktop, setAskDesktop] = useState(false);
   const [toasts, setToasts] = useState<Item[]>([]);
+  const [filter, setFilter] = useState<Filter>("all");
   const root = useRef<HTMLDivElement>(null);
   // Maior id já visto: o que vier acima disso é novo (toca o som e mostra o aviso na tela).
   const seen = useRef<number | null>(null);
@@ -185,6 +197,9 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
   }
 
   const badge = data.unread + data.due.length;
+  const activeFilter = FILTERS.find((entry) => entry.value === filter) ?? FILTERS[0];
+  const shown = data.items.filter(activeFilter.match);
+  const showDue = data.due.length > 0 && (filter === "all" || filter === "work" || filter === "unread");
   const now = today();
 
   return <div className="bell" ref={root}>
@@ -201,8 +216,16 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
         </span>
       </header>
       {askDesktop && <button className="bell-desktop" onClick={enableDesktop}>Receber avisos também com o Portal minimizado</button>}
+      {data.items.length > 0 && <div className="bell-filters" role="tablist" aria-label="Filtrar avisos">
+        {FILTERS.map((entry) => {
+          const unread = entry.value === "all" || entry.value === "unread" ? 0 : data.items.filter((item) => !item.readAt && entry.match(item)).length;
+          return <button key={entry.value} type="button" role="tab" aria-selected={filter === entry.value} className={filter === entry.value ? "active" : ""} onClick={() => setFilter(entry.value)}>
+            {entry.label}{entry.value === "unread" && data.unread > 0 ? <b>{data.unread > 99 ? "99+" : data.unread}</b> : unread > 0 ? <b>{unread > 99 ? "99+" : unread}</b> : null}
+          </button>;
+        })}
+      </div>}
       <div className="bell-scroll">
-        {data.due.length > 0 && <section>
+        {showDue && <section>
           <h4>Prazos</h4>
           {data.due.map((task) => {
             const state = dueState(task.dueDate, now);
@@ -213,8 +236,8 @@ export default function NotificationsBell({ onOpenTask, onOpenTicket, onOpenEven
           })}
         </section>}
         <section>
-          {data.due.length > 0 && <h4>Atividade</h4>}
-          {data.items.length === 0 ? <p className="bell-empty">Nenhum aviso por enquanto. Você será avisado sobre demandas e chamados (atribuições, comentários, menções, chamados novos para o seu time) e sobre os compromissos da sua agenda.</p> : data.items.map((item) => {
+          {showDue && <h4>Atividade</h4>}
+          {data.items.length === 0 ? <p className="bell-empty">Nenhum aviso por enquanto. Você será avisado sobre demandas e chamados (atribuições, comentários, menções, chamados novos para o seu time) e sobre os compromissos da sua agenda.</p> : shown.length === 0 ? <p className="bell-empty">{FILTER_EMPTY[filter]} <button type="button" className="link-button" onClick={() => setFilter("all")}>Ver todos</button></p> : shown.map((item) => {
             const Icon = kindIcon[item.kind] ?? Bell;
             return <button key={item.id} className={`bell-item ${item.readAt ? "" : "unread"}`} onClick={() => openItem(item)}>
               <span className={`bell-icon ${item.kind}`}><Icon size={14} /></span>

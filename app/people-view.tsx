@@ -19,6 +19,7 @@ import AssetsView from "./assets-view";
 import { absenceOn, describeAbsence } from "./absences";
 import { useAbsences } from "./use-absences";
 import { PersonKudos } from "./team-wall";
+import { ActivityHeatmap } from "./activity-heatmap";
 
 export type Person = { id: number; name: string; email: string; role: "admin" | "member" | "viewer"; active: boolean; avatarIcon: string; avatarKey: string | null; jobTitle: string; phone: string; birthday?: string | null; startedOn?: string | null };
 
@@ -182,6 +183,7 @@ function PersonModal({ person, teams, isAdmin, currentTeamIds, onClose, onSaved 
       <label><span>Aniversário <em>opcional, sem o ano</em></span><span className="birthday-pick"><select aria-label="Dia" value={birthDay} onChange={(event) => setBirthDay(event.target.value)}><option value="">Dia</option>{Array.from({ length: 31 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select><select aria-label="Mês" value={birthMonth} onChange={(event) => setBirthMonth(event.target.value)}><option value="">Mês</option>{MONTHS.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}</select></span></label>
       <label><span>Na empresa desde <em>opcional</em></span><input type="date" max={new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())} value={startedOn} onChange={(event) => setStartedOn(event.target.value)} /></label>
       <p className="full form-hint">A equipe recebe um aviso no sino no dia do aniversário e quando você completa mais um ano de casa.</p>
+      {isAdmin && <div className="full"><ActivityHeatmap memberId={person.id} title={`Atividade de ${person.name.split(/s+/)[0]} no último ano`} /></div>}
       {isAdmin && <div className="full generate-teams"><span className="field-label">Times</span><div>{teams.map((team) => <label key={team.id} className={`generate-team ${team.color}`}><input type="checkbox" checked={teamIds.includes(team.id)} onChange={(event) => setTeamIds((current) => event.target.checked ? [...current, team.id] : current.filter((id) => id !== team.id))} /><i />{team.name}</label>)}</div><small className="form-hint">Para definir quem lidera, edite o time na aba Times.</small></div>}
     </div>
     {error && <p className="modal-error">{error}</p>}

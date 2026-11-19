@@ -1178,9 +1178,12 @@ mark.mention { padding: 0 2px; border-radius: 4px; color: var(--brand-text); bac
 .task-row-sub { overflow: hidden; color: var(--text-faint); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .hours-flag { display: inline-grid; width: 20px; height: 20px; place-items: center; border-radius: 6px; color: var(--gold-text); background: var(--warning-soft); }
 .avatar-stack { display: inline-flex; align-items: center; }
-.avatar-stack > .task-avatar { box-shadow: 0 0 0 2px white; }
-.avatar-stack > * + * { margin-left: -6px; }
-.avatar-more { display: inline-grid; padding: 0 5px; place-items: center; border-radius: 20px; color: var(--text-tertiary); background: var(--surface-sunken); box-shadow: 0 0 0 2px white; font-size: var(--fs-xs); font-weight: 750; }
+.avatar-stack > .task-avatar { box-shadow: 0 0 0 2px var(--surface); transition: margin .18s ease, transform .18s ease; }
+.avatar-stack > * + * { margin-left: -7px; transition: margin .18s ease; }
+.avatar-stack:hover > * + * { margin-left: 2px; }
+.avatar-stack > .task-avatar:hover { z-index: 1; transform: translateY(-2px); }
+.avatar-more { position: relative; z-index: 1; display: inline-grid; padding: 0 5px; place-items: center; border-radius: 20px; color: var(--text-tertiary); background: var(--surface-sunken); box-shadow: 0 0 0 2px var(--surface); font-size: var(--fs-xs); font-weight: 750; }
+@media (prefers-reduced-motion: reduce) { .avatar-stack > *, .avatar-stack > .task-avatar { transition: none; } }
 .board-card-client { overflow: hidden; color: var(--text-muted); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .board-more { width: 100%; padding: 8px; border: 1px dashed var(--border-strong); border-radius: 9px; color: var(--brand-text); background: transparent; font-size: var(--fs-xs); font-weight: 750; cursor: pointer; }
 .task-fields { display: flex; flex-direction: column; gap: 14px; }
@@ -3804,3 +3807,58 @@ html[data-theme="dark"] .community {
 .tour-again small { color: var(--text-muted); font-size: var(--fs-xs); }
 @keyframes tour-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tour-card { animation: none; } .tour-spot { transition: none; } }
+
+/* Avisos: filtros (Todos, Não lidos, Menções, Demandas e chamados, Chat). */
+.bell-filters { display: flex; gap: 6px; flex: none; padding: 8px 12px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+.bell-filters::-webkit-scrollbar { display: none; }
+.bell-filters button { display: inline-flex; align-items: center; gap: 5px; flex: none; min-height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--text-tertiary); background: var(--surface); font-size: var(--fs-xs); font-weight: 650; white-space: nowrap; cursor: pointer; }
+.bell-filters button:hover { color: var(--text); background: var(--surface-sunken); }
+.bell-filters button.active { border-color: transparent; color: var(--on-brand); background: var(--brand); }
+.bell-filters b { min-width: 18px; padding: 0 5px; border-radius: var(--radius-pill); color: var(--on-brand); background: var(--danger-solid); font-size: var(--fs-2xs); line-height: 18px; text-align: center; }
+.bell-filters button.active b { color: var(--brand-text); background: var(--on-brand); }
+
+/* Recorte de imagem (foto de perfil e logo). */
+.cropper-layer { z-index: 110; }
+.modal.cropper { width: min(400px, calc(100vw - 24px)); }
+.cropper-view { position: relative; margin: 4px auto 0; overflow: hidden; border-radius: var(--radius-md); background: var(--surface-sunken); cursor: grab; touch-action: none; user-select: none; outline: none; }
+.cropper-view:active { cursor: grabbing; }
+.cropper-view:focus-visible { box-shadow: var(--focus-ring); }
+.cropper-view img { position: absolute; top: 0; left: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+.cropper-frame { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .9); }
+.cropper-view.circle .cropper-frame { border-radius: 50%; box-shadow: 0 0 0 9999px rgba(15, 23, 42, .5), inset 0 0 0 2px rgba(255, 255, 255, .9); }
+.cropper-zoom { display: flex; align-items: center; gap: 10px; width: 280px; margin: 14px auto 0; }
+.cropper-zoom input { flex: 1; accent-color: var(--brand); }
+.cropper-zoom button { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface); cursor: pointer; }
+.cropper-zoom button:disabled { opacity: .45; cursor: default; }
+.cropper-error { margin: 10px 0 0; color: var(--danger-text); font-size: var(--fs-sm); text-align: center; }
+.modal.cropper .modal-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.modal.cropper .modal-actions .link-button { margin-right: auto; }
+
+/* Mapa de calor da atividade (activity-heatmap.tsx). */
+.activity-card { --activity-cell: 11px; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.activity-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.activity-head strong { color: var(--text); font-size: var(--fs-sm); }
+.activity-head small { color: var(--text-muted); font-size: var(--fs-xs); }
+.activity-scroll { overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; direction: rtl; }
+.activity-grid { display: grid; grid-template-rows: 14px repeat(7, var(--activity-cell)); gap: 3px; width: max-content; direction: ltr; }
+.activity-month { grid-row: 1; color: var(--text-muted); font-size: var(--fs-2xs); line-height: 14px; white-space: nowrap; }
+.activity-cell { display: block; width: var(--activity-cell); height: var(--activity-cell); border-radius: 3px; background: var(--surface-sunken); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent); }
+.activity-cell.l1 { background: color-mix(in srgb, var(--brand) 25%, var(--surface)); }
+.activity-cell.l2 { background: color-mix(in srgb, var(--brand) 50%, var(--surface)); }
+.activity-cell.l3 { background: color-mix(in srgb, var(--brand) 75%, var(--surface)); }
+.activity-cell.l4 { background: var(--brand); }
+.activity-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; color: var(--text-muted); font-size: var(--fs-2xs); }
+.activity-legend span { margin: 0 4px; }
+.modal .activity-card { margin-top: 2px; }
+
+/* Chat: cartão de prévia de link. */
+.community .cv-link-card { display: flex; max-width: 440px; margin: 6px 0 2px; overflow: hidden; border: 1px solid var(--cv-line); border-left: 3px solid var(--cv-accent); border-radius: 10px; color: inherit; background: var(--cv-soft); text-decoration: none; transition: background .15s ease; }
+.community .cv-link-card:hover { background: var(--cv-hover); }
+.community .cv-link-image { position: relative; flex: 0 0 96px; min-height: 84px; background: var(--cv-hover); }
+.community .cv-link-image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.community .cv-link-text { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 9px 12px; }
+.community .cv-link-text small { overflow: hidden; color: var(--cv-muted); font-size: var(--fs-2xs); font-weight: 650; text-overflow: ellipsis; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.community .cv-link-text strong { display: -webkit-box; overflow: hidden; color: var(--cv-link); font-size: var(--fs-sm); line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.community .cv-link-text > span { display: -webkit-box; overflow: hidden; color: var(--cv-text); font-size: var(--fs-xs); line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.community .cv-post-group.mine .cv-link-card { margin-left: auto; }
+@media (max-width: 520px) { .community .cv-link-image { flex-basis: 72px; } }

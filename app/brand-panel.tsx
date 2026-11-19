@@ -4,6 +4,7 @@
 import { useRef, useState } from "react";
 import Palette from "lucide-react/icons/palette";
 import Upload from "lucide-react/icons/upload";
+import { ImageCropper } from "./image-cropper";
 import RotateCcw from "lucide-react/icons/rotate-ccw";
 import Users from "lucide-react/icons/users";
 import { BRAND_LIMITS, BRAND_PRESETS, DEFAULT_BRAND, brandPalette, contrast, isHexColor } from "./brand-theme";
@@ -53,6 +54,8 @@ export function BrandPanel() {
     }
   }
 
+  // Logo escolhido esperando o recorte (dá para usar sem recortar: logos largos).
+  const [cropping, setCropping] = useState<File | null>(null);
   function uploadLogo(file: File | undefined) {
     if (!file) return;
     const data = new FormData();
@@ -84,7 +87,8 @@ export function BrandPanel() {
           <span>Logo <em>(PNG, JPG ou WebP, até 1 MB; de preferência quadrado)</em></span>
           <div className="brand-logo-row">
             <span className="brand-logo-preview"><BrandLogo fallback={<Users size={22} />} /></span>
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => uploadLogo(event.target.files?.[0])} />
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => { const picked = event.target.files?.[0]; if (fileRef.current) fileRef.current.value = ""; if (picked) setCropping(picked); }} />
+            {cropping && <ImageCropper file={cropping} shape="square" title="Ajustar o logo" allowOriginal onCancel={() => setCropping(null)} onDone={(cropped) => { setCropping(null); uploadLogo(cropped); }} />}
             <button type="button" className="secondary-button" disabled={busy} onClick={() => fileRef.current?.click()}><Upload size={14} /> {brand.logoUrl ? "Trocar logo" : "Enviar logo"}</button>
             {brand.logoUrl && <button type="button" className="link-button danger" disabled={busy} onClick={() => { if (window.confirm("Remover o logo? Volta o ícone padrão.")) void run(() => post(JSON.stringify({ action: "removeLogo" }), true), "Logo removido.", true); }}>Remover</button>}
           </div>

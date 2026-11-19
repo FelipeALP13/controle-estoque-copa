@@ -131,13 +131,13 @@ export function Avatar({ member, size = 22 }: { member: TaskMember | null | unde
   </span>;
 }
 
-/** Até 3 avatares sobrepostos e "+N" para o resto. */
-export function AvatarStack({ ids, membersById, size = 22 }: { ids: number[]; membersById: Map<number, TaskMember>; size?: number }) {
+/** Avatares sobrepostos (até `max`) e "+N" para o resto; ao passar o mouse eles se afastam para mostrar cada rosto. */
+export function AvatarStack({ ids, membersById, size = 22, label = "Responsáveis", max = 3 }: { ids: number[]; membersById: Map<number, TaskMember>; size?: number; label?: string; max?: number }) {
   if (!ids.length) return <Avatar member={null} size={size} />;
   const names = ids.map((id) => membersById.get(id)?.name ?? "Pessoa removida").join(", ");
-  return <span className="avatar-stack" title={names} aria-label={`Responsáveis: ${names}`}>
-    {ids.slice(0, 3).map((id) => <Avatar key={id} member={membersById.get(id)} size={size} />)}
-    {ids.length > 3 && <span className="avatar-more" style={{ height: size, minWidth: size }}>+{ids.length - 3}</span>}
+  return <span className="avatar-stack" title={names} aria-label={`${label}: ${names}`}>
+    {ids.slice(0, max).map((id) => <Avatar key={id} member={membersById.get(id)} size={size} />)}
+    {ids.length > max && <span className="avatar-more" style={{ height: size, minWidth: size }}>+{ids.length - max}</span>}
   </span>;
 }
 
